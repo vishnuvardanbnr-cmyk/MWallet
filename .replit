@@ -37,3 +37,11 @@ author = "agent"
 task = "shell.exec"
 args = "npm run dev"
 waitForPort = 5000
+
+[userenv]
+
+[userenv.shared]
+VITE_CONTRACT_ADDRESS = "0xAC69c540DDF49fCe90088B36127ca852f198B353"
+VITE_PAYMENT_TOKEN_ADDRESS = "0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3"
+VITE_BSC_NETWORK = "testnet"
+VITE_BOARD_HANDLER_ADDRESS = "0x6b3280d57159e2Cac30777b437291900cA3ba1C0"

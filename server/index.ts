@@ -59,6 +59,9 @@ app.use((req, res, next) => {
   next();
 });
 
+import { setupWebSocket } from "./websocket";
+setupWebSocket(httpServer);
+
 (async () => {
   await registerRoutes(httpServer, app);
 
