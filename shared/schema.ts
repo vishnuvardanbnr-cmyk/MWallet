@@ -99,6 +99,31 @@ export const insertTicketMessageSchema = createInsertSchema(ticketMessages).omit
 export type InsertTicketMessage = z.infer<typeof insertTicketMessageSchema>;
 export type TicketMessage = typeof ticketMessages.$inferSelect;
 
+export const virtualBtcBalances = pgTable("virtual_btc_balances", {
+  walletAddress: varchar("wallet_address", { length: 42 }).primaryKey(),
+  balance: numeric("balance", { precision: 20, scale: 4 }).notNull().default("0"),
+  totalEarned: numeric("total_earned", { precision: 20, scale: 4 }).notNull().default("0"),
+  totalSwapped: numeric("total_swapped", { precision: 20, scale: 4 }).notNull().default("0"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
+export type VirtualBtcBalance = typeof virtualBtcBalances.$inferSelect;
+
+export const btcSwapTxns = pgTable("btc_swap_txns", {
+  id: serial("id").primaryKey(),
+  walletAddress: varchar("wallet_address", { length: 42 }).notNull(),
+  amountUsdt: numeric("amount_usdt", { precision: 20, scale: 4 }).notNull(),
+  amountBtcb: numeric("amount_btcb", { precision: 20, scale: 8 }),
+  bscTxHash: varchar("bsc_tx_hash", { length: 70 }),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  errorMessage: text("error_message"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export const insertBtcSwapTxnSchema = createInsertSchema(btcSwapTxns).omit({ id: true, createdAt: true });
+export type InsertBtcSwapTxn = z.infer<typeof insertBtcSwapTxnSchema>;
+export type BtcSwapTxn = typeof btcSwapTxns.$inferSelect;
+
 export interface HardwareProduct {
   id: string;
   name: string;

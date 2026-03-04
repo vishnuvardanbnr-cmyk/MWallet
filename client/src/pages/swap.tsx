@@ -1,8 +1,7 @@
-import { useState, useEffect, useCallback } from "react";
-import { ArrowDownUp, Loader2, Bitcoin, DollarSign, RefreshCw, AlertTriangle, CheckCircle2, ExternalLink, Settings2 } from "lucide-react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { ArrowDownUp, Loader2, Bitcoin, DollarSign, RefreshCw, CheckCircle2, AlertCircle, ExternalLink, Clock } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { getBoardHandlerContract, getPancakeRouterContract, TOKEN_ADDRESS, BTCB_TOKEN_ADDRESS, formatTokenAmount, BOARD_HANDLER_ADDRESS } from "@/lib/contract";
-import { ethers } from "ethers";
+import { Badge } from "@/components/ui/badge";
 
 interface SwapPageProps {
   account: string;
@@ -11,183 +10,149 @@ interface SwapPageProps {
   fetchUserData: () => Promise<void>;
 }
 
-interface SwapState {
-  virtualBalance: bigint;
-  totalEarned: bigint;
-  totalSwapped: bigint;
-  btcbAddress: string;
-  routerConfigured: boolean;
+interface BtcSwapData {
+  balance: string;
+  totalEarned: string;
+  totalSwapped: string;
+  history: BtcSwapTxn[];
 }
 
-export default function SwapPage({ account, formatAmount, tokenDecimals, fetchUserData }: SwapPageProps) {
+interface BtcSwapTxn {
+  id: number;
+  walletAddress: string;
+  amountUsdt: string;
+  amountBtcb: string | null;
+  bscTxHash: string | null;
+  status: string;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+const BSC_SCAN = "https://bscscan.com/tx/";
+const MIN_SWAP = 10;
+
+export default function SwapPage({ account, fetchUserData }: SwapPageProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [swapping, setSwapping] = useState(false);
-  const [swapState, setSwapState] = useState<SwapState>({
-    virtualBalance: 0n,
-    totalEarned: 0n,
-    totalSwapped: 0n,
-    btcbAddress: "",
-    routerConfigured: false,
+  const [swapData, setSwapData] = useState<BtcSwapData>({
+    balance: "0",
+    totalEarned: "0",
+    totalSwapped: "0",
+    history: [],
   });
   const [swapAmount, setSwapAmount] = useState("");
-  const [estimatedBtcb, setEstimatedBtcb] = useState<string | null>(null);
-  const [estimateLoading, setEstimateLoading] = useState(false);
   const [btcPrice, setBtcPrice] = useState<number | null>(null);
-  const [slippage, setSlippage] = useState(2);
-  const [showSettings, setShowSettings] = useState(false);
+  const [pendingTxnId, setPendingTxnId] = useState<number | null>(null);
+  const [pendingStatus, setPendingStatus] = useState<"pending" | "completed" | "failed" | null>(null);
+  const [completedTxn, setCompletedTxn] = useState<BtcSwapTxn | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const loadSwapData = useCallback(async () => {
-    setLoading(true);
+  const loadData = useCallback(async () => {
     try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const boardHandler = getBoardHandlerContract(provider);
-
-      const [balanceResult, totalSwapped] = await Promise.all([
-        boardHandler.getVirtualRewardBalance(account),
-        boardHandler.getTotalSwappedToBTC(account),
-      ]);
-
-      let btcbAddr = BTCB_TOKEN_ADDRESS;
-      let routerOk = false;
-      try {
-        btcbAddr = await boardHandler.btcbToken();
-        const routerAddr = await boardHandler.pancakeRouter();
-        routerOk = routerAddr !== ethers.ZeroAddress && btcbAddr !== ethers.ZeroAddress;
-      } catch {
-        routerOk = false;
+      const res = await fetch(`/api/btcswap/${account.toLowerCase()}`);
+      if (res.ok) {
+        const data = await res.json();
+        setSwapData(data);
       }
-
-      setSwapState({
-        virtualBalance: balanceResult[0],
-        totalEarned: balanceResult[1],
-        totalSwapped,
-        btcbAddress: btcbAddr,
-        routerConfigured: routerOk,
-      });
-    } catch (err) {
-      console.error("loadSwapData error:", err);
-    } finally {
-      setLoading(false);
-    }
+    } catch {}
+    setLoading(false);
   }, [account]);
 
   const fetchBtcPrice = useCallback(async () => {
     try {
       const res = await fetch("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd");
       const data = await res.json();
-      if (data?.bitcoin?.usd) {
-        setBtcPrice(data.bitcoin.usd);
-      }
-    } catch {
-      setBtcPrice(null);
-    }
+      if (data?.bitcoin?.usd) setBtcPrice(data.bitcoin.usd);
+    } catch {}
   }, []);
 
   useEffect(() => {
-    loadSwapData();
+    loadData();
     fetchBtcPrice();
     const interval = setInterval(fetchBtcPrice, 30000);
     return () => clearInterval(interval);
-  }, [loadSwapData, fetchBtcPrice]);
+  }, [loadData, fetchBtcPrice]);
 
-  const fetchEstimate = useCallback(async (amount: string) => {
-    if (!amount || parseFloat(amount) <= 0) {
-      setEstimatedBtcb(null);
-      return;
-    }
-
-    if (!swapState.routerConfigured) {
-      if (btcPrice && btcPrice > 0) {
-        const usdtVal = parseFloat(amount);
-        const btcVal = usdtVal / btcPrice;
-        setEstimatedBtcb(btcVal.toFixed(8));
-      }
-      return;
-    }
-
-    setEstimateLoading(true);
-    try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const boardHandler = getBoardHandlerContract(provider);
-      const amountWei = ethers.parseUnits(amount, tokenDecimals);
-      const estimate = await boardHandler.getSwapEstimate(amountWei);
-      setEstimatedBtcb(ethers.formatUnits(estimate, 18));
-    } catch {
-      if (btcPrice && btcPrice > 0) {
-        const usdtVal = parseFloat(amount);
-        const btcVal = usdtVal / btcPrice;
-        setEstimatedBtcb(btcVal.toFixed(8));
-      } else {
-        setEstimatedBtcb(null);
-      }
-    } finally {
-      setEstimateLoading(false);
-    }
-  }, [swapState.routerConfigured, btcPrice, tokenDecimals]);
+  const startPolling = useCallback((txnId: number) => {
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = setInterval(async () => {
+      try {
+        const res = await fetch(`/api/btcswap/txn/${txnId}`);
+        if (!res.ok) return;
+        const txn: BtcSwapTxn = await res.json();
+        if (txn.status === "completed") {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+          setPendingStatus("completed");
+          setCompletedTxn(txn);
+          setSwapping(false);
+          await loadData();
+          await fetchUserData();
+          toast({ title: "Swap Successful!", description: `${parseFloat(txn.amountBtcb ?? "0").toFixed(8)} BTCB sent to your wallet on BSC.` });
+        } else if (txn.status === "failed") {
+          clearInterval(pollRef.current!);
+          pollRef.current = null;
+          setPendingStatus("failed");
+          setCompletedTxn(txn);
+          setSwapping(false);
+          await loadData();
+          toast({ title: "Swap Failed", description: txn.errorMessage || "Please try again.", variant: "destructive" });
+        }
+      } catch {}
+    }, 4000);
+  }, [loadData, fetchUserData, toast]);
 
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (swapAmount) fetchEstimate(swapAmount);
-    }, 500);
-    return () => clearTimeout(timer);
-  }, [swapAmount, fetchEstimate]);
+    return () => { if (pollRef.current) clearInterval(pollRef.current); };
+  }, []);
 
   const handleSwap = async () => {
-    if (!swapAmount || parseFloat(swapAmount) <= 0) {
-      toast({ title: "Invalid Amount", description: "Enter a valid swap amount.", variant: "destructive" });
+    const amount = parseFloat(swapAmount);
+    if (isNaN(amount) || amount < MIN_SWAP) {
+      toast({ title: "Invalid Amount", description: `Minimum swap is $${MIN_SWAP}.`, variant: "destructive" });
       return;
     }
-
-    const amountWei = ethers.parseUnits(swapAmount, tokenDecimals);
-    if (amountWei > swapState.virtualBalance) {
-      toast({ title: "Insufficient Balance", description: "Swap amount exceeds your virtual reward balance.", variant: "destructive" });
-      return;
-    }
-
-    if (!swapState.routerConfigured) {
-      toast({ title: "Router Not Configured", description: "PancakeSwap router is not set up yet. Contact admin.", variant: "destructive" });
+    const available = parseFloat(swapData.balance);
+    if (amount > available) {
+      toast({ title: "Insufficient Balance", description: "Swap amount exceeds your virtual BTC balance.", variant: "destructive" });
       return;
     }
 
     setSwapping(true);
+    setPendingStatus("pending");
+    setCompletedTxn(null);
+
     try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const signer = await provider.getSigner();
-      const boardHandler = getBoardHandlerContract(signer);
-
-      let minOut = 0n;
-      try {
-        const estimate = await boardHandler.getSwapEstimate(amountWei);
-        minOut = (estimate * BigInt(10000 - slippage * 100)) / 10000n;
-      } catch {
-        minOut = 0n;
+      const res = await fetch("/api/btcswap/execute", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: account, amountUsdt: amount.toString() }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Swap Failed", description: data.message, variant: "destructive" });
+        setSwapping(false);
+        setPendingStatus(null);
+        return;
       }
-
-      const tx = await boardHandler.claimAndSwapToBTC(amountWei, minOut);
-      await tx.wait();
-
-      toast({ title: "Swap Successful!", description: `Swapped ${swapAmount} USDT to BTC successfully.` });
+      setPendingTxnId(data.txnId);
       setSwapAmount("");
-      setEstimatedBtcb(null);
-      await loadSwapData();
-      await fetchUserData();
-    } catch (err: any) {
-      const msg = err?.reason || err?.message || "Swap failed";
-      toast({ title: "Swap Failed", description: msg, variant: "destructive" });
-    } finally {
+      startPolling(data.txnId);
+    } catch {
+      toast({ title: "Network Error", description: "Could not connect to swap service.", variant: "destructive" });
       setSwapping(false);
+      setPendingStatus(null);
     }
   };
 
-  const setMaxAmount = () => {
-    const maxVal = formatTokenAmount(swapState.virtualBalance, tokenDecimals);
-    setSwapAmount(maxVal);
-  };
+  const estimatedBtcb = btcPrice && parseFloat(swapAmount) > 0
+    ? (parseFloat(swapAmount) / btcPrice).toFixed(8)
+    : null;
 
-  const balanceFormatted = parseFloat(formatTokenAmount(swapState.virtualBalance, tokenDecimals));
-  const totalEarnedFormatted = parseFloat(formatTokenAmount(swapState.totalEarned, tokenDecimals));
-  const totalSwappedFormatted = parseFloat(formatTokenAmount(swapState.totalSwapped, 18));
+  const balance = parseFloat(swapData.balance);
+  const totalEarned = parseFloat(swapData.totalEarned);
+  const totalSwapped = parseFloat(swapData.totalSwapped);
 
   if (loading) {
     return (
@@ -205,11 +170,11 @@ export default function SwapPage({ account, formatAmount, tokenDecimals, fetchUs
   return (
     <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-6">
       <div className="text-center space-y-2">
-        <h1 className="text-2xl font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-swap-title">
+        <h1 className="text-2xl font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-swap-title">
           BTC Swap
         </h1>
         <p className="text-sm text-muted-foreground">
-          Convert your virtual USDT rewards to BTC via PancakeSwap
+          Convert your virtual USDT rewards to BTCB via PancakeSwap on BSC
         </p>
       </div>
 
@@ -217,22 +182,22 @@ export default function SwapPage({ account, formatAmount, tokenDecimals, fetchUs
         <div className="premium-card rounded-xl p-3 text-center" data-testid="card-virtual-balance">
           <DollarSign className="w-5 h-5 mx-auto text-emerald-400 mb-1" />
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Available</p>
-          <p className="text-sm font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-virtual-balance">
-            ${balanceFormatted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          <p className="text-sm font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-virtual-balance">
+            ${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
         </div>
         <div className="premium-card rounded-xl p-3 text-center" data-testid="card-total-earned">
           <DollarSign className="w-5 h-5 mx-auto text-amber-400 mb-1" />
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Total Earned</p>
-          <p className="text-sm font-bold text-amber-400" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-total-earned">
-            ${totalEarnedFormatted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+          <p className="text-sm font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-total-earned">
+            ${totalEarned.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
         </div>
         <div className="premium-card rounded-xl p-3 text-center" data-testid="card-total-swapped">
           <Bitcoin className="w-5 h-5 mx-auto text-orange-400 mb-1" />
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Swapped</p>
-          <p className="text-sm font-bold text-orange-400" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-total-swapped">
-            {totalSwappedFormatted.toFixed(8)} BTC
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Swapped (USDT)</p>
+          <p className="text-sm font-bold text-orange-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-total-swapped">
+            ${totalSwapped.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </p>
         </div>
       </div>
@@ -247,46 +212,16 @@ export default function SwapPage({ account, formatAmount, tokenDecimals, fetchUs
         </div>
       )}
 
+      {/* Swap Card */}
       <div className="premium-card rounded-2xl p-5 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: 'var(--font-display)' }}>Swap</h2>
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className="p-1.5 rounded-lg hover:bg-white/5 transition-colors text-muted-foreground hover:text-foreground"
-            data-testid="button-swap-settings"
-          >
-            <Settings2 className="w-4 h-4" />
-          </button>
-        </div>
-
-        {showSettings && (
-          <div className="rounded-xl bg-white/[0.02] border border-white/[0.06] p-3 space-y-2">
-            <p className="text-xs text-muted-foreground">Slippage Tolerance</p>
-            <div className="flex gap-2">
-              {[1, 2, 3, 5].map((val) => (
-                <button
-                  key={val}
-                  onClick={() => setSlippage(val)}
-                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                    slippage === val
-                      ? "bg-purple-500/20 text-purple-400 border border-purple-500/30"
-                      : "bg-white/[0.03] text-muted-foreground border border-white/[0.06] hover:border-white/[0.12]"
-                  }`}
-                  data-testid={`button-slippage-${val}`}
-                >
-                  {val}%
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+        <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Swap</h2>
 
         <div className="space-y-1">
           <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground">You Pay (Virtual USDT)</span>
               <button
-                onClick={setMaxAmount}
+                onClick={() => setSwapAmount(balance.toFixed(2))}
                 className="text-[10px] text-purple-400 hover:text-purple-300 font-medium uppercase tracking-wider"
                 data-testid="button-max-amount"
               >
@@ -299,9 +234,11 @@ export default function SwapPage({ account, formatAmount, tokenDecimals, fetchUs
                 value={swapAmount}
                 onChange={(e) => setSwapAmount(e.target.value)}
                 placeholder="0.00"
+                min={MIN_SWAP}
                 className="flex-1 bg-transparent text-xl font-bold text-foreground outline-none placeholder:text-muted-foreground/30"
-                style={{ fontFamily: 'var(--font-display)' }}
+                style={{ fontFamily: "var(--font-display)" }}
                 data-testid="input-swap-amount"
+                disabled={swapping}
               />
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
                 <DollarSign className="w-4 h-4 text-emerald-400" />
@@ -309,7 +246,7 @@ export default function SwapPage({ account, formatAmount, tokenDecimals, fetchUs
               </div>
             </div>
             <p className="text-[10px] text-muted-foreground mt-1">
-              Balance: ${balanceFormatted.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+              Balance: ${balance.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} · Min: ${MIN_SWAP}
             </p>
           </div>
 
@@ -322,87 +259,128 @@ export default function SwapPage({ account, formatAmount, tokenDecimals, fetchUs
           <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
             <div className="flex items-center justify-between mb-2">
               <span className="text-xs text-muted-foreground">You Receive (Estimated)</span>
-              {estimateLoading && <Loader2 className="w-3 h-3 animate-spin text-muted-foreground" />}
             </div>
             <div className="flex items-center gap-3">
-              <p className="flex-1 text-xl font-bold text-foreground" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-estimated-btcb">
-                {estimatedBtcb ? parseFloat(estimatedBtcb).toFixed(8) : "0.00000000"}
+              <p className="flex-1 text-xl font-bold text-orange-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-estimated-btcb">
+                {estimatedBtcb ?? "0.00000000"}
               </p>
               <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-orange-500/10 border border-orange-500/20">
                 <Bitcoin className="w-4 h-4 text-orange-400" />
-                <span className="text-sm font-bold text-orange-400">BTC</span>
+                <span className="text-sm font-bold text-orange-400">BTCB</span>
               </div>
             </div>
-            {estimatedBtcb && btcPrice && (
-              <p className="text-[10px] text-muted-foreground mt-1">
-                ~ ${(parseFloat(estimatedBtcb) * btcPrice).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} USD
-              </p>
-            )}
+            <p className="text-[10px] text-muted-foreground mt-1">Sent to your BSC wallet · Live rate via PancakeSwap</p>
           </div>
         </div>
 
-        {swapAmount && parseFloat(swapAmount) > 0 && estimatedBtcb && (
-          <div className="rounded-xl bg-white/[0.02] border border-white/[0.06] p-3 space-y-1.5">
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Rate</span>
-              <span className="text-foreground" data-testid="text-swap-rate">
-                1 USDT = {btcPrice ? (1 / btcPrice).toFixed(8) : "..."} BTC
-              </span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Slippage Tolerance</span>
-              <span className="text-foreground">{slippage}%</span>
-            </div>
-            <div className="flex justify-between text-xs">
-              <span className="text-muted-foreground">Min. Received</span>
-              <span className="text-foreground" data-testid="text-min-received">
-                {(parseFloat(estimatedBtcb) * (1 - slippage / 100)).toFixed(8)} BTC
-              </span>
-            </div>
+        {/* Pending / result status */}
+        {pendingStatus === "pending" && (
+          <div className="flex items-center gap-2.5 p-3 rounded-xl border bg-amber-500/10 border-amber-500/20" data-testid="status-pending">
+            <Loader2 className="h-4 w-4 text-amber-400 shrink-0 animate-spin" />
+            <p className="text-sm font-medium text-amber-400">Swap in progress — executing on BSC via PancakeSwap…</p>
           </div>
         )}
-
-        {!swapState.routerConfigured && (
-          <div className="flex items-start gap-2 rounded-xl bg-amber-500/10 border border-amber-500/20 p-3">
-            <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
-            <div>
-              <p className="text-xs font-medium text-amber-400">PancakeSwap Router Not Configured</p>
-              <p className="text-[10px] text-amber-400/70 mt-0.5">
-                The admin needs to set the PancakeSwap router and BTCB token address on the contract before swaps can execute.
+        {pendingStatus === "completed" && completedTxn && (
+          <div className="flex flex-col gap-2 p-3 rounded-xl border bg-emerald-500/10 border-emerald-500/20" data-testid="status-completed">
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+              <p className="text-sm font-medium text-emerald-400">
+                Swap complete! {parseFloat(completedTxn.amountBtcb ?? "0").toFixed(8)} BTCB sent to your wallet.
               </p>
             </div>
+            {completedTxn.bscTxHash && (
+              <a
+                href={`${BSC_SCAN}${completedTxn.bscTxHash}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="flex items-center gap-1 text-[11px] text-purple-400 hover:text-purple-300"
+                data-testid="link-bscscan"
+              >
+                <ExternalLink className="h-3 w-3" /> View on BscScan
+              </a>
+            )}
+          </div>
+        )}
+        {pendingStatus === "failed" && completedTxn && (
+          <div className="flex items-center gap-2.5 p-3 rounded-xl border bg-red-500/10 border-red-500/20" data-testid="status-failed">
+            <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
+            <p className="text-sm font-medium text-red-400">{completedTxn.errorMessage || "Swap failed. Please try again."}</p>
           </div>
         )}
 
         <button
           onClick={handleSwap}
-          disabled={swapping || !swapAmount || parseFloat(swapAmount) <= 0 || swapState.virtualBalance === 0n || !swapState.routerConfigured}
+          disabled={swapping || !swapAmount || parseFloat(swapAmount) < MIN_SWAP || balance === 0}
           className="w-full glow-button text-white font-bold py-4 px-6 rounded-xl text-base transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
-          style={{ fontFamily: 'var(--font-display)' }}
+          style={{ fontFamily: "var(--font-display)" }}
           data-testid="button-swap"
         >
           {swapping ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              Swapping...
-            </>
+            <><Loader2 className="w-5 h-5 animate-spin" /> Swapping on BSC…</>
           ) : (
-            <>
-              <ArrowDownUp className="w-5 h-5" />
-              Swap to BTC
-            </>
+            <><ArrowDownUp className="w-5 h-5" /> Swap to BTC</>
           )}
         </button>
       </div>
 
+      {/* Swap History */}
+      {swapData.history.length > 0 && (
+        <div className="premium-card rounded-2xl p-5 space-y-3">
+          <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "var(--font-display)" }}>Swap History</h2>
+          <div className="space-y-2">
+            {swapData.history.map((txn) => (
+              <div key={txn.id} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]" data-testid={`row-swap-${txn.id}`}>
+                <div className="flex items-center gap-3">
+                  {txn.status === "completed" ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
+                  ) : txn.status === "failed" ? (
+                    <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
+                  ) : (
+                    <Clock className="w-4 h-4 text-amber-400 shrink-0 animate-pulse" />
+                  )}
+                  <div>
+                    <p className="text-xs font-medium">${parseFloat(txn.amountUsdt).toFixed(2)} USDT</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {new Date(txn.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
+                    </p>
+                  </div>
+                </div>
+                <div className="text-right flex items-center gap-2">
+                  {txn.amountBtcb && (
+                    <p className="text-xs font-bold text-orange-400">{parseFloat(txn.amountBtcb).toFixed(8)} BTC</p>
+                  )}
+                  <Badge
+                    className={
+                      txn.status === "completed"
+                        ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]"
+                        : txn.status === "failed"
+                        ? "bg-red-500/10 text-red-400 border-red-500/20 text-[10px]"
+                        : "bg-amber-500/10 text-amber-400 border-amber-500/20 text-[10px]"
+                    }
+                  >
+                    {txn.status}
+                  </Badge>
+                  {txn.bscTxHash && (
+                    <a href={`${BSC_SCAN}${txn.bscTxHash}`} target="_blank" rel="noopener noreferrer" data-testid={`link-scan-${txn.id}`}>
+                      <ExternalLink className="w-3 h-3 text-purple-400 hover:text-purple-300" />
+                    </a>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* How It Works */}
       <div className="premium-card rounded-2xl p-5 space-y-4">
-        <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: 'var(--font-display)' }}>How It Works</h2>
+        <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "var(--font-display)" }}>How It Works</h2>
         <div className="space-y-3">
           {[
             { step: "1", title: "Earn Virtual Rewards", desc: "Complete Board Pool matrices to accumulate virtual USDT rewards" },
-            { step: "2", title: "Enter Swap Amount", desc: "Choose how much of your virtual balance to convert to BTC" },
-            { step: "3", title: "On-Chain Swap", desc: "PancakeSwap converts your USDT to BTCB at live market rate" },
-            { step: "4", title: "Receive BTC", desc: "BTCB (Bitcoin on BSC) is sent directly to your wallet" },
+            { step: "2", title: "Enter Swap Amount", desc: `Choose how much to convert to BTC (minimum $${MIN_SWAP})` },
+            { step: "3", title: "Backend Swap on BSC", desc: "Our liquidity wallet swaps USDT → BTCB on PancakeSwap automatically" },
+            { step: "4", title: "Receive BTCB on BSC", desc: "BTCB is sent directly to your wallet address on BSC network" },
           ].map((item) => (
             <div key={item.step} className="flex items-start gap-3">
               <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-500/20 to-cyan-500/10 border border-white/[0.08] flex items-center justify-center shrink-0">

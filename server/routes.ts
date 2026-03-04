@@ -333,5 +333,165 @@ export async function registerRoutes(
     }
   });
 
+  // ── BTC Swap via backend liquidity wallet ──────────────────────────────────
+
+  const BSC_RPC = "https://bsc-dataseed.binance.org/";
+  const PANCAKE_ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
+  const USDT_BSC = "0x55d398326f99059fF775485246999027B3197955";
+  const BTCB_BSC = "0x7130d2A12B9BCbFAe4f2634d864A1Ee1Ce3Ead9c";
+  const MIN_SWAP_USDT = 10;
+
+  const PANCAKE_ABI = [
+    "function swapExactTokensForTokens(uint256 amountIn, uint256 amountOutMin, address[] calldata path, address to, uint256 deadline) external returns (uint256[] memory amounts)",
+    "function getAmountsOut(uint256 amountIn, address[] calldata path) external view returns (uint256[] memory amounts)",
+  ];
+  const ERC20_ABI = [
+    "function approve(address spender, uint256 amount) external returns (bool)",
+    "function allowance(address owner, address spender) external view returns (uint256)",
+    "function balanceOf(address account) external view returns (uint256)",
+  ];
+
+  // GET /api/btcswap/:walletAddress — balance + swap history
+  app.get("/api/btcswap/:walletAddress", async (req, res) => {
+    try {
+      const addr = req.params.walletAddress.toLowerCase();
+      const [balance, history] = await Promise.all([
+        storage.getVirtualBtcBalance(addr),
+        storage.getBtcSwapTxns(addr),
+      ]);
+      res.json({
+        balance: balance?.balance ?? "0",
+        totalEarned: balance?.totalEarned ?? "0",
+        totalSwapped: balance?.totalSwapped ?? "0",
+        history,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/btcswap/credit — admin credits virtual BTC balance to a user
+  app.post("/api/btcswap/credit", async (req, res) => {
+    try {
+      const { walletAddress, amount } = req.body;
+      if (!walletAddress || !amount || parseFloat(amount) <= 0) {
+        return res.status(400).json({ message: "walletAddress and positive amount required" });
+      }
+      const result = await storage.creditVirtualBtcBalance(walletAddress, amount.toString());
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/btcswap/execute — swap virtual USDT → BTCB on BSC via liquidity wallet
+  app.post("/api/btcswap/execute", async (req, res) => {
+    const { walletAddress, amountUsdt } = req.body;
+    if (!walletAddress || !amountUsdt) {
+      return res.status(400).json({ message: "walletAddress and amountUsdt are required" });
+    }
+    const amount = parseFloat(amountUsdt);
+    if (isNaN(amount) || amount < MIN_SWAP_USDT) {
+      return res.status(400).json({ message: `Minimum swap amount is $${MIN_SWAP_USDT}` });
+    }
+
+    // Check user virtual balance
+    const vBalance = await storage.getVirtualBtcBalance(walletAddress);
+    const available = parseFloat(vBalance?.balance ?? "0");
+    if (available < amount) {
+      return res.status(400).json({ message: "Insufficient virtual BTC balance" });
+    }
+
+    // Check liquidity wallet key is configured
+    const liquidityKey = process.env.BTC_LIQUIDITY_WALLET_PRIVATE_KEY;
+    if (!liquidityKey || liquidityKey.length < 10) {
+      return res.status(503).json({ message: "BTC swap service not configured. Contact admin." });
+    }
+
+    // Create a pending txn record first
+    const txnRecord = await storage.createBtcSwapTxn({
+      walletAddress,
+      amountUsdt: amount.toString(),
+      status: "pending",
+    });
+
+    // Execute swap asynchronously — respond immediately with txn ID
+    res.json({ txnId: txnRecord.id, status: "pending", message: "Swap initiated. Check status shortly." });
+
+    // Background execution
+    (async () => {
+      try {
+        const { ethers } = await import("ethers");
+        const provider = new ethers.JsonRpcProvider(BSC_RPC);
+        const wallet = new ethers.Wallet(liquidityKey, provider);
+
+        const usdtContract = new ethers.Contract(USDT_BSC, ERC20_ABI, wallet);
+        const routerContract = new ethers.Contract(PANCAKE_ROUTER, PANCAKE_ABI, wallet);
+
+        const amountWei = ethers.parseUnits(amount.toFixed(4), 18);
+
+        // Check liquidity wallet USDT balance
+        const usdtBalance: bigint = await usdtContract.balanceOf(wallet.address);
+        if (usdtBalance < amountWei) {
+          await storage.updateBtcSwapTxn(txnRecord.id, { status: "failed", errorMessage: "Liquidity wallet has insufficient USDT" });
+          return;
+        }
+
+        // Approve router if needed
+        const allowance: bigint = await usdtContract.allowance(wallet.address, PANCAKE_ROUTER);
+        if (allowance < amountWei) {
+          const approveTx = await usdtContract.approve(PANCAKE_ROUTER, ethers.MaxUint256);
+          await approveTx.wait();
+        }
+
+        // Get estimated BTCB output
+        const path = [USDT_BSC, BTCB_BSC];
+        const amounts: bigint[] = await routerContract.getAmountsOut(amountWei, path);
+        const estimatedBtcb = amounts[1];
+        const minOut = (estimatedBtcb * 97n) / 100n; // 3% slippage tolerance
+
+        // Execute swap — send BTCB directly to user's wallet
+        const deadline = Math.floor(Date.now() / 1000) + 300; // 5 min
+        const swapTx = await routerContract.swapExactTokensForTokens(
+          amountWei,
+          minOut,
+          path,
+          walletAddress,
+          deadline,
+        );
+        const receipt = await swapTx.wait();
+
+        const btcbReceived = ethers.formatUnits(estimatedBtcb, 18);
+
+        // Deduct from user's virtual balance and update txn
+        await storage.deductVirtualBtcBalance(walletAddress, amount.toString());
+        await storage.updateBtcSwapTxn(txnRecord.id, {
+          status: "completed",
+          bscTxHash: receipt.hash,
+          amountBtcb: btcbReceived,
+        });
+      } catch (err: any) {
+        await storage.updateBtcSwapTxn(txnRecord.id, {
+          status: "failed",
+          errorMessage: err?.reason || err?.message || "Unknown error",
+        });
+      }
+    })();
+  });
+
+  // GET /api/btcswap/txn/:id — check swap status
+  app.get("/api/btcswap/txn/:id", async (req, res) => {
+    try {
+      const { btcSwapTxns: txnTable } = await import("@shared/schema");
+      const { db } = await import("./db");
+      const { eq } = await import("drizzle-orm");
+      const [txn] = await db.select().from(txnTable).where(eq(txnTable.id, parseInt(req.params.id)));
+      if (!txn) return res.status(404).json({ message: "Transaction not found" });
+      res.json(txn);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   return httpServer;
 }

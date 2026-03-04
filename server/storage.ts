@@ -1,4 +1,4 @@
-import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage } from "@shared/schema";
+import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -14,6 +14,12 @@ export interface IStorage {
   addToMwalletBalance(walletAddress: string, amount: string): Promise<MwalletBalance>;
   createStakingClaim(data: Omit<InsertStakingClaim, "id">): Promise<StakingClaim>;
   getStakingClaims(walletAddress: string, limit: number, offset: number): Promise<{ claims: StakingClaim[]; total: number }>;
+  getVirtualBtcBalance(walletAddress: string): Promise<VirtualBtcBalance | undefined>;
+  creditVirtualBtcBalance(walletAddress: string, amount: string): Promise<VirtualBtcBalance>;
+  deductVirtualBtcBalance(walletAddress: string, amount: string): Promise<VirtualBtcBalance>;
+  createBtcSwapTxn(data: Omit<InsertBtcSwapTxn, "id">): Promise<BtcSwapTxn>;
+  updateBtcSwapTxn(id: number, data: Partial<{ amountBtcb: string; bscTxHash: string; status: string; errorMessage: string }>): Promise<BtcSwapTxn>;
+  getBtcSwapTxns(walletAddress: string): Promise<BtcSwapTxn[]>;
   getProducts(): Promise<HardwareProduct[]>;
   getProduct(id: string): Promise<HardwareProduct | undefined>;
   addProduct(product: Omit<HardwareProduct, "id">): Promise<HardwareProduct>;
@@ -124,6 +130,60 @@ export class DatabaseStorage implements IStorage {
     const [countResult] = await db.select({ count: sql<number>`count(*)::int` }).from(stakingClaims)
       .where(eq(stakingClaims.walletAddress, addr));
     return { claims, total: countResult?.count || 0 };
+  }
+
+  async getVirtualBtcBalance(walletAddress: string): Promise<VirtualBtcBalance | undefined> {
+    const [row] = await db.select().from(virtualBtcBalances).where(eq(virtualBtcBalances.walletAddress, walletAddress.toLowerCase()));
+    return row;
+  }
+
+  async creditVirtualBtcBalance(walletAddress: string, amount: string): Promise<VirtualBtcBalance> {
+    const addr = walletAddress.toLowerCase();
+    const [row] = await db.insert(virtualBtcBalances)
+      .values({ walletAddress: addr, balance: amount, totalEarned: amount, totalSwapped: "0" })
+      .onConflictDoUpdate({
+        target: virtualBtcBalances.walletAddress,
+        set: {
+          balance: sql`${virtualBtcBalances.balance}::numeric + ${amount}::numeric`,
+          totalEarned: sql`${virtualBtcBalances.totalEarned}::numeric + ${amount}::numeric`,
+          updatedAt: new Date(),
+        },
+      })
+      .returning();
+    return row;
+  }
+
+  async deductVirtualBtcBalance(walletAddress: string, amount: string): Promise<VirtualBtcBalance> {
+    const addr = walletAddress.toLowerCase();
+    const [row] = await db.update(virtualBtcBalances)
+      .set({
+        balance: sql`${virtualBtcBalances.balance}::numeric - ${amount}::numeric`,
+        totalSwapped: sql`${virtualBtcBalances.totalSwapped}::numeric + ${amount}::numeric`,
+        updatedAt: new Date(),
+      })
+      .where(eq(virtualBtcBalances.walletAddress, addr))
+      .returning();
+    return row;
+  }
+
+  async createBtcSwapTxn(data: Omit<InsertBtcSwapTxn, "id">): Promise<BtcSwapTxn> {
+    const [txn] = await db.insert(btcSwapTxns).values({
+      ...data,
+      walletAddress: data.walletAddress.toLowerCase(),
+    }).returning();
+    return txn;
+  }
+
+  async updateBtcSwapTxn(id: number, data: Partial<{ amountBtcb: string; bscTxHash: string; status: string; errorMessage: string }>): Promise<BtcSwapTxn> {
+    const [txn] = await db.update(btcSwapTxns).set(data).where(eq(btcSwapTxns.id, id)).returning();
+    return txn;
+  }
+
+  async getBtcSwapTxns(walletAddress: string): Promise<BtcSwapTxn[]> {
+    return db.select().from(btcSwapTxns)
+      .where(eq(btcSwapTxns.walletAddress, walletAddress.toLowerCase()))
+      .orderBy(desc(btcSwapTxns.createdAt))
+      .limit(20);
   }
 
   async getProducts(): Promise<HardwareProduct[]> {
