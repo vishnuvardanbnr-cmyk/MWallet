@@ -58,7 +58,7 @@ function StatCard({ label, value, icon: Icon, iconColor, accentGlow, delay, bord
 
 const TOKEN_PRICE = 0.0024;
 const STAKING_PLANS = [
-  { months: 15, multiplier: 1, returnLabel: "100% Return" },
+  { months: 15, multiplier: 0.2, returnLabel: "20% Return" },
 ];
 
 interface StakingActivePlan {
@@ -612,7 +612,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
                     <Clock className="h-4 w-4 text-purple-400" />
                     <span className="font-bold text-sm" style={{ fontFamily: 'var(--font-display)' }}>15 Months</span>
                   </div>
-                  <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">100% Return</Badge>
+                  <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">20% Return</Badge>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>

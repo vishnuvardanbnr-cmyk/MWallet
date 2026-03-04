@@ -61,7 +61,7 @@ export async function registerRoutes(
       }
 
       const TOKEN_PRICE = 0.0024;
-      const multiplier = parsed.planMonths === 15 ? 1 : 2;
+      const multiplier = 0.2;
       const totalUsd = activationFee * multiplier;
       const totalTokens = totalUsd / TOKEN_PRICE;
       const totalDays = parsed.planMonths * 30;
