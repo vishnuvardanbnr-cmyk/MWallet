@@ -14,7 +14,7 @@ const PACKAGE_PRICES: Record<number, number> = {
 
 const selectStakingSchema = z.object({
   walletAddress: z.string().min(1),
-  planMonths: z.enum(["15", "30"]).transform(Number),
+  planMonths: z.literal("15").transform(Number),
   packageLevel: z.number().min(1).max(5),
 });
 

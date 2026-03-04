@@ -59,7 +59,6 @@ function StatCard({ label, value, icon: Icon, iconColor, accentGlow, delay, bord
 const TOKEN_PRICE = 0.0024;
 const STAKING_PLANS = [
   { months: 15, multiplier: 1, returnLabel: "100% Return" },
-  { months: 30, multiplier: 2, returnLabel: "200% Return" },
 ];
 
 interface StakingActivePlan {
@@ -77,7 +76,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
   const { toast } = useToast();
 
   const [stakingPlan, setStakingPlan] = useState<StakingActivePlan | null>(null);
-  const [selectedMonths, setSelectedMonths] = useState<number | null>(null);
+  const [selectedMonths, setSelectedMonths] = useState<number | null>(15);
   const [stakingActivating, setStakingActivating] = useState(false);
   const [stakingResult, setStakingResult] = useState<{ success: boolean; message: string } | null>(null);
   const [flushoutCountdown, setFlushoutCountdown] = useState<{ hours: number; minutes: number; seconds: number } | null>(null);
@@ -600,49 +599,38 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
               <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>
                 <span className="gradient-text">Free M Coin Staking</span>
               </h2>
-              <p className="text-xs text-muted-foreground">Choose a staking duration to earn M Coin daily</p>
+              <p className="text-xs text-muted-foreground">Earn M Coin daily with a 15-month staking plan</p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-            {stakingPlansComputed.map((plan) => {
-              const isSelected = selectedMonths === plan.months;
-              return (
-                <button
-                  key={plan.months}
-                  onClick={() => setSelectedMonths(plan.months)}
-                  className={`text-left p-4 rounded-xl border-2 transition-all ${isSelected ? "border-purple-500/50 bg-purple-500/5" : "border-white/[0.06] bg-white/[0.02] hover:border-purple-500/20"}`}
-                  data-testid={`button-plan-${plan.months}`}
-                >
-                  <div className="flex items-center justify-between mb-3">
-                    <div className="flex items-center gap-2">
-                      <Clock className={`h-4 w-4 ${isSelected ? "text-purple-400" : "text-muted-foreground"}`} />
-                      <span className="font-bold text-sm" style={{ fontFamily: 'var(--font-display)' }}>{plan.months} Months</span>
-                    </div>
-                    <Badge className={isSelected ? "bg-purple-500/20 text-purple-400 border-purple-500/30" : "bg-white/[0.05] text-muted-foreground border-white/10"}>
-                      {plan.returnLabel}
-                    </Badge>
+          {stakingPlansComputed.length > 0 && (() => {
+            const plan = stakingPlansComputed[0];
+            return (
+              <div className="p-4 rounded-xl border-2 border-purple-500/40 bg-purple-500/5 mb-4" data-testid="card-staking-plan-15">
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <Clock className="h-4 w-4 text-purple-400" />
+                    <span className="font-bold text-sm" style={{ fontFamily: 'var(--font-display)' }}>15 Months</span>
                   </div>
-                  <div className="grid grid-cols-2 gap-2">
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Tokens</p>
-                      <p className="text-sm font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }}>{Math.floor(plan.totalTokens).toLocaleString()}</p>
-                    </div>
-                    <div>
-                      <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Daily</p>
-                      <p className="text-sm font-bold text-emerald-400" style={{ fontFamily: 'var(--font-display)' }}>{plan.dailyTokens.toFixed(2)}</p>
-                    </div>
+                  <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">100% Return</Badge>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Total Tokens</p>
+                    <p className="text-sm font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }}>{Math.floor(plan.totalTokens).toLocaleString()}</p>
                   </div>
-                  {isSelected && (
-                    <div className="mt-2 flex items-center gap-1.5">
-                      <CheckCircle className="h-3.5 w-3.5 text-purple-400" />
-                      <span className="text-[11px] text-purple-400 font-medium">Selected</span>
-                    </div>
-                  )}
-                </button>
-              );
-            })}
-          </div>
+                  <div>
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Daily</p>
+                    <p className="text-sm font-bold text-emerald-400" style={{ fontFamily: 'var(--font-display)' }}>{plan.dailyTokens.toFixed(2)}</p>
+                  </div>
+                </div>
+                <div className="mt-2 flex items-center gap-1.5">
+                  <CheckCircle className="h-3.5 w-3.5 text-purple-400" />
+                  <span className="text-[11px] text-purple-400 font-medium">450 days · Token price $0.0024</span>
+                </div>
+              </div>
+            );
+          })()}
 
           {stakingResult && (
             <div className={`flex items-center gap-2.5 p-3 rounded-xl border mb-3 ${stakingResult.success ? "bg-emerald-500/10 border-emerald-500/20" : "bg-red-500/10 border-red-500/20"}`} data-testid="text-staking-activate-result">
@@ -653,7 +641,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
 
           <button
             onClick={activateStaking}
-            disabled={!selectedMonths || stakingActivating}
+            disabled={stakingActivating}
             className="w-full glow-button text-white font-bold py-3.5 px-6 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
             data-testid="button-activate-staking"
             style={{ fontFamily: 'var(--font-display)' }}
