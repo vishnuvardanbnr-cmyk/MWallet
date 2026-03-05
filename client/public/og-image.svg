@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0a0e1a"/>
+      <stop offset="100%" stop-color="#0f172a"/>
+    </linearGradient>
+    <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="50%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <linearGradient id="titleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#f59e0b"/>
+      <stop offset="50%" stop-color="#a855f7"/>
+      <stop offset="100%" stop-color="#06b6d4"/>
+    </linearGradient>
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="20" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+  </defs>
+
+  <rect width="1200" height="630" fill="url(#bg)"/>
+
+  <circle cx="150" cy="150" r="200" fill="#a855f7" opacity="0.07"/>
+  <circle cx="1050" cy="480" r="250" fill="#06b6d4" opacity="0.06"/>
+  <circle cx="600" cy="600" r="180" fill="#f59e0b" opacity="0.04"/>
+
+  <rect x="460" y="195" width="280" height="280" rx="56" fill="url(#logoGrad)" opacity="0.15"/>
+  <rect x="470" y="205" width="260" height="260" rx="52" fill="url(#logoGrad)"/>
+  <text x="600" y="370" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="900" font-size="150" fill="white" opacity="0.95">M</text>
+
+  <text x="600" y="530" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="800" font-size="72" fill="url(#titleGrad)">M-Vault</text>
+
+  <text x="600" y="580" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="400" font-size="26" fill="#94a3b8" letter-spacing="2">Crypto Staking &amp; DeFi on BNB Smart Chain</text>
+</svg>
