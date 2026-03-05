@@ -239,7 +239,7 @@ export default function StakingPage({ account }: StakingPageProps) {
                 <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground">Completed</Badge>
               )}
               <Badge variant="outline" className="border-purple-500/30 text-purple-400">
-                20% Return
+                10% Return
               </Badge>
             </div>
           </div>

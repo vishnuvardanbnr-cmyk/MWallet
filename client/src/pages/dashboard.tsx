@@ -58,7 +58,7 @@ function StatCard({ label, value, icon: Icon, iconColor, accentGlow, delay, bord
 
 const TOKEN_PRICE = 0.0024;
 const STAKING_PLANS = [
-  { months: 15, multiplier: 0.2, returnLabel: "20% Return" },
+  { months: 10, multiplier: 0.1, returnLabel: "10% Return" },
 ];
 
 interface StakingActivePlan {
@@ -599,7 +599,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
               <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>
                 <span className="gradient-text">Free M Coin Staking</span>
               </h2>
-              <p className="text-xs text-muted-foreground">Earn M Coin daily with a 15-month staking plan</p>
+              <p className="text-xs text-muted-foreground">Earn M Coin daily with a 10-month staking plan</p>
             </div>
           </div>
 
@@ -610,9 +610,9 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
                     <Clock className="h-4 w-4 text-purple-400" />
-                    <span className="font-bold text-sm" style={{ fontFamily: 'var(--font-display)' }}>15 Months</span>
+                    <span className="font-bold text-sm" style={{ fontFamily: 'var(--font-display)' }}>10 Months</span>
                   </div>
-                  <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">20% Return</Badge>
+                  <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">10% Return</Badge>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -626,7 +626,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
                 </div>
                 <div className="mt-2 flex items-center gap-1.5">
                   <CheckCircle className="h-3.5 w-3.5 text-purple-400" />
-                  <span className="text-[11px] text-purple-400 font-medium">450 days · Token price $0.0024</span>
+                  <span className="text-[11px] text-purple-400 font-medium">300 days · Token price $0.0024</span>
                 </div>
               </div>
             );

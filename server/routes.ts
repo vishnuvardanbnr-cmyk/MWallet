@@ -14,7 +14,7 @@ const PACKAGE_PRICES: Record<number, number> = {
 
 const selectStakingSchema = z.object({
   walletAddress: z.string().min(1),
-  planMonths: z.literal("15").transform(Number),
+  planMonths: z.literal("10").transform(Number),
   packageLevel: z.number().min(1).max(5),
 });
 
@@ -61,7 +61,7 @@ export async function registerRoutes(
       }
 
       const TOKEN_PRICE = 0.0024;
-      const multiplier = 0.2;
+      const multiplier = 0.1;
       const totalUsd = activationFee * multiplier;
       const totalTokens = totalUsd / TOKEN_PRICE;
       const totalDays = parsed.planMonths * 30;
