@@ -4,13 +4,29 @@ pragma solidity ^0.8.20;
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 interface IMLMCallback {
     function logBoardReward(address _user, uint256 _reward, uint256 _boardLevel) external;
     function logBoardEntry(address _user, uint256 _price, uint256 _boardLevel) external;
 }
 
-contract BoardMatrixHandler is Ownable {
+interface IPancakeRouter {
+    function swapExactTokensForTokens(
+        uint256 amountIn,
+        uint256 amountOutMin,
+        address[] calldata path,
+        address to,
+        uint256 deadline
+    ) external returns (uint256[] memory amounts);
+
+    function getAmountsOut(
+        uint256 amountIn,
+        address[] calldata path
+    ) external view returns (uint256[] memory amounts);
+}
+
+contract BoardMatrixHandler is Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     struct BoardMatrix {
@@ -21,7 +37,7 @@ contract BoardMatrixHandler is Ownable {
 
     uint256 public constant TOTAL_BOARDS = 10;
     uint256 public constant BOARD_MEMBERS_REQUIRED = 12;
-    uint256 public constant BOARD_REWARD_MEMBERS = 9;
+    uint256 public constant BOARD_LEVEL2_MEMBERS = 9;
     uint256 public constant BOARD_REWARD_RATE_BP = 4000;
     uint256 public constant BOARD_NEXT_POOL_RATE_BP = 4000;
     uint256 public constant BOARD_LIQUIDITY_RATE_BP = 2000;
@@ -29,19 +45,27 @@ contract BoardMatrixHandler is Ownable {
     uint256 public constant BOARD_10_SYSTEM_RATE_BP = 625;
     uint256 public constant BOARD_10_LIQUIDITY_RATE_BP = 625;
     uint256 public constant BASIS_POINTS = 10000;
+    uint256 public constant DEFAULT_SLIPPAGE_BP = 200;
 
     mapping(uint256 => BoardMatrix[]) internal _boardMatrices;
     mapping(uint256 => uint256) public boardCurrentIndex;
+    mapping(address => uint256) public virtualRewardBalance;
+    mapping(address => uint256) public totalVirtualRewards;
+    mapping(address => uint256) public totalSwappedToBTC;
     uint256[11] public boardPrices;
 
     IERC20 public paymentToken;
     IERC20 public btcRewardToken;
+    IPancakeRouter public pancakeRouter;
     address public coinLiquidityAddress;
     address public systemAddress;
     address public mlmContract;
+    address public btcbToken;
 
     event BoardEntered(address indexed user, uint256 indexed boardLevel, uint256 matrixIndex);
     event BoardCompleted(address indexed owner, uint256 indexed boardLevel, uint256 reward, uint256 liquidity);
+    event VirtualRewardCredited(address indexed user, uint256 amount, uint256 boardLevel);
+    event SwappedToBTC(address indexed user, uint256 usdtAmount, uint256 btcbAmount);
 
     modifier onlyMLM() {
         require(msg.sender == mlmContract || msg.sender == owner(), "NA");
@@ -81,6 +105,16 @@ contract BoardMatrixHandler is Ownable {
         btcRewardToken = IERC20(_token);
     }
 
+    function setPancakeRouter(address _router) external onlyOwner {
+        require(_router != address(0), "IV");
+        pancakeRouter = IPancakeRouter(_router);
+    }
+
+    function setBtcbToken(address _token) external onlyOwner {
+        require(_token != address(0), "IV");
+        btcbToken = _token;
+    }
+
     function setBoardPrice(uint256 _boardLevel, uint256 _price) external onlyOwner {
         require(_boardLevel >= 1 && _boardLevel <= TOTAL_BOARDS, "BL");
         require(_price > 0, "P0");
@@ -115,15 +149,15 @@ contract BoardMatrixHandler is Ownable {
     }
 
     function _completeBoardMatrix(address _owner, uint256 _boardLevel) internal {
-        uint256 totalPool = boardPrices[_boardLevel] * BOARD_REWARD_MEMBERS;
+        uint256 totalPool = boardPrices[_boardLevel] * BOARD_LEVEL2_MEMBERS;
 
         if (_boardLevel < TOTAL_BOARDS) {
             uint256 reward    = (totalPool * BOARD_REWARD_RATE_BP) / BASIS_POINTS;
             uint256 liquidity = (totalPool * BOARD_LIQUIDITY_RATE_BP) / BASIS_POINTS;
 
-            if (address(btcRewardToken) != address(0)) {
-                btcRewardToken.safeTransfer(_owner, reward);
-            }
+            virtualRewardBalance[_owner] += reward;
+            totalVirtualRewards[_owner] += reward;
+            emit VirtualRewardCredited(_owner, reward, _boardLevel);
 
             if (coinLiquidityAddress != address(0)) {
                 paymentToken.safeTransfer(coinLiquidityAddress, liquidity);
@@ -142,9 +176,9 @@ contract BoardMatrixHandler is Ownable {
             uint256 systemFee = (totalPool * BOARD_10_SYSTEM_RATE_BP) / BASIS_POINTS;
             uint256 liquidity = (totalPool * BOARD_10_LIQUIDITY_RATE_BP) / BASIS_POINTS;
 
-            if (address(btcRewardToken) != address(0)) {
-                btcRewardToken.safeTransfer(_owner, reward);
-            }
+            virtualRewardBalance[_owner] += reward;
+            totalVirtualRewards[_owner] += reward;
+            emit VirtualRewardCredited(_owner, reward, _boardLevel);
 
             if (systemAddress != address(0)) {
                 paymentToken.safeTransfer(systemAddress, systemFee);
@@ -159,6 +193,53 @@ contract BoardMatrixHandler is Ownable {
 
             emit BoardCompleted(_owner, _boardLevel, reward, liquidity);
         }
+    }
+
+    function getSwapEstimate(uint256 _usdtAmount) external view returns (uint256 btcbAmount) {
+        require(address(pancakeRouter) != address(0), "Router not set");
+        require(btcbToken != address(0), "BTCB not set");
+
+        address[] memory path = new address[](2);
+        path[0] = address(paymentToken);
+        path[1] = btcbToken;
+
+        uint256[] memory amounts = pancakeRouter.getAmountsOut(_usdtAmount, path);
+        return amounts[1];
+    }
+
+    function claimAndSwapToBTC(uint256 _amount, uint256 _minBtcbOut) external nonReentrant {
+        require(_amount > 0, "Zero amount");
+        require(virtualRewardBalance[msg.sender] >= _amount, "Insufficient virtual balance");
+        require(address(pancakeRouter) != address(0), "Router not set");
+        require(btcbToken != address(0), "BTCB not set");
+
+        virtualRewardBalance[msg.sender] -= _amount;
+
+        paymentToken.approve(address(pancakeRouter), _amount);
+
+        address[] memory path = new address[](2);
+        path[0] = address(paymentToken);
+        path[1] = btcbToken;
+
+        uint256[] memory amounts = pancakeRouter.swapExactTokensForTokens(
+            _amount,
+            _minBtcbOut,
+            path,
+            msg.sender,
+            block.timestamp + 300
+        );
+
+        totalSwappedToBTC[msg.sender] += amounts[1];
+
+        emit SwappedToBTC(msg.sender, _amount, amounts[1]);
+    }
+
+    function getVirtualRewardBalance(address _user) external view returns (uint256 balance, uint256 totalEarned) {
+        return (virtualRewardBalance[_user], totalVirtualRewards[_user]);
+    }
+
+    function getTotalSwappedToBTC(address _user) external view returns (uint256) {
+        return totalSwappedToBTC[_user];
     }
 
     function getBoardPrice(uint256 _boardLevel) external view returns (uint256) {

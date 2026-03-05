@@ -18,7 +18,7 @@ export const BSC_TESTNET = {
 
 const isMainnet = import.meta.env.VITE_BSC_NETWORK === "mainnet";
 export const NETWORK = isMainnet ? BSC_MAINNET : BSC_TESTNET;
-export const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0xcC2c4171B84D60403fEE997523C030Eb6f6459b8";
+export const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0xAC69c540DDF49fCe90088B36127ca852f198B353";
 export const TOKEN_ADDRESS = import.meta.env.VITE_PAYMENT_TOKEN_ADDRESS || "";
 
 export const MLM_ABI = [
@@ -55,7 +55,6 @@ export const MLM_ABI = [
   "function getUserIdByAddress(address _user) view returns (uint256)",
   "function getAddressByUserId(uint256 _userId) view returns (address)",
   "function packagePrices(uint256) view returns (uint256)",
-  "function boardPrices(uint256) view returns (uint256)",
   "function getMaxIncomeLimit(uint8 _pkg) view returns (uint256)",
   "function getPackagePrice(uint8 _pkg) view returns (uint256)",
   "function getUserTransactionCount(address _user) view returns (uint256)",
@@ -71,7 +70,7 @@ export const MLM_ABI = [
   "event WithdrawalMatchDistributed(address indexed recipient, address indexed from, uint256 amount, uint256 level)",
 ];
 
-export const BOARD_HANDLER_ADDRESS = import.meta.env.VITE_BOARD_HANDLER_ADDRESS || "0xf6FFD2DE6a8f07F720c2CD88e52943df2C290967";
+export const BOARD_HANDLER_ADDRESS = import.meta.env.VITE_BOARD_HANDLER_ADDRESS || "0x6b3280d57159e2Cac30777b437291900cA3ba1C0";
 
 export const PANCAKE_ROUTER_ADDRESS = import.meta.env.VITE_PANCAKE_ROUTER_ADDRESS || "0xD99D1c33F9fC3444f8101754aBC46c52416550D1";
 
@@ -87,6 +86,14 @@ export const BOARD_HANDLER_ABI = [
   "function claimAndSwapToBTC(uint256 _amount, uint256 _minBtcbOut) external",
   "function btcbToken() view returns (address)",
   "function pancakeRouter() view returns (address)",
+  "function boardPrices(uint256) view returns (uint256)",
+  "function getBoardPrice(uint256 _boardLevel) view returns (uint256)",
+  "function getBoardQueueLength(uint256 _boardLevel) view returns (uint256)",
+  "function getBoardMatrixInfo(uint256 _boardLevel, uint256 _index) view returns (address owner, uint256 filledCount, bool completed)",
+  "function getBoardCurrentIndex(uint256 _boardLevel) view returns (uint256)",
+  "event BoardCompleted(address indexed owner, uint256 indexed boardLevel, uint256 reward, uint256 liquidity)",
+  "event VirtualRewardCredited(address indexed user, uint256 amount, uint256 boardLevel)",
+  "event SwappedToBTC(address indexed user, uint256 usdtAmount, uint256 btcbAmount)",
 ];
 
 export const PANCAKE_ROUTER_ABI = [
@@ -110,10 +117,10 @@ export const BOARD_PRICES_USD = [0, 50, 180, 648, 2333, 8398, 30233, 108839, 391
 export const TX_TYPE_NAMES = [
   "Activation", "Upgrade", "Reactivation", "Withdrawal",
   "Direct Sponsor", "Binary Matching", "Matching Override", "Withdrawal Match",
-  "Board Entry", "Board Reward"
+  "Board Entry", "Board Reward", "BTC Pool Deduction", "Withdrawal Match Deduction"
 ];
 
-export const TX_TYPE_INCOME = [false, false, false, false, true, true, true, true, false, true];
+export const TX_TYPE_INCOME = [false, false, false, false, true, true, true, true, false, true, false, false];
 
 export function getContract(signerOrProvider: ethers.Signer | ethers.Provider) {
   return new ethers.Contract(CONTRACT_ADDRESS, MLM_ABI, signerOrProvider);

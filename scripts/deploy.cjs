@@ -18,10 +18,6 @@ async function main() {
   console.log("  Balance:", ethers.formatEther(balance), "BNB");
   console.log("══════════════════════════════════════════════════\n");
 
-  if (balance < ethers.parseEther("0.02")) {
-    throw new Error("Insufficient BNB — need at least 0.02 BNB testnet for gas");
-  }
-
   // ── 1. Deploy MLMContract ─────────────────────────────────────────────────
   console.log("[1/2] Deploying MLMContract...");
   const MLMFactory = await ethers.getContractFactory("MLMContract");
@@ -45,6 +41,10 @@ async function main() {
 
   // ── 3. Post-deploy config on BoardMatrixHandler ───────────────────────────
   console.log("\n[+] Configuring BoardMatrixHandler...");
+  const tx0 = await mlm.setBoardHandler(boardAddress);
+  await tx0.wait();
+  console.log("      ✓ MLMContract.setBoardHandler →", boardAddress);
+
   const tx1 = await board.setMLMContract(mlmAddress);
   await tx1.wait();
   console.log("      ✓ setMLMContract →", mlmAddress);

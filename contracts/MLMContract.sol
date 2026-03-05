@@ -7,6 +7,14 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/Pausable.sol";
 
+interface IBoardMatrixHandler {
+    function enterBoard(address _user, uint256 _boardLevel) external;
+    function getBoardPrice(uint256 _boardLevel) external view returns (uint256);
+    function getBoardQueueLength(uint256 _boardLevel) external view returns (uint256);
+    function getBoardMatrixInfo(uint256 _boardLevel, uint256 _index) external view returns (address owner, uint256 filledCount, bool completed);
+    function getBoardCurrentIndex(uint256 _boardLevel) external view returns (uint256);
+}
+
 contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
@@ -47,6 +55,9 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
         uint256 rightBusiness;
         uint256 carryLeft;
         uint256 carryRight;
+
+        uint256[4] carryLeftSlab;
+        uint256[4] carryRightSlab;
 
         uint256 todayBinaryIncome;
         uint256 lastBinaryResetDay;
@@ -93,32 +104,12 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     uint256 public constant MIN_USER_ID = 1000;
     uint256 public constant MAX_USER_ID = 999999999999;
 
-    struct BoardMatrix {
-        address owner;
-        uint256 filledCount;
-        bool    completed;
-    }
-
-    uint256 public constant TOTAL_BOARDS = 10;
-    uint256 public constant BOARD_MEMBERS_REQUIRED = 12;
     uint256 public constant BTC_POOL_RATE = 1000;
-    uint256 public constant BOARD_REWARD_RATE_BP = 4000;
-    uint256 public constant BOARD_NEXT_POOL_RATE_BP = 4000;
-    uint256 public constant BOARD_LIQUIDITY_RATE_BP = 2000;
-    uint256 public constant BOARD_10_REWARD_RATE_BP = 8750;
-    uint256 public constant BOARD_10_SYSTEM_RATE_BP = 625;
-    uint256 public constant BOARD_10_LIQUIDITY_RATE_BP = 625;
 
     mapping(address => uint256) public btcPoolBalance;
-    mapping(uint256 => BoardMatrix[]) internal _boardMatrices;
-    mapping(uint256 => uint256) public boardCurrentIndex;
-    uint256[11] public boardPrices;
-
     mapping(address => uint256) public boardEntryCount;
 
-    address public coinLiquidityAddress;
-    address public systemAddress;
-    IERC20  public btcRewardToken;
+    IBoardMatrixHandler public boardHandler;
 
     address public adminBinaryWallet;
     uint256 public totalBinaryFlushed;
@@ -130,7 +121,6 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     uint256[6] public matchingOverrideMaxLevels = [0, 3, 6, 10, 15, 20];
     uint256[6] public withdrawalMatchMaxLevels = [0, 3, 5, 9, 12, 15];
 
-    uint256 public constant BINARY_RATE   = 3000;
     uint256 public constant MATCHING_OVERRIDE_RATE = 100;
     uint256 public constant WITHDRAWAL_MATCH_POOL_RATE = 1000;
     uint256 public constant GRACE_PERIOD_DURATION = 48 hours;
@@ -159,10 +149,6 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     event DailyCappingUpdated(Package pkg, uint256 oldCap, uint256 newCap);
     event MaxIncomeLimitUpdated(Package pkg, uint256 oldLimit, uint256 newLimit);
     event BtcPoolCredited(address indexed user, uint256 amount);
-    event BoardEntered(address indexed user, uint256 indexed boardLevel, uint256 matrixIndex);
-    event BoardCompleted(address indexed owner, uint256 indexed boardLevel, uint256 reward, uint256 liquidity);
-    event CoinLiquidityAddressUpdated(address indexed oldAddr, address indexed newAddr);
-    event SystemAddressUpdated(address indexed oldAddr, address indexed newAddr);
     event ProductWalletUpdated(address indexed oldAddr, address indexed newAddr);
     event BinaryIncomeAllocated(address indexed user, uint256 amount);
     event BinaryIncomeClaimed(address indexed user, uint256 amount);
@@ -174,14 +160,15 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     event FreeAccountActivated(address indexed user, uint256 userId, Package pkg, address indexed sponsor);
     event BinaryFlushed(address indexed user, uint256 flushedAmount);
     event AdminBinaryWalletUpdated(address indexed oldWallet, address indexed newWallet);
+    event BoardHandlerUpdated(address indexed oldHandler, address indexed newHandler);
 
     modifier onlyRegistered(address _user) {
-        require(isRegistered[_user], "MLM: Not registered");
+        require(isRegistered[_user], "NR");
         _;
     }
 
     modifier onlyBinaryProcessor() {
-        require(isBinaryProcessor[msg.sender] || msg.sender == owner(), "MLM: Not authorized");
+        require(isBinaryProcessor[msg.sender] || msg.sender == owner(), "AU");
         _;
     }
 
@@ -191,9 +178,9 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
         address _feeRecipient,
         address _adminBinaryWallet
     ) Ownable(msg.sender) {
-        require(_paymentToken != address(0), "MLM: Invalid token");
-        require(_feeRecipient != address(0), "MLM: Invalid fee recipient");
-        require(_adminBinaryWallet != address(0), "MLM: Invalid admin binary wallet");
+        require(_paymentToken != address(0), "IT");
+        require(_feeRecipient != address(0), "IF");
+        require(_adminBinaryWallet != address(0), "IA");
 
         paymentToken  = IERC20(_paymentToken);
         tokenDecimals = _tokenDecimals;
@@ -224,17 +211,6 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
         maxIncomeLimit[3] = 6000  * unit;
         maxIncomeLimit[4] = 12000 * unit;
         maxIncomeLimit[5] = 24000 * unit;
-
-        boardPrices[1]  = 50        * unit;
-        boardPrices[2]  = 180       * unit;
-        boardPrices[3]  = 648       * unit;
-        boardPrices[4]  = 2333      * unit;
-        boardPrices[5]  = 8398      * unit;
-        boardPrices[6]  = 30233     * unit;
-        boardPrices[7]  = 108839    * unit;
-        boardPrices[8]  = 391821    * unit;
-        boardPrices[9]  = 1410555   * unit;
-        boardPrices[10] = 5077998   * unit;
     }
 
     function _generateUserId() internal returns (uint256) {
@@ -252,7 +228,7 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
             )));
             id = (id % (MAX_USER_ID - MIN_USER_ID + 1)) + MIN_USER_ID;
             attempts++;
-            require(attempts <= 50, "MLM: ID generation failed");
+            require(attempts <= 50, "IG");
         } while (userIdTaken[id]);
 
         return id;
@@ -277,7 +253,7 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
         uint256 _binaryParentId,
         bool    _placeLeft
     ) external whenNotPaused {
-        require(!isRegistered[msg.sender], "MLM: Already registered");
+        require(!isRegistered[msg.sender], "AR");
 
         address _sponsor;
         address _binaryParent;
@@ -289,13 +265,13 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
             side = Side.NONE;
         } else {
             _sponsor = userIdToAddress[_sponsorId];
-            require(_sponsor != address(0) && isRegistered[_sponsor], "MLM: Invalid sponsor ID");
+            require(_sponsor != address(0) && isRegistered[_sponsor], "IS");
 
             if (_binaryParentId == 0) {
                 _binaryParent = _sponsor;
             } else {
                 _binaryParent = userIdToAddress[_binaryParentId];
-                require(_binaryParent != address(0) && isRegistered[_binaryParent], "MLM: Invalid binary parent ID");
+                require(_binaryParent != address(0) && isRegistered[_binaryParent], "IB");
             }
 
             if (_placeLeft) {
@@ -345,7 +321,7 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
         string calldata _phone,
         string calldata _country
     ) external onlyRegistered(msg.sender) {
-        require(bytes(_displayName).length > 0, "MLM: Display name required");
+        require(bytes(_displayName).length > 0, "DN");
 
         User storage u = users[msg.sender];
         u.displayName = _displayName;
@@ -358,11 +334,11 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     }
 
     function activatePackage(Package _pkg) external nonReentrant whenNotPaused {
-        require(isRegistered[msg.sender], "MLM: Not registered");
-        require(_pkg >= Package.BASIC && _pkg <= Package.SUPER_STOCKIEST, "MLM: Invalid package");
+        require(isRegistered[msg.sender], "NR");
+        require(_pkg >= Package.BASIC && _pkg <= Package.SUPER_STOCKIEST, "IP");
 
         User storage u = users[msg.sender];
-        require(uint256(_pkg) > uint256(u.userPackage), "MLM: Must upgrade to higher package");
+        require(uint256(_pkg) > uint256(u.userPackage), "UH");
 
         uint256 price = packagePrices[uint256(_pkg)];
         paymentToken.safeTransferFrom(msg.sender, address(this), price);
@@ -396,14 +372,14 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     }
 
     function reactivate(Package _pkg) external nonReentrant whenNotPaused {
-        require(isRegistered[msg.sender], "MLM: Not registered");
+        require(isRegistered[msg.sender], "NR");
         User storage u = users[msg.sender];
         require(
             u.status == Status.GRACE_PERIOD || u.status == Status.INACTIVE,
-            "MLM: Already active"
+            "AA"
         );
-        require(_pkg >= Package.BASIC, "MLM: Invalid package");
-        require(uint256(_pkg) >= uint256(u.userPackage), "MLM: Cannot downgrade");
+        require(_pkg >= Package.BASIC, "IP");
+        require(uint256(_pkg) >= uint256(u.userPackage), "CD");
 
         uint256 price = packagePrices[uint256(_pkg)];
         paymentToken.safeTransferFrom(msg.sender, address(this), price);
@@ -440,8 +416,8 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
 
     function repurchase() external nonReentrant whenNotPaused onlyRegistered(msg.sender) {
         User storage u = users[msg.sender];
-        require(u.status == Status.INACTIVE || u.status == Status.GRACE_PERIOD, "MLM: Must be inactive");
-        require(u.userPackage >= Package.BASIC, "MLM: No package to repurchase");
+        require(u.status == Status.INACTIVE || u.status == Status.GRACE_PERIOD, "MI");
+        require(u.userPackage >= Package.BASIC, "NP");
 
         uint256 price = packagePrices[uint256(u.userPackage)];
         paymentToken.safeTransferFrom(msg.sender, address(this), price);
@@ -485,22 +461,41 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
         emit DirectIncomeDistributed(sponsor, _user, income);
     }
 
+    function _getSlabIndex(uint256 _relativeDepth) internal pure returns (uint256, bool) {
+        if (_relativeDepth >= 1 && _relativeDepth <= 3)  return (0, true);
+        if (_relativeDepth >= 4 && _relativeDepth <= 6)  return (1, true);
+        if (_relativeDepth >= 7 && _relativeDepth <= 9)  return (2, true);
+        if (_relativeDepth >= 10 && _relativeDepth <= 20) return (3, true);
+        return (0, false);
+    }
+
     function _updateBinaryVolumes(address _user, uint256 _amount) internal {
         address current = _user;
+        uint256 levelsUp = 0;
 
         while (true) {
             address parent = users[current].binaryParent;
             if (parent == address(0)) break;
 
+            levelsUp++;
+
+            if (levelsUp > 20) break;
+
             if (users[parent].status == Status.ACTIVE || users[parent].status == Status.GRACE_PERIOD) {
                 Side side = users[current].placementSide;
 
-                if (side == Side.LEFT) {
-                    users[parent].leftBusiness += _amount;
-                    users[parent].carryLeft    += _amount;
-                } else if (side == Side.RIGHT) {
-                    users[parent].rightBusiness += _amount;
-                    users[parent].carryRight    += _amount;
+                users[parent].leftBusiness  += (side == Side.LEFT)  ? _amount : 0;
+                users[parent].rightBusiness += (side == Side.RIGHT) ? _amount : 0;
+                users[parent].carryLeft     += (side == Side.LEFT)  ? _amount : 0;
+                users[parent].carryRight    += (side == Side.RIGHT) ? _amount : 0;
+
+                (uint256 slabIdx, bool valid) = _getSlabIndex(levelsUp);
+                if (valid) {
+                    if (side == Side.LEFT) {
+                        users[parent].carryLeftSlab[slabIdx] += _amount;
+                    } else if (side == Side.RIGHT) {
+                        users[parent].carryRightSlab[slabIdx] += _amount;
+                    }
                 }
             }
 
@@ -508,22 +503,17 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
         }
     }
 
-    function _getBinaryIncomeRate(uint256 _depth) internal pure returns (uint256) {
-        if (_depth <= 5)  return 3000;
-        if (_depth <= 10) return 2000;
-        if (_depth <= 15) return 1000;
-        return 500;
-    }
+    uint256[4] public slabRates = [uint256(3000), 2000, 1000, 500];
 
     function autoDistributeBinaryIncome(uint256 _batchNumber)
         external
         onlyBinaryProcessor
         whenNotPaused
     {
-        require(_batchNumber > 0, "MLM: Batch number must be > 0");
+        require(_batchNumber > 0, "B0");
 
         uint256 startIndex = (_batchNumber - 1) * binaryBatchSize;
-        require(startIndex < allUsers.length, "MLM: Batch exceeds total users");
+        require(startIndex < allUsers.length, "BE");
 
         uint256 endIndex = startIndex + binaryBatchSize;
         if (endIndex > allUsers.length) {
@@ -538,18 +528,34 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
 
             if (u.status != Status.ACTIVE && u.status != Status.GRACE_PERIOD) continue;
 
-            uint256 matchedVolume = u.carryLeft < u.carryRight ? u.carryLeft : u.carryRight;
-            if (matchedVolume == 0) continue;
+            uint256 totalBinaryIncome = 0;
+            uint256 totalMatchedLeft = 0;
+            uint256 totalMatchedRight = 0;
 
-            uint256 rate = _getBinaryIncomeRate(u.binaryDepth);
-            uint256 binaryIncome = (matchedVolume * rate) / BASIS_POINTS;
-            if (binaryIncome == 0) continue;
+            for (uint256 s = 0; s < 4; s++) {
+                uint256 matchedVolume = u.carryLeftSlab[s] < u.carryRightSlab[s]
+                    ? u.carryLeftSlab[s]
+                    : u.carryRightSlab[s];
 
-            u.carryLeft  -= matchedVolume;
-            u.carryRight -= matchedVolume;
+                if (matchedVolume == 0) continue;
 
-            u.claimableBinaryIncome += binaryIncome;
-            emit BinaryIncomeAllocated(userAddr, binaryIncome);
+                uint256 income = (matchedVolume * slabRates[s]) / BASIS_POINTS;
+                totalBinaryIncome += income;
+
+                u.carryLeftSlab[s]  -= matchedVolume;
+                u.carryRightSlab[s] -= matchedVolume;
+
+                totalMatchedLeft  += matchedVolume;
+                totalMatchedRight += matchedVolume;
+            }
+
+            if (totalBinaryIncome == 0) continue;
+
+            u.carryLeft  -= totalMatchedLeft;
+            u.carryRight -= totalMatchedRight;
+
+            u.claimableBinaryIncome += totalBinaryIncome;
+            emit BinaryIncomeAllocated(userAddr, totalBinaryIncome);
             processedCount++;
         }
 
@@ -558,8 +564,8 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
 
     function claimBinaryIncome() external nonReentrant whenNotPaused onlyRegistered(msg.sender) {
         User storage u = users[msg.sender];
-        require(u.status == Status.ACTIVE || u.status == Status.GRACE_PERIOD, "MLM: Not active");
-        require(u.claimableBinaryIncome > 0, "MLM: Nothing to claim");
+        require(u.status == Status.ACTIVE || u.status == Status.GRACE_PERIOD, "NA");
+        require(u.claimableBinaryIncome > 0, "NC");
 
         uint256 today = block.timestamp / 1 days;
         if (u.lastBinaryResetDay < today) {
@@ -573,7 +579,7 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
             remainingCap = cap - u.todayBinaryIncome;
         }
 
-        require(remainingCap > 0, "MLM: Daily cap reached");
+        require(remainingCap > 0, "DC");
 
         uint256 totalClaimable = u.claimableBinaryIncome;
         uint256 income = totalClaimable;
@@ -631,10 +637,10 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
 
     function withdraw(uint256 _amount) external nonReentrant whenNotPaused {
         User storage u = users[msg.sender];
-        require(u.status == Status.ACTIVE, "MLM: Not active");
-        require(u.walletBalance >= _amount, "MLM: Insufficient balance");
-        require(_amount > 0, "MLM: Amount must be > 0");
-        require(_amount % (10 * 10 ** uint256(tokenDecimals)) == 0, "MLM: Amount must be a multiple of 10");
+        require(u.status == Status.ACTIVE, "NA");
+        require(u.walletBalance >= _amount, "IB2");
+        require(_amount > 0, "A0");
+        require(_amount % (10 * 10 ** uint256(tokenDecimals)) == 0, "AM");
 
         u.walletBalance -= _amount;
 
@@ -656,7 +662,7 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
         }
 
         if (mTokenPayout > 0) {
-            require(address(mToken) != address(0), "MLM: MToken not set");
+            require(address(mToken) != address(0), "MT");
             mToken.safeTransfer(msg.sender, mTokenPayout);
         }
 
@@ -726,80 +732,27 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
         return 0;
     }
 
+    function logBoardReward(address _user, uint256 _reward, uint256 _boardLevel) external {
+        require(msg.sender == address(boardHandler), "NA");
+        _userTransactions[_user].push(TransactionRecord(TxType.BOARD_REWARD, _reward, block.timestamp, address(0), uint8(_boardLevel)));
+    }
+
+    function logBoardEntry(address _user, uint256 _price, uint256 _boardLevel) external {
+        require(msg.sender == address(boardHandler), "NA");
+        _userTransactions[_user].push(TransactionRecord(TxType.BOARD_ENTRY, _price, block.timestamp, address(0), uint8(_boardLevel)));
+    }
+
     function enterBoardPool() external nonReentrant whenNotPaused onlyRegistered(msg.sender) {
-        require(users[msg.sender].status == Status.ACTIVE || users[msg.sender].status == Status.GRACE_PERIOD, "MLM: Not active");
-        
-        uint256 price = boardPrices[1];
-        require(btcPoolBalance[msg.sender] >= price, "MLM: Insufficient BTC pool balance");
+        require(users[msg.sender].status == Status.ACTIVE || users[msg.sender].status == Status.GRACE_PERIOD, "NA");
+        require(address(boardHandler) != address(0), "BH");
+
+        uint256 price = boardHandler.getBoardPrice(1);
+        require(btcPoolBalance[msg.sender] >= price, "IBP");
 
         btcPoolBalance[msg.sender] -= price;
         boardEntryCount[msg.sender]++;
         _userTransactions[msg.sender].push(TransactionRecord(TxType.BOARD_ENTRY, price, block.timestamp, address(0), 1));
-        _enterBoard(msg.sender, 1);
-    }
-
-    function _enterBoard(address _user, uint256 _boardLevel) internal {
-        _boardMatrices[_boardLevel].push(BoardMatrix({
-            owner:       _user,
-            filledCount: 0,
-            completed:   false
-        }));
-        uint256 newMatrixIdx = _boardMatrices[_boardLevel].length - 1;
-
-        emit BoardEntered(_user, _boardLevel, newMatrixIdx);
-
-        uint256 currentIdx = boardCurrentIndex[_boardLevel];
-        if (currentIdx < newMatrixIdx) {
-            BoardMatrix storage matrix = _boardMatrices[_boardLevel][currentIdx];
-            matrix.filledCount++;
-
-            if (matrix.filledCount >= BOARD_MEMBERS_REQUIRED) {
-                matrix.completed = true;
-                boardCurrentIndex[_boardLevel] = currentIdx + 1;
-                _completeBoardMatrix(matrix.owner, _boardLevel);
-            }
-        }
-    }
-
-    function _completeBoardMatrix(address _owner, uint256 _boardLevel) internal {
-        uint256 totalPool = boardPrices[_boardLevel] * BOARD_MEMBERS_REQUIRED;
-
-        if (_boardLevel < TOTAL_BOARDS) {
-            uint256 reward    = (totalPool * BOARD_REWARD_RATE_BP) / BASIS_POINTS;
-            uint256 liquidity = (totalPool * BOARD_LIQUIDITY_RATE_BP) / BASIS_POINTS;
-
-            if (address(btcRewardToken) != address(0)) {
-                btcRewardToken.safeTransfer(_owner, reward);
-            }
-
-            if (coinLiquidityAddress != address(0)) {
-                paymentToken.safeTransfer(coinLiquidityAddress, liquidity);
-            }
-
-            _userTransactions[_owner].push(TransactionRecord(TxType.BOARD_REWARD, reward, block.timestamp, address(0), uint8(_boardLevel)));
-            emit BoardCompleted(_owner, _boardLevel, reward, liquidity);
-
-            _userTransactions[_owner].push(TransactionRecord(TxType.BOARD_ENTRY, boardPrices[_boardLevel + 1], block.timestamp, address(0), uint8(_boardLevel + 1)));
-            _enterBoard(_owner, _boardLevel + 1);
-        } else {
-            uint256 reward    = (totalPool * BOARD_10_REWARD_RATE_BP) / BASIS_POINTS;
-            uint256 systemFee = (totalPool * BOARD_10_SYSTEM_RATE_BP) / BASIS_POINTS;
-            uint256 liquidity = (totalPool * BOARD_10_LIQUIDITY_RATE_BP) / BASIS_POINTS;
-
-            if (address(btcRewardToken) != address(0)) {
-                btcRewardToken.safeTransfer(_owner, reward);
-            }
-
-            if (systemAddress != address(0)) {
-                paymentToken.safeTransfer(systemAddress, systemFee);
-            }
-            if (coinLiquidityAddress != address(0)) {
-                paymentToken.safeTransfer(coinLiquidityAddress, liquidity);
-            }
-
-            _userTransactions[_owner].push(TransactionRecord(TxType.BOARD_REWARD, reward, block.timestamp, address(0), uint8(_boardLevel)));
-            emit BoardCompleted(_owner, _boardLevel, reward, liquidity);
-        }
+        boardHandler.enterBoard(msg.sender, 1);
     }
 
     function _creditIncome(address _user, uint256 _amount) internal {
@@ -842,10 +795,10 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
 
     function flushGracePeriod(address _user) external onlyOwner onlyRegistered(_user) {
         User storage u = users[_user];
-        require(u.status == Status.GRACE_PERIOD, "MLM: Not in grace period");
+        require(u.status == Status.GRACE_PERIOD, "NG");
         require(
             block.timestamp > u.gracePeriodStart + GRACE_PERIOD_DURATION,
-            "MLM: Grace period not expired"
+            "GE"
         );
 
         uint256 flushed = u.tempWalletBalance;
@@ -873,107 +826,75 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     }
 
     function getUserInfo(address _user) external view returns (
-        uint256 userId,
-        address sponsor,
-        address binaryParent,
-        address leftChild,
-        address rightChild,
-        Side    placementSide,
-        Package userPackage,
-        Status  status,
-        uint256 walletBalance,
-        uint256 tempWalletBalance,
-        uint256 totalEarnings,
-        uint256 directReferralCount,
-        uint256 joinedAt
+        uint256 userId, address sponsor, address binaryParent,
+        address leftChild, address rightChild, Side placementSide,
+        Package userPackage, Status status, uint256 walletBalance,
+        uint256 tempWalletBalance, uint256 totalEarnings,
+        uint256 directReferralCount, uint256 joinedAt
     ) {
         User storage u = users[_user];
-        return (
-            u.userId,
-            u.sponsor,
-            u.binaryParent,
-            u.leftChild,
-            u.rightChild,
-            u.placementSide,
-            u.userPackage,
-            u.status,
-            u.walletBalance,
-            u.tempWalletBalance,
-            u.totalEarnings,
-            u.directReferralCount,
-            u.joinedAt
-        );
+        return (u.userId, u.sponsor, u.binaryParent, u.leftChild, u.rightChild,
+            u.placementSide, u.userPackage, u.status, u.walletBalance,
+            u.tempWalletBalance, u.totalEarnings, u.directReferralCount, u.joinedAt);
     }
 
     function getProfile(address _user) external view returns (
-        string memory displayName,
-        string memory email,
-        string memory phone,
-        string memory country,
-        bool   profileSet
+        string memory displayName, string memory email,
+        string memory phone, string memory country, bool profileSet
     ) {
         User storage u = users[_user];
-        return (
-            u.displayName,
-            u.email,
-            u.phone,
-            u.country,
-            u.profileSet
-        );
+        return (u.displayName, u.email, u.phone, u.country, u.profileSet);
     }
 
     function getIncomeInfo(address _user) external view returns (
-        uint256 totalDirectIncome,
-        uint256 totalBinaryIncome,
-        uint256 totalMatchingOverrideIncome,
-        uint256 totalWithdrawalMatchIncome,
-        uint256 totalEarnings,
-        uint256 totalWithdrawn,
-        uint256 maxIncome
+        uint256 totalDirectIncome, uint256 totalBinaryIncome,
+        uint256 totalMatchingOverrideIncome, uint256 totalWithdrawalMatchIncome,
+        uint256 totalEarnings, uint256 totalWithdrawn, uint256 maxIncome
     ) {
         User storage u = users[_user];
-        return (
-            u.totalDirectIncome,
-            u.totalBinaryIncome,
-            u.totalMatchingOverrideIncome,
-            u.totalWithdrawalMatchIncome,
-            u.totalEarnings,
-            u.totalWithdrawn,
-            maxIncomeLimit[uint256(u.userPackage)]
-        );
+        return (u.totalDirectIncome, u.totalBinaryIncome,
+            u.totalMatchingOverrideIncome, u.totalWithdrawalMatchIncome,
+            u.totalEarnings, u.totalWithdrawn, maxIncomeLimit[uint256(u.userPackage)]);
     }
 
     function getBinaryInfo(address _user) external view returns (
-        uint256 leftBusiness,
-        uint256 rightBusiness,
-        uint256 carryLeft,
-        uint256 carryRight,
-        uint256 todayBinaryIncome,
-        uint256 dailyCap,
-        uint256 claimableBinaryIncome,
-        uint256 binaryDepth
+        uint256 leftBusiness, uint256 rightBusiness,
+        uint256 carryLeft, uint256 carryRight,
+        uint256 todayBinaryIncome, uint256 dailyCap,
+        uint256 claimableBinaryIncome, uint256 binaryDepth
     ) {
         User storage u = users[_user];
-        return (
-            u.leftBusiness,
-            u.rightBusiness,
-            u.carryLeft,
-            u.carryRight,
-            u.todayBinaryIncome,
-            dailyCapping[uint256(u.userPackage)],
-            u.claimableBinaryIncome,
-            u.binaryDepth
-        );
+        return (u.leftBusiness, u.rightBusiness, u.carryLeft, u.carryRight,
+            u.todayBinaryIncome, dailyCapping[uint256(u.userPackage)],
+            u.claimableBinaryIncome, u.binaryDepth);
+    }
+
+    function getBinarySlabInfo(address _user) external view returns (
+        uint256[4] memory carryLeftSlabs, uint256[4] memory carryRightSlabs,
+        uint256[4] memory matchableSlabs, uint256[4] memory potentialIncomeSlabs,
+        uint256[4] memory rates
+    ) {
+        User storage u = users[_user];
+        carryLeftSlabs  = u.carryLeftSlab;
+        carryRightSlabs = u.carryRightSlab;
+        rates = [uint256(3000), 2000, 1000, 500];
+
+        for (uint256 i = 0; i < 4; i++) {
+            matchableSlabs[i] = u.carryLeftSlab[i] < u.carryRightSlab[i]
+                ? u.carryLeftSlab[i]
+                : u.carryRightSlab[i];
+            potentialIncomeSlabs[i] = (matchableSlabs[i] * rates[i]) / BASIS_POINTS;
+        }
     }
 
     function getUserIdByAddress(address _user) external view returns (uint256) {
-        require(isRegistered[_user], "MLM: Not registered");
+        require(isRegistered[_user], "NR");
         return users[_user].userId;
     }
 
     function getAddressByUserId(uint256 _userId) external view returns (address) {
         address addr = userIdToAddress[_userId];
-        require(addr != address(0), "MLM: User ID not found");
+        require(addr != address(0), "UF");
         return addr;
     }
 
@@ -982,21 +903,14 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     }
 
     function getDirectReferralsPaginated(
-        address _user,
-        uint256 _offset,
-        uint256 _limit
+        address _user, uint256 _offset, uint256 _limit
     ) external view returns (address[] memory referrals, uint256 total) {
         address[] storage refs = directReferrals[_user];
         total = refs.length;
-
-        if (_offset >= total) {
-            return (new address[](0), total);
-        }
-
+        if (_offset >= total) return (new address[](0), total);
         uint256 end = _offset + _limit;
         if (end > total) end = total;
         uint256 count = end - _offset;
-
         referrals = new address[](count);
         for (uint256 i = 0; i < count; i++) {
             referrals[i] = refs[_offset + i];
@@ -1016,7 +930,7 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     }
 
     function getUserByIndex(uint256 _index) external view returns (address) {
-        require(_index < allUsers.length, "MLM: Index out of bounds");
+        require(_index < allUsers.length, "OB");
         return allUsers[_index];
     }
 
@@ -1028,62 +942,30 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
         return btcPoolBalance[_user];
     }
 
-    function getBoardPrice(uint256 _boardLevel) external view returns (uint256) {
-        require(_boardLevel >= 1 && _boardLevel <= TOTAL_BOARDS, "MLM: Invalid board level");
-        return boardPrices[_boardLevel];
-    }
-
-    function getBoardQueueLength(uint256 _boardLevel) external view returns (uint256) {
-        return _boardMatrices[_boardLevel].length;
-    }
-
-    function getBoardMatrixInfo(uint256 _boardLevel, uint256 _index) external view returns (
-        address owner,
-        uint256 filledCount,
-        bool    completed
-    ) {
-        require(_index < _boardMatrices[_boardLevel].length, "MLM: Index out of bounds");
-        BoardMatrix storage m = _boardMatrices[_boardLevel][_index];
-        return (m.owner, m.filledCount, m.completed);
-    }
-
-    function getBoardCurrentIndex(uint256 _boardLevel) external view returns (uint256) {
-        return boardCurrentIndex[_boardLevel];
-    }
-
     function getUserTransactionCount(address _user) external view returns (uint256) {
         return _userTransactions[_user].length;
     }
 
     function getUserTransactionsPaginated(
-        address _user,
-        uint256 _offset,
-        uint256 _limit
+        address _user, uint256 _offset, uint256 _limit
     ) external view returns (
-        TxType[]  memory txTypes,
-        uint256[] memory amounts,
-        uint256[] memory timestamps,
-        address[] memory relatedUsers,
-        uint8[]   memory extraDatas,
-        uint256   total
+        TxType[] memory txTypes, uint256[] memory amounts,
+        uint256[] memory timestamps, address[] memory relatedUsers,
+        uint8[] memory extraDatas, uint256 total
     ) {
         TransactionRecord[] storage txs = _userTransactions[_user];
         total = txs.length;
-
         if (_offset >= total) {
             return (new TxType[](0), new uint256[](0), new uint256[](0), new address[](0), new uint8[](0), total);
         }
-
         uint256 end = _offset + _limit;
         if (end > total) end = total;
         uint256 count = end - _offset;
-
         txTypes      = new TxType[](count);
         amounts      = new uint256[](count);
         timestamps   = new uint256[](count);
         relatedUsers = new address[](count);
         extraDatas   = new uint8[](count);
-
         for (uint256 i = 0; i < count; i++) {
             uint256 idx = total - 1 - (_offset + i);
             TransactionRecord storage t = txs[idx];
@@ -1095,65 +977,60 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
         }
     }
 
-    function pause() external onlyOwner {
-        _pause();
-    }
-
-    function unpause() external onlyOwner {
-        _unpause();
-    }
+    function pause() external onlyOwner { _pause(); }
+    function unpause() external onlyOwner { _unpause(); }
 
     function setFeeRecipient(address _newRecipient) external onlyOwner {
-        require(_newRecipient != address(0), "MLM: Invalid address");
+        require(_newRecipient != address(0), "IV");
         address old = feeRecipient;
         feeRecipient = _newRecipient;
         emit FeeRecipientUpdated(old, _newRecipient);
     }
 
     function setProductWallet(address _wallet) external onlyOwner {
-        require(_wallet != address(0), "MLM: Invalid address");
+        require(_wallet != address(0), "IV");
         address old = productWallet;
         productWallet = _wallet;
         emit ProductWalletUpdated(old, _wallet);
     }
 
     function setAdminBinaryWallet(address _wallet) external onlyOwner {
-        require(_wallet != address(0), "MLM: Invalid address");
+        require(_wallet != address(0), "IV");
         address old = adminBinaryWallet;
         adminBinaryWallet = _wallet;
         emit AdminBinaryWalletUpdated(old, _wallet);
     }
 
     function setWithdrawalFee(uint256 _feeBasisPoints) external onlyOwner {
-        require(_feeBasisPoints <= 2000, "MLM: Fee too high");
+        require(_feeBasisPoints <= 2000, "FH");
         uint256 oldFee = withdrawalFee;
         withdrawalFee = _feeBasisPoints;
         emit WithdrawalFeeUpdated(oldFee, _feeBasisPoints);
     }
 
     function setPackagePrice(Package _pkg, uint256 _price) external onlyOwner {
-        require(_pkg >= Package.BASIC && _pkg <= Package.SUPER_STOCKIEST, "MLM: Invalid package");
+        require(_pkg >= Package.BASIC && _pkg <= Package.SUPER_STOCKIEST, "IP");
         uint256 oldPrice = packagePrices[uint256(_pkg)];
         packagePrices[uint256(_pkg)] = _price;
         emit PackagePriceUpdated(_pkg, oldPrice, _price);
     }
 
     function setDailyCapping(Package _pkg, uint256 _cap) external onlyOwner {
-        require(_pkg >= Package.BASIC && _pkg <= Package.SUPER_STOCKIEST, "MLM: Invalid package");
+        require(_pkg >= Package.BASIC && _pkg <= Package.SUPER_STOCKIEST, "IP");
         uint256 oldCap = dailyCapping[uint256(_pkg)];
         dailyCapping[uint256(_pkg)] = _cap;
         emit DailyCappingUpdated(_pkg, oldCap, _cap);
     }
 
     function setMaxIncomeLimit(Package _pkg, uint256 _limit) external onlyOwner {
-        require(_pkg >= Package.BASIC && _pkg <= Package.SUPER_STOCKIEST, "MLM: Invalid package");
+        require(_pkg >= Package.BASIC && _pkg <= Package.SUPER_STOCKIEST, "IP");
         uint256 oldLimit = maxIncomeLimit[uint256(_pkg)];
         maxIncomeLimit[uint256(_pkg)] = _limit;
         emit MaxIncomeLimitUpdated(_pkg, oldLimit, _limit);
     }
 
     function updatePaymentToken(address _token, uint8 _decimals) external onlyOwner {
-        require(_token != address(0), "MLM: Invalid token");
+        require(_token != address(0), "IT");
         address oldToken = address(paymentToken);
         paymentToken  = IERC20(_token);
         tokenDecimals = _decimals;
@@ -1161,54 +1038,32 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     }
 
     function withdrawContractFunds(address _to, uint256 _amount) external onlyOwner {
-        require(_to != address(0), "MLM: Invalid address");
+        require(_to != address(0), "IV");
         paymentToken.safeTransfer(_to, _amount);
         emit ContractFundsWithdrawn(_to, _amount);
     }
 
-    function recoverToken(
-        address _token,
-        address _to,
-        uint256 _amount
-    ) external onlyOwner {
-        require(_to != address(0), "MLM: Invalid address");
+    function recoverToken(address _token, address _to, uint256 _amount) external onlyOwner {
+        require(_to != address(0), "IV");
         IERC20(_token).safeTransfer(_to, _amount);
         emit EmergencyTokenRecovery(_token, _to, _amount);
     }
 
-    function setCoinLiquidityAddress(address _addr) external onlyOwner {
-        require(_addr != address(0), "MLM: Invalid address");
-        address old = coinLiquidityAddress;
-        coinLiquidityAddress = _addr;
-        emit CoinLiquidityAddressUpdated(old, _addr);
-    }
-
-    function setSystemAddress(address _addr) external onlyOwner {
-        require(_addr != address(0), "MLM: Invalid address");
-        address old = systemAddress;
-        systemAddress = _addr;
-        emit SystemAddressUpdated(old, _addr);
-    }
-
-    function setBoardPrice(uint256 _boardLevel, uint256 _price) external onlyOwner {
-        require(_boardLevel >= 1 && _boardLevel <= TOTAL_BOARDS, "MLM: Invalid board level");
-        require(_price > 0, "MLM: Price must be > 0");
-        boardPrices[_boardLevel] = _price;
-    }
-
-    function setBtcRewardToken(address _token) external onlyOwner {
-        require(_token != address(0), "MLM: Invalid address");
-        btcRewardToken = IERC20(_token);
+    function setBoardHandler(address _handler) external onlyOwner {
+        require(_handler != address(0), "IV");
+        address old = address(boardHandler);
+        boardHandler = IBoardMatrixHandler(_handler);
+        emit BoardHandlerUpdated(old, _handler);
     }
 
     function setBinaryProcessor(address _processor, bool _status) external onlyOwner {
-        require(_processor != address(0), "MLM: Invalid address");
+        require(_processor != address(0), "IV");
         isBinaryProcessor[_processor] = _status;
         emit BinaryProcessorUpdated(_processor, _status);
     }
 
     function setBinaryBatchSize(uint256 _size) external onlyOwner {
-        require(_size > 0 && _size <= 500, "MLM: Batch size 1-500");
+        require(_size > 0 && _size <= 500, "BS");
         uint256 oldSize = binaryBatchSize;
         binaryBatchSize = _size;
         emit BinaryBatchSizeUpdated(oldSize, _size);
@@ -1220,19 +1075,16 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     }
 
     function adminActivateUser(
-        address _user,
-        uint256 _sponsorId,
-        uint256 _binaryParentId,
-        bool    _placeLeft,
-        Package _pkg
+        address _user, uint256 _sponsorId, uint256 _binaryParentId,
+        bool _placeLeft, Package _pkg
     ) external onlyOwner whenNotPaused {
-        require(_user != address(0), "MLM: Invalid address");
-        require(!isRegistered[_user], "MLM: Already registered");
-        require(_pkg >= Package.BASIC && _pkg <= Package.SUPER_STOCKIEST, "MLM: Invalid package");
-        require(allUsers.length > 0, "MLM: No root user");
+        require(_user != address(0), "IV");
+        require(!isRegistered[_user], "AR");
+        require(_pkg >= Package.BASIC && _pkg <= Package.SUPER_STOCKIEST, "IP");
+        require(allUsers.length > 0, "RU");
 
         address _sponsor = userIdToAddress[_sponsorId];
-        require(_sponsor != address(0) && isRegistered[_sponsor], "MLM: Invalid sponsor ID");
+        require(_sponsor != address(0) && isRegistered[_sponsor], "IS");
 
         address _binaryParent;
         Side side;
@@ -1241,7 +1093,7 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
             _binaryParent = _sponsor;
         } else {
             _binaryParent = userIdToAddress[_binaryParentId];
-            require(_binaryParent != address(0) && isRegistered[_binaryParent], "MLM: Invalid binary parent ID");
+            require(_binaryParent != address(0) && isRegistered[_binaryParent], "IB");
         }
 
         if (_placeLeft) {
@@ -1283,15 +1135,33 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
         emit FreeAccountActivated(_user, newUserId, _pkg, _sponsor);
     }
 
+    function getBoardPrice(uint256 _boardLevel) external view returns (uint256) {
+        return boardHandler.getBoardPrice(_boardLevel);
+    }
+
+    function getBoardQueueLength(uint256 _boardLevel) external view returns (uint256) {
+        return boardHandler.getBoardQueueLength(_boardLevel);
+    }
+
+    function getBoardMatrixInfo(uint256 _boardLevel, uint256 _index) external view returns (
+        address owner, uint256 filledCount, bool completed
+    ) {
+        return boardHandler.getBoardMatrixInfo(_boardLevel, _index);
+    }
+
+    function getBoardCurrentIndex(uint256 _boardLevel) external view returns (uint256) {
+        return boardHandler.getBoardCurrentIndex(_boardLevel);
+    }
+
     function setMToken(address _token) external onlyOwner {
-        require(_token != address(0), "MLM: Invalid address");
+        require(_token != address(0), "IV");
         address old = address(mToken);
         mToken = IERC20(_token);
         emit MTokenUpdated(old, _token);
     }
 
     function setWithdrawalUsdtRate(uint256 _rateBasisPoints) external onlyOwner {
-        require(_rateBasisPoints <= BASIS_POINTS, "MLM: Rate exceeds 100%");
+        require(_rateBasisPoints <= BASIS_POINTS, "RE");
         uint256 oldRate = withdrawalUsdtRate;
         withdrawalUsdtRate = _rateBasisPoints;
         emit WithdrawalUsdtRateUpdated(oldRate, _rateBasisPoints);
