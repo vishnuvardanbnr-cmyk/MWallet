@@ -17,7 +17,7 @@ module.exports = {
       url: "https://data-seed-prebsc-1-s1.binance.org:8545/",
       chainId: 97,
       accounts: DEPLOYER_KEY ? [DEPLOYER_KEY] : [],
-      gasPrice: 10000000000,
+      gasPrice: 1000000000,
     },
     bscMainnet: {
       url: "https://bsc-dataseed.binance.org/",

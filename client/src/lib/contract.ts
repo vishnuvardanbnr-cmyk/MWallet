@@ -18,7 +18,7 @@ export const BSC_TESTNET = {
 
 const isMainnet = import.meta.env.VITE_BSC_NETWORK === "mainnet";
 export const NETWORK = isMainnet ? BSC_MAINNET : BSC_TESTNET;
-export const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0xAC69c540DDF49fCe90088B36127ca852f198B353";
+export const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0x50A19062E88e2A1045E9DD71d99fD58331785c40";
 export const TOKEN_ADDRESS = import.meta.env.VITE_PAYMENT_TOKEN_ADDRESS || "";
 
 export const MLM_ABI = [
@@ -70,7 +70,7 @@ export const MLM_ABI = [
   "event WithdrawalMatchDistributed(address indexed recipient, address indexed from, uint256 amount, uint256 level)",
 ];
 
-export const BOARD_HANDLER_ADDRESS = import.meta.env.VITE_BOARD_HANDLER_ADDRESS || "0x6b3280d57159e2Cac30777b437291900cA3ba1C0";
+export const BOARD_HANDLER_ADDRESS = import.meta.env.VITE_BOARD_HANDLER_ADDRESS || "0xAFDf34f6e2FBa1D1E9b1E4e180821b463c3cB72D";
 
 export const PANCAKE_ROUTER_ADDRESS = import.meta.env.VITE_PANCAKE_ROUTER_ADDRESS || "0xD99D1c33F9fC3444f8101754aBC46c52416550D1";
 
