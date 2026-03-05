@@ -18,8 +18,8 @@ async function main() {
   console.log("  Balance:", ethers.formatEther(balance), "BNB");
   console.log("══════════════════════════════════════════════════\n");
 
-  if (balance < ethers.parseEther("0.05")) {
-    throw new Error("Insufficient BNB — need at least 0.05 BNB testnet for gas");
+  if (balance < ethers.parseEther("0.02")) {
+    throw new Error("Insufficient BNB — need at least 0.02 BNB testnet for gas");
   }
 
   // ── 1. Deploy MLMContract ─────────────────────────────────────────────────
