@@ -5,18 +5,58 @@ import { insertProfileSchema } from "@shared/schema";
 import { z } from "zod";
 
 const PACKAGE_PRICES: Record<number, number> = {
-  1: 200,
-  2: 600,
-  3: 1200,
-  4: 2400,
-  5: 4800,
+  1: 50,    // STARTER
+  2: 200,   // BASIC
+  3: 600,   // PRO
+  4: 1200,  // ELITE
+  5: 2400,  // STOCKIEST
+  6: 4800,  // SUPER_STOCKIEST
 };
 
 const selectStakingSchema = z.object({
   walletAddress: z.string().min(1),
   planMonths: z.literal("10").transform(Number),
-  packageLevel: z.number().min(1).max(5),
+  packageLevel: z.number().min(1).max(6),
 });
+
+// Override rates per level (basis: 1.0 = 100%)
+const OVERRIDE_RATES = [0, 0.05, 0.03, 0.02, 0.015, 0.01, 0.005, 0.005, 0.005, 0.005, 0.005];
+// Max levels eligible by package index (0=NONE,1=STARTER,2=BASIC,3=PRO,4=ELITE,5=STOCKIEST,6=SS)
+const OVERRIDE_MAX_LEVELS = [0, 1, 2, 3, 4, 6, 10];
+
+const BSC_TESTNET_RPC = "https://data-seed-prebsc-1-s1.binance.org:8545/";
+const MLM_READ_ABI = [
+  "function getUserInfo(address _user) external view returns (uint256 userId, address sponsor, address binaryParent, address leftChild, address rightChild, uint8 placementSide, uint8 userPackage, uint8 status, uint256 walletBalance, uint256 tempWalletBalance, uint256 totalEarnings, uint256 directReferralCount, uint256 joinedAt)",
+];
+const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
+const MLM_CONTRACT_ADDR = "0x4EdDD28d52901898133dB5643e9137dcDa31AD52";
+
+async function distributeStakingOverride(fromWallet: string, usdtProfit: number): Promise<void> {
+  try {
+    const { ethers } = await import("ethers");
+    const provider = new ethers.JsonRpcProvider(BSC_TESTNET_RPC);
+    const mlm = new ethers.Contract(MLM_CONTRACT_ADDR, MLM_READ_ABI, provider);
+
+    let current = fromWallet;
+    for (let level = 1; level <= 10; level++) {
+      const info = await mlm.getUserInfo(current);
+      const sponsor: string = info[1];
+      if (!sponsor || sponsor === ZERO_ADDR) break;
+      const pkg = Number(info[6]);
+      const maxLevels = pkg >= 0 && pkg < OVERRIDE_MAX_LEVELS.length ? OVERRIDE_MAX_LEVELS[pkg] : 0;
+      if (level <= maxLevels && pkg >= 1) {
+        const rate = OVERRIDE_RATES[level] ?? 0;
+        const amount = usdtProfit * rate;
+        if (amount > 0) {
+          await storage.logStakingOverrideIncome(sponsor, fromWallet, amount.toFixed(4), level);
+        }
+      }
+      current = sponsor;
+    }
+  } catch (_err) {
+    // Non-fatal — override distribution failure should not block user action
+  }
+}
 
 export async function registerRoutes(
   httpServer: Server,
@@ -536,6 +576,8 @@ export async function registerRoutes(
         note: `${daysSince} day(s) reward @ $${dailyUsdtValue.toFixed(4)}/day`,
       });
 
+      distributeStakingOverride(addr, totalUsdtReward).catch(() => {});
+
       res.json({ rewardTokens: rewardTokens.toFixed(8), daysRewarded: daysSince, usdtValue: totalUsdtReward.toFixed(4), priceUsed: buyPrice.toFixed(8) });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -582,6 +624,8 @@ export async function registerRoutes(
         priceAtTxn: sellPrice.toFixed(8),
         note: `Sold ${tokens.toFixed(4)} reward tokens at sell price $${sellPrice.toFixed(8)}`,
       });
+
+      distributeStakingOverride(addr, usdtOut).catch(() => {});
 
       res.json({ usdtReceived: usdtOut.toFixed(4), tokensBurned: tokens.toFixed(8), sellPriceUsed: sellPrice.toFixed(8) });
     } catch (err: any) {
@@ -637,7 +681,21 @@ export async function registerRoutes(
         note: `Unstaked: ${userTokens.toFixed(2)} tokens burned → $${usdtFromTokens.toFixed(2)} USDT + $${usdtBonus.toFixed(2)} bonus`,
       });
 
+      distributeStakingOverride(addr, totalUsdt).catch(() => {});
+
       res.json({ usdtReceived: totalUsdt.toFixed(4), fromTokens: usdtFromTokens.toFixed(4), bonusUsdt: usdtBonus.toFixed(4), tokensBurned: userTokens.toFixed(8), sellPriceUsed: sellPrice.toFixed(8) });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/paidstaking/override-income/:walletAddress
+  app.get("/api/paidstaking/override-income/:walletAddress", async (req, res) => {
+    try {
+      const addr = req.params.walletAddress.toLowerCase();
+      const rows = await storage.getStakingOverrideIncome(addr);
+      const total = rows.reduce((sum, r) => sum + parseFloat(r.amountUsdt), 0);
+      res.json({ records: rows, totalUsdt: total.toFixed(4) });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

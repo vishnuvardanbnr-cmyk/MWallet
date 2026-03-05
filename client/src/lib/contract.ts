@@ -18,7 +18,7 @@ export const BSC_TESTNET = {
 
 const isMainnet = import.meta.env.VITE_BSC_NETWORK === "mainnet";
 export const NETWORK = isMainnet ? BSC_MAINNET : BSC_TESTNET;
-export const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0x50A19062E88e2A1045E9DD71d99fD58331785c40";
+export const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0x4EdDD28d52901898133dB5643e9137dcDa31AD52";
 export const TOKEN_ADDRESS = import.meta.env.VITE_PAYMENT_TOKEN_ADDRESS || "";
 
 export const MLM_ABI = [
@@ -108,8 +108,8 @@ export const ERC20_ABI = [
   "function symbol() view returns (string)",
 ];
 
-export const PACKAGE_NAMES = ["None", "Basic", "Pro", "Elite", "Stockiest", "Super Stockiest"];
-export const PACKAGE_PRICES_USD = [0, 200, 600, 1200, 2400, 4800];
+export const PACKAGE_NAMES = ["None", "Starter", "Basic", "Pro", "Elite", "Stockiest", "Super Stockiest"];
+export const PACKAGE_PRICES_USD = [0, 50, 200, 600, 1200, 2400, 4800];
 export const STATUS_NAMES = ["Inactive", "Active", "Grace Period"];
 
 export const BOARD_PRICES_USD = [0, 50, 180, 648, 2333, 8398, 30233, 108839, 391821, 1410555, 5077998];

@@ -18,7 +18,7 @@ interface IBoardMatrixHandler {
 contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
-    enum Package { NONE, BASIC, PRO, ELITE, STOCKIEST, SUPER_STOCKIEST }
+    enum Package { NONE, STARTER, BASIC, PRO, ELITE, STOCKIEST, SUPER_STOCKIEST }
     enum Status  { INACTIVE, ACTIVE, GRACE_PERIOD }
     enum Side    { NONE, LEFT, RIGHT }
 
@@ -114,12 +114,12 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     address public adminBinaryWallet;
     uint256 public totalBinaryFlushed;
 
-    uint256[6] public packagePrices;
-    uint256[6] public directRates = [0, 1000, 1500, 2000, 2500, 3000];
-    uint256[6] public dailyCapping;
-    uint256[6] public maxIncomeLimit;
-    uint256[6] public matchingOverrideMaxLevels = [0, 3, 6, 10, 15, 20];
-    uint256[6] public withdrawalMatchMaxLevels = [0, 3, 5, 9, 12, 15];
+    uint256[7] public packagePrices;
+    uint256[7] public directRates = [0, 500, 1000, 1500, 2000, 2500, 3000];
+    uint256[7] public dailyCapping;
+    uint256[7] public maxIncomeLimit;
+    uint256[7] public matchingOverrideMaxLevels = [0, 1, 3, 6, 10, 15, 20];
+    uint256[7] public withdrawalMatchMaxLevels = [0, 1, 3, 5, 9, 12, 15];
 
     uint256 public constant MATCHING_OVERRIDE_RATE = 100;
     uint256 public constant WITHDRAWAL_MATCH_POOL_RATE = 1000;
@@ -192,25 +192,28 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
         uint256 unit = 10 ** uint256(_tokenDecimals);
 
         packagePrices[0] = 0;
-        packagePrices[1] = 200  * unit;
-        packagePrices[2] = 600  * unit;
-        packagePrices[3] = 1200 * unit;
-        packagePrices[4] = 2400 * unit;
-        packagePrices[5] = 4800 * unit;
+        packagePrices[1] = 50   * unit;   // STARTER
+        packagePrices[2] = 200  * unit;   // BASIC
+        packagePrices[3] = 600  * unit;   // PRO
+        packagePrices[4] = 1200 * unit;   // ELITE
+        packagePrices[5] = 2400 * unit;   // STOCKIEST
+        packagePrices[6] = 4800 * unit;   // SUPER_STOCKIEST
 
         dailyCapping[0] = 0;
-        dailyCapping[1] = 200   * unit;
-        dailyCapping[2] = 600   * unit;
-        dailyCapping[3] = 1200  * unit;
-        dailyCapping[4] = 2400  * unit;
-        dailyCapping[5] = 4800  * unit;
+        dailyCapping[1] = 50    * unit;   // STARTER
+        dailyCapping[2] = 200   * unit;   // BASIC
+        dailyCapping[3] = 600   * unit;   // PRO
+        dailyCapping[4] = 1200  * unit;   // ELITE
+        dailyCapping[5] = 2400  * unit;   // STOCKIEST
+        dailyCapping[6] = 4800  * unit;   // SUPER_STOCKIEST
 
         maxIncomeLimit[0] = 0;
-        maxIncomeLimit[1] = 1000  * unit;
-        maxIncomeLimit[2] = 3000  * unit;
-        maxIncomeLimit[3] = 6000  * unit;
-        maxIncomeLimit[4] = 12000 * unit;
-        maxIncomeLimit[5] = 24000 * unit;
+        maxIncomeLimit[1] = 250   * unit;  // STARTER  (5x)
+        maxIncomeLimit[2] = 1000  * unit;  // BASIC    (5x)
+        maxIncomeLimit[3] = 3000  * unit;  // PRO      (5x)
+        maxIncomeLimit[4] = 6000  * unit;  // ELITE    (5x)
+        maxIncomeLimit[5] = 12000 * unit;  // STOCKIEST (5x)
+        maxIncomeLimit[6] = 24000 * unit;  // SUPER_STOCKIEST (5x)
     }
 
     function _generateUserId() internal returns (uint256) {
@@ -335,7 +338,7 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
 
     function activatePackage(Package _pkg) external nonReentrant whenNotPaused {
         require(isRegistered[msg.sender], "NR");
-        require(_pkg >= Package.BASIC && _pkg <= Package.SUPER_STOCKIEST, "IP");
+        require(_pkg >= Package.STARTER && _pkg <= Package.SUPER_STOCKIEST, "IP");
 
         User storage u = users[msg.sender];
         require(uint256(_pkg) > uint256(u.userPackage), "UH");
@@ -378,7 +381,7 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
             u.status == Status.GRACE_PERIOD || u.status == Status.INACTIVE,
             "AA"
         );
-        require(_pkg >= Package.BASIC, "IP");
+        require(_pkg >= Package.STARTER, "IP");
         require(uint256(_pkg) >= uint256(u.userPackage), "CD");
 
         uint256 price = packagePrices[uint256(_pkg)];
@@ -417,7 +420,7 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     function repurchase() external nonReentrant whenNotPaused onlyRegistered(msg.sender) {
         User storage u = users[msg.sender];
         require(u.status == Status.INACTIVE || u.status == Status.GRACE_PERIOD, "MI");
-        require(u.userPackage >= Package.BASIC, "NP");
+        require(u.userPackage >= Package.STARTER, "NP");
 
         uint256 price = packagePrices[uint256(u.userPackage)];
         paymentToken.safeTransferFrom(msg.sender, address(this), price);
@@ -714,7 +717,9 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     }
 
     function _getWithdrawalMatchRate(Package _pkg, uint256 _level) internal pure returns (uint256) {
-        if (_pkg == Package.BASIC) {
+        if (_pkg == Package.STARTER) {
+            if (_level <= 1) return 100;
+        } else if (_pkg == Package.BASIC) {
             if (_level <= 3) return 100;
         } else if (_pkg == Package.PRO) {
             if (_level <= 4) return 100;
@@ -1009,21 +1014,21 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     }
 
     function setPackagePrice(Package _pkg, uint256 _price) external onlyOwner {
-        require(_pkg >= Package.BASIC && _pkg <= Package.SUPER_STOCKIEST, "IP");
+        require(_pkg >= Package.STARTER && _pkg <= Package.SUPER_STOCKIEST, "IP");
         uint256 oldPrice = packagePrices[uint256(_pkg)];
         packagePrices[uint256(_pkg)] = _price;
         emit PackagePriceUpdated(_pkg, oldPrice, _price);
     }
 
     function setDailyCapping(Package _pkg, uint256 _cap) external onlyOwner {
-        require(_pkg >= Package.BASIC && _pkg <= Package.SUPER_STOCKIEST, "IP");
+        require(_pkg >= Package.STARTER && _pkg <= Package.SUPER_STOCKIEST, "IP");
         uint256 oldCap = dailyCapping[uint256(_pkg)];
         dailyCapping[uint256(_pkg)] = _cap;
         emit DailyCappingUpdated(_pkg, oldCap, _cap);
     }
 
     function setMaxIncomeLimit(Package _pkg, uint256 _limit) external onlyOwner {
-        require(_pkg >= Package.BASIC && _pkg <= Package.SUPER_STOCKIEST, "IP");
+        require(_pkg >= Package.STARTER && _pkg <= Package.SUPER_STOCKIEST, "IP");
         uint256 oldLimit = maxIncomeLimit[uint256(_pkg)];
         maxIncomeLimit[uint256(_pkg)] = _limit;
         emit MaxIncomeLimitUpdated(_pkg, oldLimit, _limit);
@@ -1080,7 +1085,7 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     ) external onlyOwner whenNotPaused {
         require(_user != address(0), "IV");
         require(!isRegistered[_user], "AR");
-        require(_pkg >= Package.BASIC && _pkg <= Package.SUPER_STOCKIEST, "IP");
+        require(_pkg >= Package.STARTER && _pkg <= Package.SUPER_STOCKIEST, "IP");
         require(allUsers.length > 0, "RU");
 
         address _sponsor = userIdToAddress[_sponsorId];

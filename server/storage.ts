@@ -1,4 +1,4 @@
-import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction } from "@shared/schema";
+import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -52,6 +52,8 @@ export interface IStorage {
   getOrders(walletAddress?: string): Promise<HardwareOrder[]>;
   createOrder(order: Omit<HardwareOrder, "id" | "createdAt">): Promise<HardwareOrder>;
   updateOrderStatus(id: string, status: string): Promise<HardwareOrder | undefined>;
+  logStakingOverrideIncome(recipientWallet: string, fromWallet: string, amountUsdt: string, level: number): Promise<StakingOverrideIncome>;
+  getStakingOverrideIncome(recipientWallet: string): Promise<StakingOverrideIncome[]>;
   createTicket(data: InsertTicket): Promise<SupportTicket>;
   getTickets(walletAddress?: string): Promise<SupportTicket[]>;
   getTicket(id: number): Promise<SupportTicket | undefined>;
@@ -453,6 +455,23 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(ticketMessages)
       .where(eq(ticketMessages.ticketId, ticketId))
       .orderBy(ticketMessages.createdAt);
+  }
+
+  async logStakingOverrideIncome(recipientWallet: string, fromWallet: string, amountUsdt: string, level: number): Promise<StakingOverrideIncome> {
+    const [row] = await db.insert(stakingOverrideIncome).values({
+      recipientWallet: recipientWallet.toLowerCase(),
+      fromWallet: fromWallet.toLowerCase(),
+      amountUsdt,
+      level,
+    }).returning();
+    await this.creditVirtualUsdt(recipientWallet.toLowerCase(), amountUsdt);
+    return row;
+  }
+
+  async getStakingOverrideIncome(recipientWallet: string): Promise<StakingOverrideIncome[]> {
+    return db.select().from(stakingOverrideIncome)
+      .where(eq(stakingOverrideIncome.recipientWallet, recipientWallet.toLowerCase()))
+      .orderBy(desc(stakingOverrideIncome.createdAt));
   }
 }
 
