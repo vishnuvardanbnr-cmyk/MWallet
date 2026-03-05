@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/home/runner/workspace/contracts/BoardMatrixHandler.sol": {
-      "lastModificationDate": 1772682607431,
-      "contentHash": "1f927d6ab8fd0961e9165c55ead061f1",
+      "lastModificationDate": 1772684501582,
+      "contentHash": "b2c471f77a05b10319fff7f963c2f01d",
       "sourceName": "contracts/BoardMatrixHandler.sol",
       "solcConfig": {
         "version": "0.8.20",

@@ -21,6 +21,7 @@ contract BoardMatrixHandler is Ownable {
 
     uint256 public constant TOTAL_BOARDS = 10;
     uint256 public constant BOARD_MEMBERS_REQUIRED = 12;
+    uint256 public constant BOARD_REWARD_MEMBERS = 9;
     uint256 public constant BOARD_REWARD_RATE_BP = 4000;
     uint256 public constant BOARD_NEXT_POOL_RATE_BP = 4000;
     uint256 public constant BOARD_LIQUIDITY_RATE_BP = 2000;
@@ -114,7 +115,7 @@ contract BoardMatrixHandler is Ownable {
     }
 
     function _completeBoardMatrix(address _owner, uint256 _boardLevel) internal {
-        uint256 totalPool = boardPrices[_boardLevel] * BOARD_MEMBERS_REQUIRED;
+        uint256 totalPool = boardPrices[_boardLevel] * BOARD_REWARD_MEMBERS;
 
         if (_boardLevel < TOTAL_BOARDS) {
             uint256 reward    = (totalPool * BOARD_REWARD_RATE_BP) / BASIS_POINTS;
