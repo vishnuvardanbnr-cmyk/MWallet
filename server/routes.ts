@@ -788,6 +788,43 @@ export async function registerRoutes(
 
   // ── BTC Swap via backend liquidity wallet ──────────────────────────────────
 
+  const BOARD_HANDLER_TESTNET = "0x7ad7bfe3b717fA581e0383F1B2c21ED26A0C5465";
+  const BOARD_HANDLER_SYNC_ABI = ["function totalVirtualRewards(address) view returns (uint256)"];
+
+  // POST /api/btcswap/sync/:walletAddress — sync on-chain board rewards to backend virtual balance
+  // Reads totalVirtualRewards from BoardMatrixHandler (BSC testnet) and credits any new earnings
+  app.post("/api/btcswap/sync/:walletAddress", async (req, res) => {
+    try {
+      const addr = req.params.walletAddress.toLowerCase();
+      const { ethers } = await import("ethers");
+      const provider = new ethers.JsonRpcProvider(BSC_TESTNET_RPC);
+      const boardContract = new ethers.Contract(BOARD_HANDLER_TESTNET, BOARD_HANDLER_SYNC_ABI, provider);
+
+      const onChainTotalWei: bigint = await boardContract.totalVirtualRewards(addr);
+      const onChainTotal = parseFloat(ethers.formatUnits(onChainTotalWei, 18));
+
+      const vBalance = await storage.getVirtualBtcBalance(addr);
+      const dbTotalEarned = parseFloat(vBalance?.totalEarned ?? "0");
+
+      const diff = onChainTotal - dbTotalEarned;
+      if (diff > 0.0001) {
+        await storage.creditVirtualBtcBalance(addr, diff.toFixed(4));
+      }
+
+      const updated = await storage.getVirtualBtcBalance(addr);
+      res.json({
+        synced: diff > 0.0001,
+        newCredits: diff > 0.0001 ? diff.toFixed(4) : "0",
+        balance: updated?.balance ?? "0",
+        totalEarned: updated?.totalEarned ?? "0",
+        totalSwapped: updated?.totalSwapped ?? "0",
+        history: await storage.getBtcSwapTxns(addr),
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   const BSC_RPC = "https://bsc-dataseed.binance.org/";
   const PANCAKE_ROUTER = "0x10ED43C718714eb63d5aA57B78B54704E256024E";
   const USDT_BSC = "0x55d398326f99059fF775485246999027B3197955";

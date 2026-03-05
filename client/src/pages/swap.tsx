@@ -48,16 +48,23 @@ export default function SwapPage({ account, fetchUserData }: SwapPageProps) {
   const [completedTxn, setCompletedTxn] = useState<BtcSwapTxn | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  const loadData = useCallback(async () => {
+  const [syncing, setSyncing] = useState(false);
+
+  const syncRewards = useCallback(async (silent = false) => {
+    setSyncing(true);
     try {
-      const res = await fetch(`/api/btcswap/${account.toLowerCase()}`);
+      const res = await fetch(`/api/btcswap/sync/${account.toLowerCase()}`, { method: "POST" });
       if (res.ok) {
         const data = await res.json();
-        setSwapData(data);
+        setSwapData({ balance: data.balance, totalEarned: data.totalEarned, totalSwapped: data.totalSwapped, history: data.history });
+        if (!silent && data.synced && parseFloat(data.newCredits) > 0) {
+          toast({ title: "Rewards synced!", description: `$${parseFloat(data.newCredits).toFixed(4)} USDT in new board rewards credited to your BTC swap balance.` });
+        }
       }
     } catch {}
+    setSyncing(false);
     setLoading(false);
-  }, [account]);
+  }, [account, toast]);
 
   const fetchBtcPrice = useCallback(async () => {
     try {
@@ -68,11 +75,11 @@ export default function SwapPage({ account, fetchUserData }: SwapPageProps) {
   }, []);
 
   useEffect(() => {
-    loadData();
+    syncRewards(true);
     fetchBtcPrice();
     const interval = setInterval(fetchBtcPrice, 30000);
     return () => clearInterval(interval);
-  }, [loadData, fetchBtcPrice]);
+  }, [syncRewards, fetchBtcPrice]);
 
   const startPolling = useCallback((txnId: number) => {
     if (pollRef.current) clearInterval(pollRef.current);
@@ -87,7 +94,7 @@ export default function SwapPage({ account, fetchUserData }: SwapPageProps) {
           setPendingStatus("completed");
           setCompletedTxn(txn);
           setSwapping(false);
-          await loadData();
+          await syncRewards(true);
           await fetchUserData();
           toast({ title: "Swap Successful!", description: `${parseFloat(txn.amountBtcb ?? "0").toFixed(8)} BTCB sent to your wallet on BSC.` });
         } else if (txn.status === "failed") {
@@ -96,12 +103,12 @@ export default function SwapPage({ account, fetchUserData }: SwapPageProps) {
           setPendingStatus("failed");
           setCompletedTxn(txn);
           setSwapping(false);
-          await loadData();
+          await syncRewards(true);
           toast({ title: "Swap Failed", description: txn.errorMessage || "Please try again.", variant: "destructive" });
         }
       } catch {}
     }, 4000);
-  }, [loadData, fetchUserData, toast]);
+  }, [syncRewards, fetchUserData, toast]);
 
   useEffect(() => {
     return () => { if (pollRef.current) clearInterval(pollRef.current); };
@@ -174,8 +181,17 @@ export default function SwapPage({ account, fetchUserData }: SwapPageProps) {
           BTC Swap
         </h1>
         <p className="text-sm text-muted-foreground">
-          Convert your virtual USDT rewards to BTCB via PancakeSwap on BSC
+          Convert your board pool rewards to BTCB via PancakeSwap on BSC
         </p>
+        <button
+          onClick={() => syncRewards(false)}
+          disabled={syncing}
+          className="inline-flex items-center gap-1.5 text-xs text-purple-400 hover:text-purple-300 transition-colors disabled:opacity-50"
+          data-testid="button-sync-rewards"
+        >
+          <RefreshCw className={`w-3 h-3 ${syncing ? "animate-spin" : ""}`} />
+          {syncing ? "Syncing rewards..." : "Sync board rewards"}
+        </button>
       </div>
 
       <div className="grid grid-cols-3 gap-3">
@@ -377,10 +393,10 @@ export default function SwapPage({ account, fetchUserData }: SwapPageProps) {
         <h2 className="text-sm font-semibold text-foreground" style={{ fontFamily: "var(--font-display)" }}>How It Works</h2>
         <div className="space-y-3">
           {[
-            { step: "1", title: "Earn Virtual Rewards", desc: "Complete Board Pool matrices to accumulate virtual USDT rewards" },
-            { step: "2", title: "Enter Swap Amount", desc: `Choose how much to convert to BTC (minimum $${MIN_SWAP})` },
-            { step: "3", title: "Backend Swap on BSC", desc: "Our liquidity wallet swaps USDT → BTCB on PancakeSwap automatically" },
-            { step: "4", title: "Receive BTCB on BSC", desc: "BTCB is sent directly to your wallet address on BSC network" },
+            { step: "1", title: "Earn Board Rewards", desc: "Complete Board Pool matrices to accumulate virtual USDT rewards on BSC Testnet" },
+            { step: "2", title: "Sync Rewards", desc: "Click 'Sync board rewards' to pull your latest on-chain rewards into your swap balance" },
+            { step: "3", title: "Enter Swap Amount", desc: `Choose how much to convert to BTC (minimum $${MIN_SWAP})` },
+            { step: "4", title: "Receive BTCB on BSC", desc: "Our liquidity wallet swaps USDT → BTCB via PancakeSwap and sends it to your wallet" },
           ].map((item) => (
             <div key={item.step} className="flex items-start gap-3">
               <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-500/20 to-cyan-500/10 border border-white/[0.08] flex items-center justify-center shrink-0">
