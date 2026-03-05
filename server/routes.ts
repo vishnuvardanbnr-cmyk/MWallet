@@ -420,6 +420,83 @@ export async function registerRoutes(
     }
   });
 
+  // POST /api/usdt/deposit-verify — user submits txHash after on-chain USDT transfer to admin wallet
+  app.post("/api/usdt/deposit-verify", async (req, res) => {
+    try {
+      const { walletAddress, txHash, claimedAmount } = req.body;
+      if (!walletAddress || !txHash || !claimedAmount || parseFloat(claimedAmount) <= 0) {
+        return res.status(400).json({ message: "walletAddress, txHash and positive claimedAmount required" });
+      }
+      const addr = walletAddress.toLowerCase();
+      const hash = txHash.toLowerCase();
+
+      // Prevent double-crediting same txHash
+      const existing = await storage.findDepositByTxHash(hash);
+      if (existing) {
+        return res.status(409).json({ message: "This transaction has already been processed" });
+      }
+
+      const { ethers } = await import("ethers");
+      const provider = new ethers.JsonRpcProvider(BSC_TESTNET_RPC);
+
+      const receipt = await provider.getTransactionReceipt(hash);
+      if (!receipt) {
+        return res.status(400).json({ message: "Transaction not found on-chain. Please wait for confirmation and try again." });
+      }
+      if (!receipt.status) {
+        return res.status(400).json({ message: "Transaction failed on-chain" });
+      }
+
+      const USDT_TESTNET = "0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3".toLowerCase();
+      const DEPOSIT_TARGET = "0x127323b3053a901620f8d461c88fc6a7d9c7de2e".toLowerCase();
+      const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+
+      let verifiedAmount: string | null = null;
+      for (const log of receipt.logs) {
+        if (
+          log.address.toLowerCase() === USDT_TESTNET &&
+          log.topics[0]?.toLowerCase() === TRANSFER_TOPIC &&
+          log.topics.length >= 3
+        ) {
+          const from = "0x" + log.topics[1].slice(26);
+          const to   = "0x" + log.topics[2].slice(26);
+          if (from.toLowerCase() === addr && to.toLowerCase() === DEPOSIT_TARGET) {
+            const rawAmount = ethers.getBigInt(log.data);
+            const decimals = 18;
+            const humanAmount = parseFloat(ethers.formatUnits(rawAmount, decimals));
+            const claimed = parseFloat(claimedAmount);
+            // Allow ±1% tolerance for rounding
+            if (Math.abs(humanAmount - claimed) / claimed < 0.01) {
+              verifiedAmount = humanAmount.toFixed(4);
+            }
+            break;
+          }
+        }
+      }
+
+      if (!verifiedAmount) {
+        return res.status(400).json({ message: "Could not verify USDT transfer to admin wallet in this transaction. Ensure you transferred to the correct address." });
+      }
+
+      await storage.recordUsdtDeposit(addr, hash, verifiedAmount);
+      await storage.creditVirtualUsdt(addr, verifiedAmount);
+
+      res.json({ success: true, amount: verifiedAmount, message: `$${verifiedAmount} USDT credited to your virtual balance` });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/usdt/deposits/:walletAddress — deposit history
+  app.get("/api/usdt/deposits/:walletAddress", async (req, res) => {
+    try {
+      const deposits = await storage.getUsdtDeposits(req.params.walletAddress);
+      res.json(deposits);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // GET /api/usdt/:walletAddress
   app.get("/api/usdt/:walletAddress", async (req, res) => {
     try {

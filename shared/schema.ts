@@ -189,6 +189,19 @@ export const insertBtcSwapTxnSchema = createInsertSchema(btcSwapTxns).omit({ id:
 export type InsertBtcSwapTxn = z.infer<typeof insertBtcSwapTxnSchema>;
 export type BtcSwapTxn = typeof btcSwapTxns.$inferSelect;
 
+// ── USDT Deposits ─────────────────────────────────────────────────────────────
+
+export const usdtDeposits = pgTable("usdt_deposits", {
+  id: serial("id").primaryKey(),
+  walletAddress: varchar("wallet_address", { length: 42 }).notNull(),
+  txHash: varchar("tx_hash", { length: 70 }).notNull().unique(),
+  amount: numeric("amount", { precision: 20, scale: 4 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("confirmed"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type UsdtDeposit = typeof usdtDeposits.$inferSelect;
+
 // ── Staking Override Income ───────────────────────────────────────────────────
 
 export const stakingOverrideIncome = pgTable("staking_override_income", {

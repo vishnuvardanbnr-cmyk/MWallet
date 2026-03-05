@@ -1,4 +1,4 @@
-import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome } from "@shared/schema";
+import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome, usdtDeposits, type UsdtDeposit } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -54,6 +54,9 @@ export interface IStorage {
   updateOrderStatus(id: string, status: string): Promise<HardwareOrder | undefined>;
   logStakingOverrideIncome(recipientWallet: string, fromWallet: string, amountUsdt: string, level: number): Promise<StakingOverrideIncome>;
   getStakingOverrideIncome(recipientWallet: string): Promise<StakingOverrideIncome[]>;
+  findDepositByTxHash(txHash: string): Promise<UsdtDeposit | undefined>;
+  recordUsdtDeposit(walletAddress: string, txHash: string, amount: string): Promise<UsdtDeposit>;
+  getUsdtDeposits(walletAddress: string): Promise<UsdtDeposit[]>;
   createTicket(data: InsertTicket): Promise<SupportTicket>;
   getTickets(walletAddress?: string): Promise<SupportTicket[]>;
   getTicket(id: number): Promise<SupportTicket | undefined>;
@@ -472,6 +475,27 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(stakingOverrideIncome)
       .where(eq(stakingOverrideIncome.recipientWallet, recipientWallet.toLowerCase()))
       .orderBy(desc(stakingOverrideIncome.createdAt));
+  }
+
+  async findDepositByTxHash(txHash: string): Promise<UsdtDeposit | undefined> {
+    const [row] = await db.select().from(usdtDeposits).where(eq(usdtDeposits.txHash, txHash.toLowerCase()));
+    return row;
+  }
+
+  async recordUsdtDeposit(walletAddress: string, txHash: string, amount: string): Promise<UsdtDeposit> {
+    const [row] = await db.insert(usdtDeposits).values({
+      walletAddress: walletAddress.toLowerCase(),
+      txHash: txHash.toLowerCase(),
+      amount,
+      status: "confirmed",
+    }).returning();
+    return row;
+  }
+
+  async getUsdtDeposits(walletAddress: string): Promise<UsdtDeposit[]> {
+    return db.select().from(usdtDeposits)
+      .where(eq(usdtDeposits.walletAddress, walletAddress.toLowerCase()))
+      .orderBy(desc(usdtDeposits.createdAt));
   }
 }
 

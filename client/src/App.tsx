@@ -297,6 +297,7 @@ function App() {
                     <Route path="/wallet">
                       <WalletPage
                         userInfo={web3.userInfo!}
+                        account={web3.account!}
                         formatAmount={web3.formatAmount}
                         withdrawFunds={web3.withdrawFunds}
                         getTransactionsFromContract={web3.getTransactionsFromContract}
