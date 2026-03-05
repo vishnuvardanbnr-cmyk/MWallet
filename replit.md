@@ -1,7 +1,7 @@
 # M-Vault — Web3 MLM/DeFi Platform
 
 ## Overview
-M-Vault is a Web3 MLM/DeFi platform for BNB Smart Chain. Users connect MetaMask wallets and participate in a binary MLM structure with staking rewards, board pools, and a BTC swap feature.
+M-Vault is a Web3 MLM/DeFi platform for BNB Smart Chain. Users connect MetaMask wallets and participate in a binary MLM structure with staking rewards, board pools, BTC swap, and M Token paid staking.
 
 **Production URL**: https://app.mvault.pro  
 **VPS**: 173.249.10.179 (root) — Ubuntu 24.04, Nginx → Node.js on port 5000  

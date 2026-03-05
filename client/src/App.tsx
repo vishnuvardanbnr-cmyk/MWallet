@@ -31,6 +31,7 @@ import StakingPage from "@/pages/staking";
 import DeepPlacementPage from "@/pages/deep-placement";
 import StorePage from "@/pages/store";
 import SwapPage from "@/pages/swap";
+import PaidStakingPage from "@/pages/paid-staking";
 
 function ScrollToTop() {
   const [location] = useLocation();
@@ -349,6 +350,9 @@ function App() {
                     </Route>
                     <Route path="/staking">
                       <StakingPage account={web3.account!} />
+                    </Route>
+                    <Route path="/paid-staking">
+                      <PaidStakingPage account={web3.account!} />
                     </Route>
                     <Route path="/store">
                       <StorePage />

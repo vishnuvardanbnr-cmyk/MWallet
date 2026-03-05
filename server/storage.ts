@@ -1,4 +1,4 @@
-import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn } from "@shared/schema";
+import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -14,6 +14,30 @@ export interface IStorage {
   addToMwalletBalance(walletAddress: string, amount: string): Promise<MwalletBalance>;
   createStakingClaim(data: Omit<InsertStakingClaim, "id">): Promise<StakingClaim>;
   getStakingClaims(walletAddress: string, limit: number, offset: number): Promise<{ claims: StakingClaim[]; total: number }>;
+  // Token Economics
+  getTokenEconomics(): Promise<TokenEconomics>;
+  initTokenEconomics(): Promise<TokenEconomics>;
+  updateTokenEconomics(data: Partial<{ liquidity: string; circulatingSupply: string; generatedVolume: string }>): Promise<TokenEconomics>;
+  // Virtual USDT
+  getVirtualUsdtBalance(walletAddress: string): Promise<VirtualUsdtBalance | undefined>;
+  creditVirtualUsdt(walletAddress: string, amount: string): Promise<VirtualUsdtBalance>;
+  deductVirtualUsdt(walletAddress: string, amount: string): Promise<VirtualUsdtBalance>;
+  // M Token balances
+  getMTokenBalance(walletAddress: string): Promise<MTokenBalance | undefined>;
+  addMTokenMainBalance(walletAddress: string, amount: string): Promise<MTokenBalance>;
+  addMTokenRewardBalance(walletAddress: string, amount: string): Promise<MTokenBalance>;
+  deductMTokenRewardBalance(walletAddress: string, amount: string): Promise<MTokenBalance>;
+  deductMTokenMainBalance(walletAddress: string, amount: string): Promise<MTokenBalance>;
+  // Paid Staking
+  createPaidStakingPlan(data: InsertPaidStakingPlan): Promise<PaidStakingPlan>;
+  getActivePaidStakingPlan(walletAddress: string): Promise<PaidStakingPlan | undefined>;
+  getAllPaidStakingPlans(walletAddress: string): Promise<PaidStakingPlan[]>;
+  updatePaidStakingRewards(id: number, tokensClaimed: string, claimDate: Date): Promise<PaidStakingPlan>;
+  markPaidStakingUnstaked(id: number, usdtReturned: string): Promise<PaidStakingPlan>;
+  // Token Transactions
+  logTokenTransaction(data: { walletAddress: string; txType: string; tokenAmount: string; usdtAmount?: string; priceAtTxn?: string; note?: string }): Promise<TokenTransaction>;
+  getTokenTransactions(walletAddress: string): Promise<TokenTransaction[]>;
+  // Virtual BTC
   getVirtualBtcBalance(walletAddress: string): Promise<VirtualBtcBalance | undefined>;
   creditVirtualBtcBalance(walletAddress: string, amount: string): Promise<VirtualBtcBalance>;
   deductVirtualBtcBalance(walletAddress: string, amount: string): Promise<VirtualBtcBalance>;
@@ -130,6 +154,160 @@ export class DatabaseStorage implements IStorage {
     const [countResult] = await db.select({ count: sql<number>`count(*)::int` }).from(stakingClaims)
       .where(eq(stakingClaims.walletAddress, addr));
     return { claims, total: countResult?.count || 0 };
+  }
+
+  async getTokenEconomics(): Promise<TokenEconomics> {
+    const [row] = await db.select().from(tokenEconomics).limit(1);
+    if (row) return row;
+    return this.initTokenEconomics();
+  }
+
+  async initTokenEconomics(): Promise<TokenEconomics> {
+    const [existing] = await db.select().from(tokenEconomics).limit(1);
+    if (existing) return existing;
+    const [row] = await db.insert(tokenEconomics).values({ liquidity: "0", circulatingSupply: "0", generatedVolume: "0", listingPrice: "0.036" }).returning();
+    return row;
+  }
+
+  async updateTokenEconomics(data: Partial<{ liquidity: string; circulatingSupply: string; generatedVolume: string }>): Promise<TokenEconomics> {
+    const [existing] = await db.select().from(tokenEconomics).limit(1);
+    if (!existing) await this.initTokenEconomics();
+    const set: any = { updatedAt: new Date() };
+    if (data.liquidity !== undefined) set.liquidity = data.liquidity;
+    if (data.circulatingSupply !== undefined) set.circulatingSupply = data.circulatingSupply;
+    if (data.generatedVolume !== undefined) set.generatedVolume = data.generatedVolume;
+    const [row] = await db.update(tokenEconomics).set(set).returning();
+    return row;
+  }
+
+  async getVirtualUsdtBalance(walletAddress: string): Promise<VirtualUsdtBalance | undefined> {
+    const [row] = await db.select().from(virtualUsdtBalances).where(eq(virtualUsdtBalances.walletAddress, walletAddress.toLowerCase()));
+    return row;
+  }
+
+  async creditVirtualUsdt(walletAddress: string, amount: string): Promise<VirtualUsdtBalance> {
+    const addr = walletAddress.toLowerCase();
+    const [row] = await db.insert(virtualUsdtBalances)
+      .values({ walletAddress: addr, balance: amount, totalDeposited: amount })
+      .onConflictDoUpdate({
+        target: virtualUsdtBalances.walletAddress,
+        set: {
+          balance: sql`${virtualUsdtBalances.balance}::numeric + ${amount}::numeric`,
+          totalDeposited: sql`${virtualUsdtBalances.totalDeposited}::numeric + ${amount}::numeric`,
+          updatedAt: new Date(),
+        },
+      }).returning();
+    return row;
+  }
+
+  async deductVirtualUsdt(walletAddress: string, amount: string): Promise<VirtualUsdtBalance> {
+    const [row] = await db.update(virtualUsdtBalances)
+      .set({ balance: sql`${virtualUsdtBalances.balance}::numeric - ${amount}::numeric`, updatedAt: new Date() })
+      .where(eq(virtualUsdtBalances.walletAddress, walletAddress.toLowerCase()))
+      .returning();
+    return row;
+  }
+
+  async getMTokenBalance(walletAddress: string): Promise<MTokenBalance | undefined> {
+    const [row] = await db.select().from(mTokenBalances).where(eq(mTokenBalances.walletAddress, walletAddress.toLowerCase()));
+    return row;
+  }
+
+  async addMTokenMainBalance(walletAddress: string, amount: string): Promise<MTokenBalance> {
+    const addr = walletAddress.toLowerCase();
+    const [row] = await db.insert(mTokenBalances)
+      .values({ walletAddress: addr, mainBalance: amount })
+      .onConflictDoUpdate({
+        target: mTokenBalances.walletAddress,
+        set: { mainBalance: sql`${mTokenBalances.mainBalance}::numeric + ${amount}::numeric`, updatedAt: new Date() },
+      }).returning();
+    return row;
+  }
+
+  async addMTokenRewardBalance(walletAddress: string, amount: string): Promise<MTokenBalance> {
+    const addr = walletAddress.toLowerCase();
+    const [row] = await db.insert(mTokenBalances)
+      .values({ walletAddress: addr, rewardBalance: amount, totalRewardEarned: amount })
+      .onConflictDoUpdate({
+        target: mTokenBalances.walletAddress,
+        set: {
+          rewardBalance: sql`${mTokenBalances.rewardBalance}::numeric + ${amount}::numeric`,
+          totalRewardEarned: sql`${mTokenBalances.totalRewardEarned}::numeric + ${amount}::numeric`,
+          updatedAt: new Date(),
+        },
+      }).returning();
+    return row;
+  }
+
+  async deductMTokenRewardBalance(walletAddress: string, amount: string): Promise<MTokenBalance> {
+    const [row] = await db.update(mTokenBalances)
+      .set({ rewardBalance: sql`${mTokenBalances.rewardBalance}::numeric - ${amount}::numeric`, updatedAt: new Date() })
+      .where(eq(mTokenBalances.walletAddress, walletAddress.toLowerCase()))
+      .returning();
+    return row;
+  }
+
+  async deductMTokenMainBalance(walletAddress: string, amount: string): Promise<MTokenBalance> {
+    const [row] = await db.update(mTokenBalances)
+      .set({ mainBalance: sql`${mTokenBalances.mainBalance}::numeric - ${amount}::numeric`, updatedAt: new Date() })
+      .where(eq(mTokenBalances.walletAddress, walletAddress.toLowerCase()))
+      .returning();
+    return row;
+  }
+
+  async createPaidStakingPlan(data: InsertPaidStakingPlan): Promise<PaidStakingPlan> {
+    const [plan] = await db.insert(paidStakingPlans).values({ ...data, walletAddress: data.walletAddress.toLowerCase() }).returning();
+    return plan;
+  }
+
+  async getActivePaidStakingPlan(walletAddress: string): Promise<PaidStakingPlan | undefined> {
+    const [plan] = await db.select().from(paidStakingPlans)
+      .where(and(eq(paidStakingPlans.walletAddress, walletAddress.toLowerCase()), eq(paidStakingPlans.isActive, true)));
+    return plan;
+  }
+
+  async getAllPaidStakingPlans(walletAddress: string): Promise<PaidStakingPlan[]> {
+    return db.select().from(paidStakingPlans)
+      .where(eq(paidStakingPlans.walletAddress, walletAddress.toLowerCase()))
+      .orderBy(desc(paidStakingPlans.startDate));
+  }
+
+  async updatePaidStakingRewards(id: number, tokensClaimed: string, claimDate: Date): Promise<PaidStakingPlan> {
+    const [plan] = await db.update(paidStakingPlans)
+      .set({
+        totalRewardTokensClaimed: sql`${paidStakingPlans.totalRewardTokensClaimed}::numeric + ${tokensClaimed}::numeric`,
+        lastRewardClaimDate: claimDate,
+      })
+      .where(eq(paidStakingPlans.id, id))
+      .returning();
+    return plan;
+  }
+
+  async markPaidStakingUnstaked(id: number, usdtReturned: string): Promise<PaidStakingPlan> {
+    const [plan] = await db.update(paidStakingPlans)
+      .set({ unstaked: true, isActive: false, unstakeDate: new Date(), usdtReturnedOnUnstake: usdtReturned })
+      .where(eq(paidStakingPlans.id, id))
+      .returning();
+    return plan;
+  }
+
+  async logTokenTransaction(data: { walletAddress: string; txType: string; tokenAmount: string; usdtAmount?: string; priceAtTxn?: string; note?: string }): Promise<TokenTransaction> {
+    const [txn] = await db.insert(tokenTransactions).values({
+      walletAddress: data.walletAddress.toLowerCase(),
+      txType: data.txType,
+      tokenAmount: data.tokenAmount,
+      usdtAmount: data.usdtAmount,
+      priceAtTxn: data.priceAtTxn,
+      note: data.note,
+    }).returning();
+    return txn;
+  }
+
+  async getTokenTransactions(walletAddress: string): Promise<TokenTransaction[]> {
+    return db.select().from(tokenTransactions)
+      .where(eq(tokenTransactions.walletAddress, walletAddress.toLowerCase()))
+      .orderBy(desc(tokenTransactions.createdAt))
+      .limit(50);
   }
 
   async getVirtualBtcBalance(walletAddress: string): Promise<VirtualBtcBalance | undefined> {

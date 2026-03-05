@@ -333,6 +333,326 @@ export async function registerRoutes(
     }
   });
 
+  // ── Token Economics ────────────────────────────────────────────────────────
+
+  // Helper: get current buy/sell price
+  const getTokenPrice = async () => {
+    const econ = await storage.getTokenEconomics();
+    const listing = parseFloat(econ.listingPrice);
+    const liquidity = parseFloat(econ.liquidity);
+    const supply = parseFloat(econ.circulatingSupply);
+    const buyPrice = (supply > 0 && liquidity > 0) ? Math.max(listing, liquidity / supply) : listing;
+    const sellPrice = buyPrice * 0.9;
+    return { buyPrice, sellPrice, econ };
+  };
+
+  // Ensure token economics row exists on startup
+  storage.initTokenEconomics().catch(() => {});
+
+  // GET /api/token/price
+  app.get("/api/token/price", async (_req, res) => {
+    try {
+      const { buyPrice, sellPrice, econ } = await getTokenPrice();
+      res.json({
+        buyPrice: buyPrice.toFixed(8),
+        sellPrice: sellPrice.toFixed(8),
+        listingPrice: econ.listingPrice,
+        liquidity: econ.liquidity,
+        circulatingSupply: econ.circulatingSupply,
+        generatedVolume: econ.generatedVolume,
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/usdt/credit  (admin credits virtual USDT to a user)
+  app.post("/api/usdt/credit", async (req, res) => {
+    try {
+      const { walletAddress, amount } = req.body;
+      if (!walletAddress || !amount || parseFloat(amount) <= 0) {
+        return res.status(400).json({ message: "walletAddress and positive amount required" });
+      }
+      const result = await storage.creditVirtualUsdt(walletAddress, amount.toString());
+      res.json(result);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/usdt/:walletAddress
+  app.get("/api/usdt/:walletAddress", async (req, res) => {
+    try {
+      const bal = await storage.getVirtualUsdtBalance(req.params.walletAddress);
+      res.json({ balance: bal?.balance ?? "0", totalDeposited: bal?.totalDeposited ?? "0" });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Paid Staking ────────────────────────────────────────────────────────────
+
+  // GET /api/paidstaking/:walletAddress
+  app.get("/api/paidstaking/:walletAddress", async (req, res) => {
+    try {
+      const addr = req.params.walletAddress.toLowerCase();
+      const [activePlan, allPlans, mTokenBal, usdtBal] = await Promise.all([
+        storage.getActivePaidStakingPlan(addr),
+        storage.getAllPaidStakingPlans(addr),
+        storage.getMTokenBalance(addr),
+        storage.getVirtualUsdtBalance(addr),
+      ]);
+      const { buyPrice, sellPrice } = await getTokenPrice();
+      res.json({
+        activePlan,
+        allPlans,
+        mTokenBalance: mTokenBal,
+        usdtBalance: usdtBal?.balance ?? "0",
+        currentBuyPrice: buyPrice.toFixed(8),
+        currentSellPrice: sellPrice.toFixed(8),
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/paidstaking/stake
+  app.post("/api/paidstaking/stake", async (req, res) => {
+    try {
+      const { walletAddress, usdtAmount } = req.body;
+      if (!walletAddress || !usdtAmount || parseFloat(usdtAmount) <= 0) {
+        return res.status(400).json({ message: "walletAddress and positive usdtAmount required" });
+      }
+      const usdtAmt = parseFloat(usdtAmount);
+      const addr = walletAddress.toLowerCase();
+
+      // Check virtual USDT balance
+      const usdtBal = await storage.getVirtualUsdtBalance(addr);
+      if (!usdtBal || parseFloat(usdtBal.balance) < usdtAmt) {
+        return res.status(400).json({ message: "Insufficient virtual USDT balance" });
+      }
+
+      // Check no active plan
+      const existing = await storage.getActivePaidStakingPlan(addr);
+      if (existing) {
+        return res.status(400).json({ message: "You already have an active paid staking plan" });
+      }
+
+      const { buyPrice } = await getTokenPrice();
+
+      // Token calculations
+      const theoreticalTokens = usdtAmt / buyPrice;
+      const mintedTokens = theoreticalTokens * 0.9;       // mint 90%
+      const userTokens = theoreticalTokens * 0.7;          // user gets 70%
+      const adminTokens = theoreticalTokens * 0.2;         // admin gets 20%
+      const dailyRewardUsdt = usdtAmt * 0.003;             // 0.3% daily of invested USDT
+
+      // Deduct USDT from user, add to liquidity (USDT backs the token supply)
+      await storage.deductVirtualUsdt(addr, usdtAmt.toString());
+
+      // Update circulating supply and liquidity
+      const econ = await storage.getTokenEconomics();
+      const newSupply = parseFloat(econ.circulatingSupply) + mintedTokens;
+      const newLiquidity = parseFloat(econ.liquidity) + usdtAmt;
+      await storage.updateTokenEconomics({
+        circulatingSupply: newSupply.toFixed(8),
+        liquidity: newLiquidity.toFixed(8),
+      });
+
+      // Add user's tokens to their M token main balance
+      await storage.addMTokenMainBalance(addr, userTokens.toFixed(8));
+
+      // Create the staking plan
+      const startDate = new Date();
+      const endDate = new Date(startDate);
+      endDate.setMonth(endDate.getMonth() + 10); // 10 months
+
+      const plan = await storage.createPaidStakingPlan({
+        walletAddress: addr,
+        usdtInvested: usdtAmt.toFixed(4),
+        buyPriceAtEntry: buyPrice.toFixed(8),
+        totalTokensMinted: mintedTokens.toFixed(8),
+        userTokens: userTokens.toFixed(8),
+        adminTokens: adminTokens.toFixed(8),
+        dailyRewardUsdt: dailyRewardUsdt.toFixed(4),
+        startDate,
+        endDate,
+      });
+
+      // Log transaction
+      await storage.logTokenTransaction({
+        walletAddress: addr,
+        txType: "paid_stake",
+        tokenAmount: mintedTokens.toFixed(8),
+        usdtAmount: usdtAmt.toFixed(4),
+        priceAtTxn: buyPrice.toFixed(8),
+        note: `Staked $${usdtAmt} USDT. User: ${userTokens.toFixed(2)} tokens, Admin: ${adminTokens.toFixed(2)} tokens`,
+      });
+
+      res.json({ plan, mintedTokens: mintedTokens.toFixed(8), userTokens: userTokens.toFixed(8), adminTokens: adminTokens.toFixed(8), buyPriceUsed: buyPrice.toFixed(8) });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/paidstaking/claim-rewards
+  app.post("/api/paidstaking/claim-rewards", async (req, res) => {
+    try {
+      const { walletAddress } = req.body;
+      if (!walletAddress) return res.status(400).json({ message: "walletAddress required" });
+      const addr = walletAddress.toLowerCase();
+
+      const plan = await storage.getActivePaidStakingPlan(addr);
+      if (!plan) return res.status(404).json({ message: "No active paid staking plan found" });
+
+      const now = new Date();
+      const lastClaim = plan.lastRewardClaimDate ? new Date(plan.lastRewardClaimDate) : new Date(plan.startDate);
+      const daysSince = Math.floor((now.getTime() - lastClaim.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysSince < 1) return res.status(400).json({ message: "Rewards can only be claimed once per day" });
+
+      const { buyPrice } = await getTokenPrice();
+      const dailyUsdtValue = parseFloat(plan.dailyRewardUsdt);
+      const totalUsdtReward = dailyUsdtValue * daysSince;
+      const rewardTokens = totalUsdtReward / buyPrice; // convert to tokens at current price
+
+      // Add to user's reward balance (generated volume, not circulating supply)
+      await storage.addMTokenRewardBalance(addr, rewardTokens.toFixed(8));
+
+      // Update generated volume
+      const econ = await storage.getTokenEconomics();
+      const newGenVol = parseFloat(econ.generatedVolume) + rewardTokens;
+      await storage.updateTokenEconomics({ generatedVolume: newGenVol.toFixed(8) });
+
+      // Update plan
+      await storage.updatePaidStakingRewards(plan.id, rewardTokens.toFixed(8), now);
+
+      await storage.logTokenTransaction({
+        walletAddress: addr,
+        txType: "paid_stake_reward",
+        tokenAmount: rewardTokens.toFixed(8),
+        usdtAmount: totalUsdtReward.toFixed(4),
+        priceAtTxn: buyPrice.toFixed(8),
+        note: `${daysSince} day(s) reward @ $${dailyUsdtValue.toFixed(4)}/day`,
+      });
+
+      res.json({ rewardTokens: rewardTokens.toFixed(8), daysRewarded: daysSince, usdtValue: totalUsdtReward.toFixed(4), priceUsed: buyPrice.toFixed(8) });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/paidstaking/sell-rewards  (sell reward tokens → USDT, burned from circulating supply)
+  app.post("/api/paidstaking/sell-rewards", async (req, res) => {
+    try {
+      const { walletAddress, tokenAmount } = req.body;
+      if (!walletAddress || !tokenAmount || parseFloat(tokenAmount) <= 0) {
+        return res.status(400).json({ message: "walletAddress and positive tokenAmount required" });
+      }
+      const addr = walletAddress.toLowerCase();
+      const tokens = parseFloat(tokenAmount);
+
+      const mBal = await storage.getMTokenBalance(addr);
+      const rewardBal = parseFloat(mBal?.rewardBalance ?? "0");
+      if (rewardBal < tokens) return res.status(400).json({ message: "Insufficient reward token balance" });
+
+      const { sellPrice } = await getTokenPrice();
+      const usdtOut = tokens * sellPrice;
+
+      // Deduct reward balance, decrement circulating supply (burns as main token), decrement liquidity
+      await storage.deductMTokenRewardBalance(addr, tokens.toFixed(8));
+      const econ = await storage.getTokenEconomics();
+      const newSupply = Math.max(0, parseFloat(econ.circulatingSupply) - tokens);
+      const newLiquidity = Math.max(0, parseFloat(econ.liquidity) - usdtOut);
+      const newGenVol = Math.max(0, parseFloat(econ.generatedVolume) - tokens);
+      await storage.updateTokenEconomics({
+        circulatingSupply: newSupply.toFixed(8),
+        liquidity: newLiquidity.toFixed(8),
+        generatedVolume: newGenVol.toFixed(8),
+      });
+
+      // Credit virtual USDT to user
+      await storage.creditVirtualUsdt(addr, usdtOut.toFixed(4));
+
+      await storage.logTokenTransaction({
+        walletAddress: addr,
+        txType: "sell_rewards",
+        tokenAmount: tokens.toFixed(8),
+        usdtAmount: usdtOut.toFixed(4),
+        priceAtTxn: sellPrice.toFixed(8),
+        note: `Sold ${tokens.toFixed(4)} reward tokens at sell price $${sellPrice.toFixed(8)}`,
+      });
+
+      res.json({ usdtReceived: usdtOut.toFixed(4), tokensBurned: tokens.toFixed(8), sellPriceUsed: sellPrice.toFixed(8) });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/paidstaking/unstake  (after 10 months)
+  app.post("/api/paidstaking/unstake", async (req, res) => {
+    try {
+      const { walletAddress } = req.body;
+      if (!walletAddress) return res.status(400).json({ message: "walletAddress required" });
+      const addr = walletAddress.toLowerCase();
+
+      const plan = await storage.getActivePaidStakingPlan(addr);
+      if (!plan) return res.status(404).json({ message: "No active paid staking plan" });
+
+      const now = new Date();
+      const endDate = new Date(plan.endDate);
+      if (now < endDate) {
+        const daysLeft = Math.ceil((endDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        return res.status(400).json({ message: `Staking period not ended. ${daysLeft} days remaining.` });
+      }
+
+      const { sellPrice } = await getTokenPrice();
+      const userTokens = parseFloat(plan.userTokens);
+      const usdtFromTokens = userTokens * sellPrice;              // USDT from selling 70% tokens
+      const usdtBonus = parseFloat(plan.usdtInvested) * 0.2;     // 20% of original investment from admin
+
+      // Burn user's 70% staked tokens from circulating supply, remove USDT from liquidity
+      await storage.deductMTokenMainBalance(addr, userTokens.toFixed(8));
+      const econ = await storage.getTokenEconomics();
+      const newSupply = Math.max(0, parseFloat(econ.circulatingSupply) - userTokens);
+      const newLiquidity = Math.max(0, parseFloat(econ.liquidity) - usdtFromTokens);
+      await storage.updateTokenEconomics({
+        circulatingSupply: newSupply.toFixed(8),
+        liquidity: newLiquidity.toFixed(8),
+      });
+
+      // Credit USDT to user (token proceeds + 20% bonus)
+      const totalUsdt = usdtFromTokens + usdtBonus;
+      await storage.creditVirtualUsdt(addr, totalUsdt.toFixed(4));
+
+      // Mark plan as unstaked
+      await storage.markPaidStakingUnstaked(plan.id, totalUsdt.toFixed(4));
+
+      await storage.logTokenTransaction({
+        walletAddress: addr,
+        txType: "unstake",
+        tokenAmount: userTokens.toFixed(8),
+        usdtAmount: totalUsdt.toFixed(4),
+        priceAtTxn: sellPrice.toFixed(8),
+        note: `Unstaked: ${userTokens.toFixed(2)} tokens burned → $${usdtFromTokens.toFixed(2)} USDT + $${usdtBonus.toFixed(2)} bonus`,
+      });
+
+      res.json({ usdtReceived: totalUsdt.toFixed(4), fromTokens: usdtFromTokens.toFixed(4), bonusUsdt: usdtBonus.toFixed(4), tokensBurned: userTokens.toFixed(8), sellPriceUsed: sellPrice.toFixed(8) });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // GET /api/token/transactions/:walletAddress
+  app.get("/api/token/transactions/:walletAddress", async (req, res) => {
+    try {
+      const txns = await storage.getTokenTransactions(req.params.walletAddress);
+      res.json(txns);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── BTC Swap via backend liquidity wallet ──────────────────────────────────
 
   const BSC_RPC = "https://bsc-dataseed.binance.org/";

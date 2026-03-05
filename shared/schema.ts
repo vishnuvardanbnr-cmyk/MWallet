@@ -99,6 +99,71 @@ export const insertTicketMessageSchema = createInsertSchema(ticketMessages).omit
 export type InsertTicketMessage = z.infer<typeof insertTicketMessageSchema>;
 export type TicketMessage = typeof ticketMessages.$inferSelect;
 
+// ── Token Economics ──────────────────────────────────────────────────────────
+
+export const tokenEconomics = pgTable("token_economics", {
+  id: serial("id").primaryKey(),
+  liquidity: numeric("liquidity", { precision: 30, scale: 8 }).notNull().default("0"),
+  circulatingSupply: numeric("circulating_supply", { precision: 30, scale: 8 }).notNull().default("0"),
+  generatedVolume: numeric("generated_volume", { precision: 30, scale: 8 }).notNull().default("0"),
+  listingPrice: numeric("listing_price", { precision: 20, scale: 8 }).notNull().default("0.036"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type TokenEconomics = typeof tokenEconomics.$inferSelect;
+
+export const virtualUsdtBalances = pgTable("virtual_usdt_balances", {
+  walletAddress: varchar("wallet_address", { length: 42 }).primaryKey(),
+  balance: numeric("balance", { precision: 20, scale: 4 }).notNull().default("0"),
+  totalDeposited: numeric("total_deposited", { precision: 20, scale: 4 }).notNull().default("0"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type VirtualUsdtBalance = typeof virtualUsdtBalances.$inferSelect;
+
+export const mTokenBalances = pgTable("m_token_balances", {
+  walletAddress: varchar("wallet_address", { length: 42 }).primaryKey(),
+  mainBalance: numeric("main_balance", { precision: 30, scale: 8 }).notNull().default("0"),
+  rewardBalance: numeric("reward_balance", { precision: 30, scale: 8 }).notNull().default("0"),
+  totalRewardEarned: numeric("total_reward_earned", { precision: 30, scale: 8 }).notNull().default("0"),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+export type MTokenBalance = typeof mTokenBalances.$inferSelect;
+
+export const paidStakingPlans = pgTable("paid_staking_plans", {
+  id: serial("id").primaryKey(),
+  walletAddress: varchar("wallet_address", { length: 42 }).notNull(),
+  usdtInvested: numeric("usdt_invested", { precision: 20, scale: 4 }).notNull(),
+  buyPriceAtEntry: numeric("buy_price_at_entry", { precision: 20, scale: 8 }).notNull(),
+  totalTokensMinted: numeric("total_tokens_minted", { precision: 30, scale: 8 }).notNull(),
+  userTokens: numeric("user_tokens", { precision: 30, scale: 8 }).notNull(),
+  adminTokens: numeric("admin_tokens", { precision: 30, scale: 8 }).notNull(),
+  dailyRewardUsdt: numeric("daily_reward_usdt", { precision: 20, scale: 4 }).notNull(),
+  totalRewardTokensClaimed: numeric("total_reward_tokens_claimed", { precision: 30, scale: 8 }).notNull().default("0"),
+  lastRewardClaimDate: timestamp("last_reward_claim_date"),
+  startDate: timestamp("start_date").notNull().defaultNow(),
+  endDate: timestamp("end_date").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  unstaked: boolean("unstaked").notNull().default(false),
+  unstakeDate: timestamp("unstake_date"),
+  usdtReturnedOnUnstake: numeric("usdt_returned_on_unstake", { precision: 20, scale: 4 }),
+});
+export const insertPaidStakingPlanSchema = createInsertSchema(paidStakingPlans).omit({ id: true, totalRewardTokensClaimed: true, lastRewardClaimDate: true, isActive: true, unstaked: true, unstakeDate: true, usdtReturnedOnUnstake: true });
+export type InsertPaidStakingPlan = z.infer<typeof insertPaidStakingPlanSchema>;
+export type PaidStakingPlan = typeof paidStakingPlans.$inferSelect;
+
+export const tokenTransactions = pgTable("token_transactions", {
+  id: serial("id").primaryKey(),
+  walletAddress: varchar("wallet_address", { length: 42 }).notNull(),
+  txType: varchar("tx_type", { length: 30 }).notNull(),
+  tokenAmount: numeric("token_amount", { precision: 30, scale: 8 }).notNull().default("0"),
+  usdtAmount: numeric("usdt_amount", { precision: 20, scale: 4 }),
+  priceAtTxn: numeric("price_at_txn", { precision: 20, scale: 8 }),
+  note: text("note"),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+export type TokenTransaction = typeof tokenTransactions.$inferSelect;
+
+// ── Virtual BTC ───────────────────────────────────────────────────────────────
+
 export const virtualBtcBalances = pgTable("virtual_btc_balances", {
   walletAddress: varchar("wallet_address", { length: 42 }).primaryKey(),
   balance: numeric("balance", { precision: 20, scale: 4 }).notNull().default("0"),
