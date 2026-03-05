@@ -1,7 +1,8 @@
 require("@nomicfoundation/hardhat-toolbox");
 require("dotenv").config();
 
-const DEPLOYER_KEY = process.env.DEPLOYER_PRIVATE_KEY || "";
+const DEPLOYER_KEY   = process.env.DEPLOYER_PRIVATE_KEY || "";
+const ETHERSCAN_KEY  = process.env.BSCSCAN_API_KEY || "";
 
 module.exports = {
   solidity: {
@@ -28,5 +29,21 @@ module.exports = {
   paths: {
     sources: "./contracts",
     artifacts: "./artifacts",
+  },
+  etherscan: {
+    apiKey: {
+      bscTestnet: ETHERSCAN_KEY,
+      bsc: ETHERSCAN_KEY,
+    },
+    customChains: [
+      {
+        network: "bscTestnet",
+        chainId: 97,
+        urls: {
+          apiURL: "https://api-testnet.bscscan.com/api",
+          browserURL: "https://testnet.bscscan.com",
+        },
+      },
+    ],
   },
 };
