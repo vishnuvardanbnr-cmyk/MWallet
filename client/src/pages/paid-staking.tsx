@@ -447,9 +447,7 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
               <p className="text-[10px] text-purple-400 uppercase tracking-wider font-medium">Stake Preview</p>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="flex justify-between"><span className="text-muted-foreground">Entry price</span><span className="font-medium">${buyPrice.toFixed(6)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Minted (90%)</span><span className="font-medium">{previewTokens.minted} M</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Your tokens (70%)</span><span className="font-bold text-purple-400">{previewTokens.user} M</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Admin tokens (20%)</span><span className="font-medium text-muted-foreground">{previewTokens.admin} M</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Tokens minted</span><span className="font-bold text-purple-400">{previewTokens.minted} M</span></div>
                 <div className="flex justify-between col-span-2 pt-1 border-t border-white/[0.05]">
                   <span className="text-muted-foreground">Daily reward</span>
                   <span className="font-bold text-amber-400">${previewTokens.dailyReward} USDT value/day</span>
