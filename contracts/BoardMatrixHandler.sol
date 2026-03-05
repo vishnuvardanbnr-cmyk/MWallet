@@ -54,6 +54,11 @@ contract BoardMatrixHandler is Ownable, ReentrancyGuard {
     mapping(address => uint256) public totalSwappedToBTC;
     uint256[11] public boardPrices;
 
+    // ── USDT Deposit Vault ────────────────────────────────────────────────────
+    mapping(address => uint256)   public depositBalance;
+    mapping(address => uint256[]) public depositAmounts;
+    mapping(address => uint256[]) public depositTimestamps;
+
     IERC20 public paymentToken;
     IERC20 public btcRewardToken;
     IPancakeRouter public pancakeRouter;
@@ -66,6 +71,8 @@ contract BoardMatrixHandler is Ownable, ReentrancyGuard {
     event BoardCompleted(address indexed owner, uint256 indexed boardLevel, uint256 reward, uint256 liquidity);
     event VirtualRewardCredited(address indexed user, uint256 amount, uint256 boardLevel);
     event SwappedToBTC(address indexed user, uint256 usdtAmount, uint256 btcbAmount);
+    event Deposited(address indexed user, uint256 amount);
+    event AdminWithdrawn(address indexed to, uint256 amount);
 
     modifier onlyMLM() {
         require(msg.sender == mlmContract || msg.sender == owner(), "NA");
@@ -263,6 +270,35 @@ contract BoardMatrixHandler is Ownable, ReentrancyGuard {
 
     function getBoardCurrentIndex(uint256 _boardLevel) external view returns (uint256) {
         return boardCurrentIndex[_boardLevel];
+    }
+
+    // ── USDT Deposit Vault ────────────────────────────────────────────────────
+
+    function deposit(uint256 _amount) external nonReentrant {
+        require(_amount > 0, "A0");
+        paymentToken.safeTransferFrom(msg.sender, address(this), _amount);
+        depositBalance[msg.sender] += _amount;
+        depositAmounts[msg.sender].push(_amount);
+        depositTimestamps[msg.sender].push(block.timestamp);
+        emit Deposited(msg.sender, _amount);
+    }
+
+    function getDepositBalance(address _user) external view returns (uint256) {
+        return depositBalance[_user];
+    }
+
+    function getDepositHistory(address _user) external view returns (
+        uint256[] memory amounts,
+        uint256[] memory timestamps
+    ) {
+        return (depositAmounts[_user], depositTimestamps[_user]);
+    }
+
+    function adminWithdrawDeposits(address _to, uint256 _amount) external onlyOwner {
+        require(_to != address(0), "ZA");
+        require(_amount > 0, "A0");
+        paymentToken.safeTransfer(_to, _amount);
+        emit AdminWithdrawn(_to, _amount);
     }
 
     function recoverToken(address _token, address _to, uint256 _amount) external onlyOwner {

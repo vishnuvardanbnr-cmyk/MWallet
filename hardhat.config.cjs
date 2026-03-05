@@ -31,16 +31,13 @@ module.exports = {
     artifacts: "./artifacts",
   },
   etherscan: {
-    apiKey: {
-      bscTestnet: ETHERSCAN_KEY,
-      bsc: ETHERSCAN_KEY,
-    },
+    apiKey: ETHERSCAN_KEY,
     customChains: [
       {
         network: "bscTestnet",
         chainId: 97,
         urls: {
-          apiURL: "https://api-testnet.bscscan.com/api",
+          apiURL: "https://api.etherscan.io/v2/api?chainid=97",
           browserURL: "https://testnet.bscscan.com",
         },
       },

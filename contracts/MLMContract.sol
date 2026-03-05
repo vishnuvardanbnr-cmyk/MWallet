@@ -22,7 +22,7 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     enum Status  { INACTIVE, ACTIVE, GRACE_PERIOD }
     enum Side    { NONE, LEFT, RIGHT }
 
-    enum TxType { ACTIVATION, UPGRADE, REACTIVATION, WITHDRAWAL, DIRECT_INCOME, BINARY_INCOME, MATCHING_OVERRIDE, WITHDRAWAL_MATCH, BOARD_ENTRY, BOARD_REWARD, BTC_POOL_DEDUCTION, WITHDRAWAL_MATCH_DEDUCTION, DEPOSIT }
+    enum TxType { ACTIVATION, UPGRADE, REACTIVATION, WITHDRAWAL, DIRECT_INCOME, BINARY_INCOME, MATCHING_OVERRIDE, WITHDRAWAL_MATCH, BOARD_ENTRY, BOARD_REWARD, BTC_POOL_DEDUCTION, WITHDRAWAL_MATCH_DEDUCTION }
 
     struct TransactionRecord {
         TxType  txType;
@@ -108,7 +108,6 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
 
     mapping(address => uint256) public btcPoolBalance;
     mapping(address => uint256) public boardEntryCount;
-    mapping(address => uint256) public depositBalance;
 
     IBoardMatrixHandler public boardHandler;
 
@@ -162,8 +161,6 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
     event BinaryFlushed(address indexed user, uint256 flushedAmount);
     event AdminBinaryWalletUpdated(address indexed oldWallet, address indexed newWallet);
     event BoardHandlerUpdated(address indexed oldHandler, address indexed newHandler);
-    event Deposited(address indexed user, uint256 amount);
-    event DepositWithdrawn(address indexed to, uint256 amount);
 
     modifier onlyRegistered(address _user) {
         require(isRegistered[_user], "NR");
@@ -761,25 +758,6 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
         boardEntryCount[msg.sender]++;
         _userTransactions[msg.sender].push(TransactionRecord(TxType.BOARD_ENTRY, price, block.timestamp, address(0), 1));
         boardHandler.enterBoard(msg.sender, 1);
-    }
-
-    function deposit(uint256 _amount) external nonReentrant whenNotPaused {
-        require(_amount > 0, "A0");
-        paymentToken.safeTransferFrom(msg.sender, address(this), _amount);
-        depositBalance[msg.sender] += _amount;
-        _userTransactions[msg.sender].push(TransactionRecord(TxType.DEPOSIT, _amount, block.timestamp, address(0), 0));
-        emit Deposited(msg.sender, _amount);
-    }
-
-    function getDepositBalance(address _user) external view returns (uint256) {
-        return depositBalance[_user];
-    }
-
-    function adminWithdrawDeposits(address _to, uint256 _amount) external onlyOwner {
-        require(_to != address(0), "ZA");
-        require(_amount > 0, "A0");
-        paymentToken.safeTransfer(_to, _amount);
-        emit DepositWithdrawn(_to, _amount);
     }
 
     function _creditIncome(address _user, uint256 _amount) internal {

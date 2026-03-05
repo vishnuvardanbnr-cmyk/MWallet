@@ -420,7 +420,7 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/usdt/deposit-verify — user submits txHash after on-chain USDT transfer to admin wallet
+  // POST /api/usdt/deposit-verify — verify Deposited event from BoardMatrixHandler vault contract
   app.post("/api/usdt/deposit-verify", async (req, res) => {
     try {
       const { walletAddress, txHash, claimedAmount } = req.body;
@@ -447,23 +447,21 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Transaction failed on-chain" });
       }
 
-      const USDT_TESTNET = "0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3".toLowerCase();
-      const DEPOSIT_TARGET = "0x127323b3053a901620f8d461c88fc6a7d9c7de2e".toLowerCase();
-      const TRANSFER_TOPIC = "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef";
+      // Verify the Deposited(address indexed user, uint256 amount) event from BoardMatrixHandler
+      const BOARD_HANDLER = "0x7ad7bfe3b717fA581e0383F1B2c21ED26A0C5465".toLowerCase();
+      const DEPOSITED_TOPIC = ethers.id("Deposited(address,uint256)").toLowerCase();
 
       let verifiedAmount: string | null = null;
       for (const log of receipt.logs) {
         if (
-          log.address.toLowerCase() === USDT_TESTNET &&
-          log.topics[0]?.toLowerCase() === TRANSFER_TOPIC &&
-          log.topics.length >= 3
+          log.address.toLowerCase() === BOARD_HANDLER &&
+          log.topics[0]?.toLowerCase() === DEPOSITED_TOPIC &&
+          log.topics.length >= 2
         ) {
-          const from = "0x" + log.topics[1].slice(26);
-          const to   = "0x" + log.topics[2].slice(26);
-          if (from.toLowerCase() === addr && to.toLowerCase() === DEPOSIT_TARGET) {
+          const user = "0x" + log.topics[1].slice(26);
+          if (user.toLowerCase() === addr) {
             const rawAmount = ethers.getBigInt(log.data);
-            const decimals = 18;
-            const humanAmount = parseFloat(ethers.formatUnits(rawAmount, decimals));
+            const humanAmount = parseFloat(ethers.formatUnits(rawAmount, 18));
             const claimed = parseFloat(claimedAmount);
             // Allow ±1% tolerance for rounding
             if (Math.abs(humanAmount - claimed) / claimed < 0.01) {
@@ -475,7 +473,7 @@ export async function registerRoutes(
       }
 
       if (!verifiedAmount) {
-        return res.status(400).json({ message: "Could not verify USDT transfer to admin wallet in this transaction. Ensure you transferred to the correct address." });
+        return res.status(400).json({ message: "Could not verify deposit event in this transaction. Ensure the deposit was made via the M-Vault interface." });
       }
 
       await storage.recordUsdtDeposit(addr, hash, verifiedAmount);

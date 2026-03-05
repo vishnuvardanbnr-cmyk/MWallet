@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { getTokenContract, DEPOSIT_ADMIN_WALLET, NETWORK } from "@/lib/contract";
+import { getTokenContract, getBoardHandlerContract, BOARD_HANDLER_ADDRESS, NETWORK } from "@/lib/contract";
 import { ethers } from "ethers";
 import type { UserInfo } from "@/hooks/use-web3";
 
@@ -28,7 +28,7 @@ interface WalletProps {
 
 const ITEMS_PER_PAGE = 10;
 
-type DepositStep = "idle" | "transferring" | "verifying" | "done";
+type DepositStep = "idle" | "approving" | "depositing" | "verifying" | "done";
 
 export default function WalletPage({ userInfo, account, formatAmount, withdrawFunds, getTransactionsFromContract }: WalletProps) {
   const { toast } = useToast();
@@ -113,33 +113,47 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
     }
   };
 
-  // USDT Deposit
+  // USDT Deposit via BoardMatrixHandler vault
   const handleDeposit = async () => {
     const amt = parseFloat(depositAmount);
     if (!depositAmount || isNaN(amt) || amt <= 0) {
       toast({ title: "Invalid amount", variant: "destructive" });
       return;
     }
-    setDepositStep("transferring");
+
     let txHash = "";
     try {
       const provider = new ethers.BrowserProvider((window as any).ethereum);
-      await provider.send("wallet_switchEthereumChain", [{ chainId: "0x" + NETWORK.chainId.toString(16) }]);
+      await provider.send("wallet_switchEthereumChain", [{ chainId: NETWORK.chainId }]);
       const signer = await provider.getSigner();
       const usdtContract = getTokenContract(signer);
       const parsedAmt = ethers.parseUnits(amt.toFixed(4), 18);
-      const tx = await (usdtContract as any).transfer(DEPOSIT_ADMIN_WALLET, parsedAmt);
-      toast({ title: "Transaction sent", description: "Waiting for confirmation..." });
-      const receipt = await tx.wait();
+
+      // Step 1: approve USDT to BoardMatrixHandler
+      setDepositStep("approving");
+      const allowance: bigint = await (usdtContract as any).allowance(account, BOARD_HANDLER_ADDRESS);
+      if (allowance < parsedAmt) {
+        toast({ title: "Approving USDT...", description: "Please confirm the approval in MetaMask" });
+        const approveTx = await (usdtContract as any).approve(BOARD_HANDLER_ADDRESS, parsedAmt);
+        await approveTx.wait();
+        toast({ title: "Approval confirmed", description: "Now depositing..." });
+      }
+
+      // Step 2: call deposit on BoardMatrixHandler
+      setDepositStep("depositing");
+      const boardHandler = getBoardHandlerContract(signer);
+      toast({ title: "Depositing...", description: "Please confirm the deposit transaction in MetaMask" });
+      const depositTx = await (boardHandler as any).deposit(parsedAmt);
+      const receipt = await depositTx.wait();
       txHash = receipt.hash;
       setDepositTxHash(txHash);
     } catch (err: any) {
       setDepositStep("idle");
-      toast({ title: "Transfer failed", description: err?.shortMessage || err?.message || "MetaMask rejected", variant: "destructive" });
+      toast({ title: "Deposit failed", description: err?.shortMessage || err?.message || "MetaMask rejected", variant: "destructive" });
       return;
     }
 
-    // Verify on backend
+    // Step 3: verify on backend & credit virtual balance
     setDepositStep("verifying");
     try {
       const res = await fetch("/api/usdt/deposit-verify", {
@@ -193,6 +207,14 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
     const date = new Date(typeof ts === "number" && ts < 1e12 ? ts * 1000 : ts);
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + " " + date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   };
+
+  const stepDotClass = (isActive: boolean, isComplete: boolean) =>
+    isActive ? "bg-amber-400 animate-pulse" : isComplete ? "bg-emerald-400" : "bg-white/20";
+
+  const ds = depositStep as string;
+  const dep1Done = ds === "depositing" || ds === "verifying" || ds === "done";
+  const dep2Done = ds === "verifying" || ds === "done";
+  const dep3Done = ds === "done";
 
   const totalPages = Math.max(1, Math.ceil(recentTxs.length / ITEMS_PER_PAGE));
   const paginatedTxs = recentTxs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
@@ -493,20 +515,24 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
 
               <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-1.5">
                 <div className="flex items-center gap-2">
-                  <div className={`h-2 w-2 rounded-full ${depositStep === "transferring" ? "bg-amber-400 animate-pulse" : depositStep === "verifying" || depositStep === "done" ? "bg-emerald-400" : "bg-white/20"}`} />
-                  <p className="text-xs text-muted-foreground">Step 1: Transfer USDT via MetaMask</p>
+                  <div className={`h-2 w-2 rounded-full ${stepDotClass(depositStep === "approving", dep1Done)}`} />
+                  <p className="text-xs text-muted-foreground">Step 1: Approve USDT to vault contract</p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <div className={`h-2 w-2 rounded-full ${depositStep === "verifying" ? "bg-amber-400 animate-pulse" : depositStep === "done" ? "bg-emerald-400" : "bg-white/20"}`} />
-                  <p className="text-xs text-muted-foreground">Step 2: On-chain verification &amp; credit</p>
+                  <div className={`h-2 w-2 rounded-full ${stepDotClass(depositStep === "depositing", dep2Done)}`} />
+                  <p className="text-xs text-muted-foreground">Step 2: Deposit USDT to on-chain vault</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className={`h-2 w-2 rounded-full ${stepDotClass(depositStep === "verifying", dep3Done)}`} />
+                  <p className="text-xs text-muted-foreground">Step 3: Verify &amp; credit virtual balance</p>
                 </div>
               </div>
 
               <div className="flex items-start gap-2 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
                 <Info className="h-3.5 w-3.5 mt-0.5 shrink-0 text-emerald-400" />
                 <div className="text-xs text-muted-foreground">
-                  <p>USDT is transferred directly to the platform admin wallet on BSC Testnet. The equivalent amount is credited to your virtual balance automatically.</p>
-                  <p className="mt-1 font-mono text-[10px] break-all text-emerald-400/70">To: {DEPOSIT_ADMIN_WALLET}</p>
+                  <p>USDT is deposited into the M-Vault on-chain vault contract on BSC Testnet. Your virtual balance is credited after on-chain confirmation.</p>
+                  <p className="mt-1 font-mono text-[10px] break-all text-emerald-400/70">Vault: {BOARD_HANDLER_ADDRESS}</p>
                 </div>
               </div>
 
@@ -517,11 +543,11 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
                 data-testid="button-deposit-confirm"
                 style={{ fontFamily: 'var(--font-display)' }}
               >
-                {depositStep === "transferring" && <Loader2 className="h-4 w-4 animate-spin" />}
-                {depositStep === "verifying" && <Loader2 className="h-4 w-4 animate-spin" />}
+                {(depositStep === "approving" || depositStep === "depositing" || depositStep === "verifying") && <Loader2 className="h-4 w-4 animate-spin" />}
                 {depositStep === "idle" && <ArrowDownCircle className="h-4 w-4" />}
                 {depositStep === "idle" && "Deposit USDT"}
-                {depositStep === "transferring" && "Waiting for MetaMask..."}
+                {depositStep === "approving" && "Approving USDT..."}
+                {depositStep === "depositing" && "Depositing to vault..."}
                 {depositStep === "verifying" && "Verifying on-chain..."}
               </button>
             </div>

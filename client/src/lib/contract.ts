@@ -71,7 +71,7 @@ export const MLM_ABI = [
   "event WithdrawalMatchDistributed(address indexed recipient, address indexed from, uint256 amount, uint256 level)",
 ];
 
-export const BOARD_HANDLER_ADDRESS = import.meta.env.VITE_BOARD_HANDLER_ADDRESS || "0xAFDf34f6e2FBa1D1E9b1E4e180821b463c3cB72D";
+export const BOARD_HANDLER_ADDRESS = import.meta.env.VITE_BOARD_HANDLER_ADDRESS || "0x7ad7bfe3b717fA581e0383F1B2c21ED26A0C5465";
 
 export const PANCAKE_ROUTER_ADDRESS = import.meta.env.VITE_PANCAKE_ROUTER_ADDRESS || "0xD99D1c33F9fC3444f8101754aBC46c52416550D1";
 
@@ -95,6 +95,13 @@ export const BOARD_HANDLER_ABI = [
   "event BoardCompleted(address indexed owner, uint256 indexed boardLevel, uint256 reward, uint256 liquidity)",
   "event VirtualRewardCredited(address indexed user, uint256 amount, uint256 boardLevel)",
   "event SwappedToBTC(address indexed user, uint256 usdtAmount, uint256 btcbAmount)",
+  "event Deposited(address indexed user, uint256 amount)",
+  "event AdminWithdrawn(address indexed to, uint256 amount)",
+  "function deposit(uint256 _amount) external",
+  "function depositBalance(address) view returns (uint256)",
+  "function getDepositBalance(address _user) view returns (uint256)",
+  "function getDepositHistory(address _user) view returns (uint256[] amounts, uint256[] timestamps)",
+  "function adminWithdrawDeposits(address _to, uint256 _amount) external",
 ];
 
 export const PANCAKE_ROUTER_ABI = [
