@@ -275,9 +275,9 @@ export default function StakingPage({ account }: StakingPageProps) {
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
             <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Activation Fee</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Total Tokens</p>
               <p className="text-sm font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }}>
-                ${parseFloat(plan.activationFee).toLocaleString()}
+                {parseFloat(plan.totalTokens).toLocaleString(undefined, { maximumFractionDigits: 2 })}
               </p>
             </div>
             <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
