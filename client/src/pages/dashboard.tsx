@@ -56,7 +56,7 @@ function StatCard({ label, value, icon: Icon, iconColor, accentGlow, delay, bord
   );
 }
 
-const TOKEN_PRICE = 0.0024;
+const TOKEN_PRICE = 0.036;
 const STAKING_PLANS = [
   { months: 10, multiplier: 0.1, returnLabel: "10% Return" },
 ];
@@ -76,7 +76,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
   const { toast } = useToast();
 
   const [stakingPlan, setStakingPlan] = useState<StakingActivePlan | null>(null);
-  const [selectedMonths, setSelectedMonths] = useState<number | null>(15);
+  const [selectedMonths, setSelectedMonths] = useState<number | null>(10);
   const [stakingActivating, setStakingActivating] = useState(false);
   const [stakingResult, setStakingResult] = useState<{ success: boolean; message: string } | null>(null);
   const [flushoutCountdown, setFlushoutCountdown] = useState<{ hours: number; minutes: number; seconds: number } | null>(null);
@@ -626,7 +626,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
                 </div>
                 <div className="mt-2 flex items-center gap-1.5">
                   <CheckCircle className="h-3.5 w-3.5 text-purple-400" />
-                  <span className="text-[11px] text-purple-400 font-medium">300 days · Token price $0.0024</span>
+                  <span className="text-[11px] text-purple-400 font-medium">300 days · Token price $0.036</span>
                 </div>
               </div>
             );

@@ -100,7 +100,8 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid package level" });
       }
 
-      const TOKEN_PRICE = 0.0024;
+      const econ = await storage.getTokenEconomics();
+      const TOKEN_PRICE = parseFloat(econ.listingPrice) || 0.036;
       const multiplier = 0.1;
       const totalUsd = activationFee * multiplier;
       const totalTokens = totalUsd / TOKEN_PRICE;
