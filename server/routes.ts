@@ -124,7 +124,8 @@ export async function registerRoutes(
 
       res.json(plan);
     } catch (err: any) {
-      res.status(400).json({ message: err.message });
+      const isValidation = err?.name === "ZodError";
+      res.status(isValidation ? 400 : 500).json({ message: err.message || err.toString() });
     }
   });
 
