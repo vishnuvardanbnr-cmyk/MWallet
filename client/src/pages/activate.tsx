@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, LogOut, Wallet, Zap, Star, Crown, Shield, Award, Check, Info, ArrowLeft, Rocket, TrendingUp } from "lucide-react";
+import { Loader2, LogOut, Wallet, Zap, Star, Crown, Shield, Award, Gem, Check, Info, ArrowLeft, Rocket, TrendingUp } from "lucide-react";
 import { PACKAGE_NAMES, PACKAGE_PRICES_USD, shortenAddress, getContract, formatTokenAmount } from "@/lib/contract";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
@@ -14,7 +14,7 @@ interface ActivatePageProps {
   disconnect: () => void;
 }
 
-const PACKAGE_ICONS = [Zap, Zap, Star, Crown, Shield, Award];
+const PACKAGE_ICONS = [Zap, Zap, Star, Crown, Shield, Award, Gem];
 const ICON_COLORS = [
   "",
   "from-cyan-400 to-blue-500",
@@ -22,6 +22,7 @@ const ICON_COLORS = [
   "from-amber-400 to-orange-500",
   "from-amber-300 to-yellow-400",
   "from-purple-400 to-pink-500",
+  "from-rose-400 to-amber-400",
 ];
 const CARD_BORDERS = [
   "",
@@ -30,6 +31,7 @@ const CARD_BORDERS = [
   "border-amber-500/20 hover:border-amber-500/40",
   "border-yellow-400/20 hover:border-yellow-400/40",
   "border-purple-500/20 hover:border-purple-500/40",
+  "border-rose-400/20 hover:border-rose-400/40",
 ];
 
 export default function ActivatePage({ account, approveToken, activatePackage, fetchUserData, disconnect }: ActivatePageProps) {
@@ -48,7 +50,7 @@ export default function ActivatePage({ account, approveToken, activatePackage, f
         const contract = getContract(provider);
         const decimals = Number(await contract.tokenDecimals());
         const limits: Record<number, string> = {};
-        for (let pkg = 1; pkg <= 5; pkg++) {
+        for (let pkg = 1; pkg <= 6; pkg++) {
           const limit = await contract.getMaxIncomeLimit(pkg);
           const formatted = parseFloat(formatTokenAmount(limit, decimals));
           limits[pkg] = `$${formatted.toLocaleString()}`;
@@ -120,7 +122,7 @@ export default function ActivatePage({ account, approveToken, activatePackage, f
         </div>
 
         <div className="w-full max-w-lg space-y-3 mb-6">
-          {[1, 2, 3, 4, 5].map((pkg) => {
+          {[1, 2, 3, 4, 5, 6].map((pkg) => {
             const Icon = PACKAGE_ICONS[pkg];
             const isSelected = selectedPkg === pkg;
 
