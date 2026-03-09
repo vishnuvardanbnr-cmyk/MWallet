@@ -350,7 +350,7 @@ function App() {
                       />
                     </Route>
                     <Route path="/staking">
-                      <StakingPage account={web3.account!} />
+                      <StakingPage account={web3.account!} binaryInfo={web3.binaryInfo} tokenDecimals={web3.tokenDecimals} />
                     </Route>
                     <Route path="/paid-staking">
                       <PaidStakingPage account={web3.account!} />

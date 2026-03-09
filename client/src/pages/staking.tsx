@@ -1,10 +1,31 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
-import { Loader2, ArrowLeft, Coins, CheckCircle, AlertCircle, Clock, Download, ChevronLeft, ChevronRight, Timer } from "lucide-react";
+import { Loader2, ArrowLeft, Coins, CheckCircle, AlertCircle, Clock, Download, ChevronLeft, ChevronRight, Timer, Star, Trophy, TrendingUp, ChevronDown, ChevronUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { formatTokenAmount } from "@/lib/contract";
+import type { BinaryInfo } from "@/hooks/use-web3";
 
 const CLAIMS_PER_PAGE = 10;
+
+const STAR_RANKS = [
+  { rank: 1, title: "Star 1", totalQual: 5_000,       stakingPct: 5,  allocation: 250 },
+  { rank: 2, title: "Star 2", totalQual: 20_000,      stakingPct: 5,  allocation: 1_000 },
+  { rank: 3, title: "Star 3", totalQual: 50_000,      stakingPct: 5,  allocation: 2_500 },
+  { rank: 4, title: "Star 4", totalQual: 100_000,     stakingPct: 8,  allocation: 8_000 },
+  { rank: 5, title: "Star 5", totalQual: 500_000,     stakingPct: 8,  allocation: 40_000 },
+  { rank: 6, title: "Star 6", totalQual: 1_000_000,   stakingPct: 8,  allocation: 80_000 },
+  { rank: 7, title: "Star 7", totalQual: 5_000_000,   stakingPct: 8,  allocation: 400_000 },
+  { rank: 8, title: "Star 8", totalQual: 10_000_000,  stakingPct: 10, allocation: 1_000_000 },
+  { rank: 9, title: "Star 9", totalQual: 50_000_000,  stakingPct: 10, allocation: 5_000_000 },
+  { rank: 10, title: "Star 10", totalQual: 100_000_000, stakingPct: 10, allocation: 10_000_000 },
+];
+
+function formatUSD(n: number): string {
+  if (n >= 1_000_000) return `$${(n / 1_000_000).toLocaleString()}M`;
+  if (n >= 1_000) return `$${(n / 1_000).toLocaleString()}K`;
+  return `$${n.toLocaleString()}`;
+}
 
 interface StakingPlan {
   id: number;
@@ -41,9 +62,11 @@ interface ClaimResult {
 
 interface StakingPageProps {
   account: string;
+  binaryInfo?: BinaryInfo | null;
+  tokenDecimals?: number;
 }
 
-export default function StakingPage({ account }: StakingPageProps) {
+export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }: StakingPageProps) {
   const [, navigate] = useLocation();
   const [activePlan, setActivePlan] = useState<StakingPlan | null>(null);
   const [allPlans, setAllPlans] = useState<StakingPlan[]>([]);
@@ -55,6 +78,19 @@ export default function StakingPage({ account }: StakingPageProps) {
   const [claimsLoading, setClaimsLoading] = useState(false);
   const [claiming, setClaiming] = useState(false);
   const [claimResult, setClaimResult] = useState<ClaimResult | null>(null);
+  const [showRankTable, setShowRankTable] = useState(false);
+
+  const leftUSDT = binaryInfo ? parseFloat(formatTokenAmount(binaryInfo.leftBusiness, tokenDecimals)) : 0;
+  const rightUSDT = binaryInfo ? parseFloat(formatTokenAmount(binaryInfo.rightBusiness, tokenDecimals)) : 0;
+  const minLeg = Math.min(leftUSDT, rightUSDT);
+  const totalTeam = leftUSDT + rightUSDT;
+
+  const currentRankIndex = STAR_RANKS.reduce((best, r, i) => (minLeg >= r.totalQual / 2 ? i : best), -1);
+  const currentRank = currentRankIndex >= 0 ? STAR_RANKS[currentRankIndex] : null;
+  const nextRank = STAR_RANKS[currentRankIndex + 1] ?? null;
+
+  const nextTarget = nextRank ? nextRank.totalQual / 2 : null;
+  const progressPct = nextTarget ? Math.min(100, (minLeg / nextTarget) * 100) : 100;
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -447,6 +483,139 @@ export default function StakingPage({ account }: StakingPageProps) {
           </div>
         </div>
       )}
+
+      {/* ── M Plan STAR Ranking ───────────────────────────────────────────── */}
+      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.25s" }} data-testid="card-leadership-ranking">
+        <div className="flex items-center justify-between gap-3 mb-5">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-gradient-to-br from-amber-500/25 via-yellow-500/20 to-orange-500/15 flex items-center justify-center">
+              <Star className="h-5 w-5 text-amber-400" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>
+                <span className="gradient-text">M Plan STAR Ranking</span>
+              </h2>
+              <p className="text-[10px] text-muted-foreground">Min 50/50 on each leg to qualify for each rank</p>
+            </div>
+          </div>
+          {currentRank && (
+            <Badge className="bg-amber-500/15 text-amber-400 border-amber-500/30 text-[11px] font-bold shrink-0">
+              <Star className="h-3 w-3 mr-1" />{currentRank.title}
+            </Badge>
+          )}
+        </div>
+
+        {/* Current rank & progress */}
+        <div className="grid grid-cols-2 gap-3 mb-5">
+          <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Left Leg Volume</p>
+            <p className="text-sm font-bold text-cyan-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-left-leg">{formatUSD(leftUSDT)}</p>
+          </div>
+          <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Right Leg Volume</p>
+            <p className="text-sm font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-right-leg">{formatUSD(rightUSDT)}</p>
+          </div>
+          <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Current Rank</p>
+            <p className="text-sm font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-current-rank">
+              {currentRank ? currentRank.title : "Unranked"}
+            </p>
+          </div>
+          <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Staking Allocation</p>
+            <p className="text-sm font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-allocation">
+              {currentRank ? formatUSD(currentRank.allocation) : "$0"}
+            </p>
+          </div>
+        </div>
+
+        {/* Next rank progress bar */}
+        {nextRank && (
+          <div className="mb-5 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+            <div className="flex items-center justify-between mb-2">
+              <div className="flex items-center gap-1.5">
+                <TrendingUp className="h-3.5 w-3.5 text-purple-400" />
+                <span className="text-xs font-semibold" style={{ fontFamily: "var(--font-display)" }}>Progress to {nextRank.title}</span>
+              </div>
+              <span className="text-[11px] text-muted-foreground">{progressPct.toFixed(1)}%</span>
+            </div>
+            <div className="h-2.5 rounded-full bg-white/[0.06] overflow-hidden mb-2">
+              <div
+                className="h-full rounded-full bg-gradient-to-r from-amber-500 via-yellow-400 to-orange-400 transition-all duration-700"
+                style={{ width: `${progressPct}%` }}
+              />
+            </div>
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+              <span>Weaker leg: {formatUSD(minLeg)}</span>
+              <span>Need each side: {formatUSD(nextRank.totalQual / 2)}</span>
+            </div>
+            <div className="mt-2 flex items-center justify-between text-[10px]">
+              <span className="text-muted-foreground">Remaining on weaker leg</span>
+              <span className="text-amber-400 font-semibold">{formatUSD(Math.max(0, nextRank.totalQual / 2 - minLeg))}</span>
+            </div>
+          </div>
+        )}
+
+        {currentRank && !nextRank && (
+          <div className="mb-5 flex items-center gap-2.5 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+            <Trophy className="h-4 w-4 text-amber-400 shrink-0" />
+            <p className="text-sm font-semibold text-amber-400">Maximum rank achieved — Star 10!</p>
+          </div>
+        )}
+
+        {/* Toggle full ranking table */}
+        <button
+          onClick={() => setShowRankTable(!showRankTable)}
+          className="w-full flex items-center justify-center gap-2 py-2.5 px-4 rounded-xl border border-white/[0.07] bg-white/[0.02] text-xs text-muted-foreground hover:text-foreground hover:bg-white/[0.04] transition-all"
+          data-testid="button-toggle-rank-table"
+        >
+          {showRankTable ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+          {showRankTable ? "Hide" : "View"} Full Ranking Table
+        </button>
+
+        {showRankTable && (
+          <div className="mt-4 overflow-x-auto">
+            <table className="w-full text-xs" data-testid="table-star-ranks">
+              <thead>
+                <tr className="border-b border-white/[0.07]">
+                  <th className="text-left py-2 pr-3 text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Rank</th>
+                  <th className="text-right py-2 pr-3 text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Total Qual.</th>
+                  <th className="text-right py-2 pr-3 text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Each Side</th>
+                  <th className="text-right py-2 pr-3 text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Staking %</th>
+                  <th className="text-right py-2 text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Allocation</th>
+                </tr>
+              </thead>
+              <tbody>
+                {STAR_RANKS.map((r) => {
+                  const isAchieved = currentRank && r.rank <= currentRank.rank;
+                  const isCurrent = currentRank?.rank === r.rank;
+                  const isNext = nextRank?.rank === r.rank;
+                  return (
+                    <tr
+                      key={r.rank}
+                      className={`border-b border-white/[0.04] transition-colors ${isCurrent ? "bg-amber-500/10" : isNext ? "bg-purple-500/5" : ""}`}
+                      data-testid={`row-rank-${r.rank}`}
+                    >
+                      <td className="py-2.5 pr-3">
+                        <div className="flex items-center gap-1.5">
+                          <Star className={`h-3 w-3 ${isAchieved ? "text-amber-400" : "text-muted-foreground/30"}`} />
+                          <span className={`font-semibold ${isCurrent ? "text-amber-400" : isAchieved ? "text-foreground" : "text-muted-foreground"}`} style={{ fontFamily: "var(--font-display)" }}>{r.title}</span>
+                          {isCurrent && <Badge className="text-[9px] bg-amber-500/15 text-amber-400 border-amber-500/25 ml-1 py-0">YOU</Badge>}
+                          {isNext && !isCurrent && <Badge className="text-[9px] bg-purple-500/10 text-purple-400 border-purple-500/20 ml-1 py-0">NEXT</Badge>}
+                        </div>
+                      </td>
+                      <td className={`py-2.5 pr-3 text-right font-medium ${isAchieved ? "text-foreground" : "text-muted-foreground"}`}>{formatUSD(r.totalQual)}</td>
+                      <td className={`py-2.5 pr-3 text-right ${isAchieved ? "text-cyan-400" : "text-muted-foreground"}`}>{formatUSD(r.totalQual / 2)}</td>
+                      <td className={`py-2.5 pr-3 text-right font-medium ${isAchieved ? "text-emerald-400" : "text-muted-foreground"}`}>{r.stakingPct}%</td>
+                      <td className={`py-2.5 text-right font-bold ${isCurrent ? "text-amber-400" : isAchieved ? "text-emerald-400" : "text-muted-foreground"}`} style={{ fontFamily: "var(--font-display)" }}>{formatUSD(r.allocation)}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
