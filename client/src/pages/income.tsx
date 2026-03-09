@@ -4,6 +4,7 @@ import { Users, GitBranch, Layers, RefreshCw, ArrowUpRight, Loader2, ChevronLeft
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import type { IncomeInfo, BinaryInfo, SlabInfo } from "@/hooks/use-web3";
+import { PACKAGE_NAMES, PACKAGE_PRICES_USD } from "@/lib/contract";
 
 interface ContractTx {
   type: string;
@@ -40,6 +41,9 @@ const WITHDRAWAL_MATCH_DESC: Record<number, string> = {
   4: "1% per level, up to 12 levels",
   5: "10% per level, up to 15 levels",
 };
+
+// 5× package price = maxIncomeLimit from contract
+const PACKAGE_MAX_INCOME = [0, 250, 1000, 3000, 6000, 12000, 24000];
 
 const BINARY_MATCH_DESC: Record<number, string> = {
   0: "Activate a package to unlock",
@@ -92,7 +96,7 @@ export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, 
   const pkg = userPackage;
   const incomeTypes = [
     { title: "Direct Sponsor", amount: incomeInfo.totalDirectIncome, icon: Users, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/10", gradient: "#f59e0b", description: DIRECT_SPONSOR_DESC[pkg] || "10-30% from direct referrals" },
-    { title: "Binary Matching", amount: incomeInfo.totalBinaryIncome, icon: GitBranch, color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/10", gradient: "#a855f7", description: BINARY_MATCH_DESC[pkg] || "30% of matching volume" },
+    { title: "Binary Matching", amount: incomeInfo.totalBinaryIncome + binaryInfo.claimableBinaryIncome, icon: GitBranch, color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/10", gradient: "#a855f7", description: BINARY_MATCH_DESC[pkg] || "30% of matching volume" },
     { title: "Matching on Binary", amount: incomeInfo.totalMatchingOverrideIncome, icon: Layers, color: "text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-500/10", gradient: "#06b6d4", description: MATCHING_OVERRIDE_DESC[pkg] || "1% per level from downline binary income" },
     { title: "Withdrawal Match", amount: incomeInfo.totalWithdrawalMatchIncome, icon: RefreshCw, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10", gradient: "#10b981", description: WITHDRAWAL_MATCH_DESC[pkg] || "0.5-5% from downline withdrawals" },
   ];
@@ -163,29 +167,40 @@ export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, 
           }
           return (
             <div className="divide-y divide-white/[0.04]">
-              {reactivationTxs.map((tx, idx) => (
-                <div key={`flush-${tx.timestamp}-${idx}`} className="flex items-center justify-between px-5 py-3.5" data-testid={`row-flushout-${idx}`}>
-                  <div className="flex items-center gap-3">
-                    <div className="h-9 w-9 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
-                      <AlertTriangle className="h-4 w-4 text-red-400" />
-                    </div>
-                    <div>
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-sm font-medium">Flushed & Reactivated</span>
-                        <Badge variant="outline" className="text-[10px] border-red-500/20 text-red-400">
-                          {tx.detail}
-                        </Badge>
+              {reactivationTxs.map((tx, idx) => {
+                const pkgIdx = PACKAGE_NAMES.indexOf(tx.detail);
+                const flushedIncome = pkgIdx > 0 ? PACKAGE_MAX_INCOME[pkgIdx] : 0;
+                const reactivationFee = parseFloat(formatAmount(tx.amount));
+                return (
+                  <div key={`flush-${tx.timestamp}-${idx}`} className="flex items-start justify-between px-5 py-3.5" data-testid={`row-flushout-${idx}`}>
+                    <div className="flex items-start gap-3">
+                      <div className="h-9 w-9 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0 mt-0.5">
+                        <AlertTriangle className="h-4 w-4 text-red-400" />
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">
-                        {formatTimestamp(tx.timestamp)}
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium">Flushed & Reactivated</span>
+                          <Badge variant="outline" className="text-[10px] border-red-500/20 text-red-400">
+                            {tx.detail}
+                          </Badge>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          {formatTimestamp(tx.timestamp)}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground/70 mt-0.5">
+                          Paid to reactivate: ${reactivationFee.toFixed(2)}
+                        </p>
+                      </div>
+                    </div>
+                    <div className="text-right shrink-0">
+                      <p className="font-bold text-sm text-red-400" style={{ fontFamily: 'var(--font-display)' }}>
+                        {flushedIncome > 0 ? `-$${flushedIncome.toLocaleString()}` : `-$${reactivationFee.toFixed(2)}`}
                       </p>
+                      <p className="text-[10px] text-muted-foreground">Income flushed</p>
                     </div>
                   </div>
-                  <span className="font-bold text-sm text-red-400" style={{ fontFamily: 'var(--font-display)' }}>
-                    ${formatAmount(tx.amount)}
-                  </span>
-                </div>
-              ))}
+                );
+              })}
             </div>
           );
         })()}

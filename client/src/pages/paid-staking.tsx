@@ -451,9 +451,8 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
         </div>
       )}
 
-      {/* New Stake Form (show when no active/running plan) */}
-      {(!plan || plan.unstaked || !plan.isActive) && (
-        <div className="glass-card rounded-2xl p-5 space-y-4" data-testid="card-new-stake">
+      {/* New Stake Form — always visible so users can start additional plans */}
+      <div className="glass-card rounded-2xl p-5 space-y-4" data-testid="card-new-stake">
           <div className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
               <Coins className="h-4 w-4 text-purple-400" />
@@ -524,8 +523,7 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
               <p className="text-xs text-amber-400">You need a USDT balance to stake. Contact admin to deposit USDT.</p>
             </div>
           )}
-        </div>
-      )}
+      </div>
 
       {/* Override Income + Transaction History */}
       {data && (data.overrideIncome?.length > 0 || data.tokenTransactions?.length > 0) && (

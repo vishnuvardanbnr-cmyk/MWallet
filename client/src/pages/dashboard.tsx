@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { DollarSign, TrendingUp, ArrowDownToLine, Coins, Zap, Shield, Copy, ChevronRight, User, Wallet, CheckCircle, AlertCircle, Loader2, Clock, Timer, Star, Trophy } from "lucide-react";
+import { DollarSign, TrendingUp, ArrowDownToLine, Coins, Zap, Shield, Copy, ChevronRight, User, Users, Wallet, CheckCircle, AlertCircle, Loader2, Clock, Timer, Star, Trophy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { PACKAGE_NAMES, PACKAGE_PRICES_USD, STATUS_NAMES, formatTokenAmount } from "@/lib/contract";
 
@@ -289,7 +289,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
         <StatCard label="Wallet Balance" value={formatAmount(userInfo.walletBalance)} icon={DollarSign} iconColor="text-amber-400" accentGlow="bg-amber-500/15" delay="0.05s" />
         <StatCard label="Total Earnings" value={formatAmount(incomeInfo.totalEarnings)} icon={TrendingUp} iconColor="text-purple-400" accentGlow="bg-purple-500/15" delay="0.1s" />
         <StatCard label="Total Withdrawn" value={formatAmount(incomeInfo.totalWithdrawn)} icon={ArrowDownToLine} iconColor="text-cyan-400" accentGlow="bg-cyan-500/15" delay="0.15s" />
-        <StatCard label="Available" value={formatAmount(remaining)} icon={Coins} iconColor="text-emerald-400" accentGlow="bg-emerald-500/15" delay="0.2s" />
+        <StatCard label="Direct Refs" value={Number(userInfo.directReferralCount).toString()} icon={Users} iconColor="text-emerald-400" accentGlow="bg-emerald-500/15" delay="0.2s" />
       </div>
 
       {starRank && (
