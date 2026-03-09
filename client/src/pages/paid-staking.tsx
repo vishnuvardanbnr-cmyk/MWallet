@@ -40,6 +40,24 @@ interface MTokenBalance {
   totalRewardEarned: string;
 }
 
+interface TokenTransaction {
+  id: number;
+  txType: string;
+  tokenAmount: string;
+  usdtAmount: string | null;
+  priceAtTxn: string | null;
+  note: string | null;
+  createdAt: string;
+}
+
+interface OverrideIncome {
+  id: number;
+  fromWallet: string;
+  amountUsdt: string;
+  level: number;
+  createdAt: string;
+}
+
 interface PageData {
   activePlan: PaidStakingPlan | null;
   allPlans: PaidStakingPlan[];
@@ -47,6 +65,9 @@ interface PageData {
   usdtBalance: string;
   currentBuyPrice: string;
   currentSellPrice: string;
+  tokenTransactions: TokenTransaction[];
+  overrideIncome: OverrideIncome[];
+  overrideTotalUsdt: string;
 }
 
 export default function PaidStakingPage({ account }: PaidStakingPageProps) {
@@ -57,6 +78,7 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
   const [stakeAmount, setStakeAmount] = useState("");
   const [staking, setStaking] = useState(false);
   const [claiming, setClaiming] = useState(false);
+  const [claimingUsdt, setClaimingUsdt] = useState(false);
   const [unstaking, setUnstaking] = useState(false);
   const [sellingRewards, setSellingRewards] = useState(false);
   const [sellRewardAmount, setSellRewardAmount] = useState("");
@@ -113,6 +135,22 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
     finally { setClaiming(false); }
   };
 
+  const handleClaimUsdt = async () => {
+    setClaimingUsdt(true);
+    try {
+      const res = await fetch("/api/paidstaking/claim-usdt-rewards", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: account }),
+      });
+      const result = await res.json();
+      if (!res.ok) { toast({ title: "Claim Failed", description: result.message, variant: "destructive" }); return; }
+      toast({ title: "USDT Claimed!", description: `$${parseFloat(result.usdtClaimed).toFixed(4)} USDT added to your balance (${result.daysRewarded} day${result.daysRewarded > 1 ? "s" : ""}).` });
+      await loadData();
+    } catch { toast({ title: "Network Error", variant: "destructive" }); }
+    finally { setClaimingUsdt(false); }
+  };
+
   const handleSellRewards = async () => {
     const amt = parseFloat(sellRewardAmount);
     if (isNaN(amt) || amt <= 0) {
@@ -151,8 +189,8 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
     finally { setUnstaking(false); }
   };
 
-  const buyPrice = parseFloat(data?.currentBuyPrice ?? price?.buyPrice ?? "0.036");
-  const sellPrice = parseFloat(data?.currentSellPrice ?? price?.sellPrice ?? "0.0324");
+  const buyPrice = parseFloat(data?.currentBuyPrice ?? price?.buyPrice ?? "0.0036");
+  const sellPrice = parseFloat(data?.currentSellPrice ?? price?.sellPrice ?? "0.00324");
   const usdtBalance = parseFloat(data?.usdtBalance ?? "0");
   const rewardBalance = parseFloat(data?.mTokenBalance?.rewardBalance ?? "0");
   const mainBalance = parseFloat(data?.mTokenBalance?.mainBalance ?? "0");
@@ -228,7 +266,7 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
           <div className="text-center p-3 rounded-xl bg-purple-500/5 border border-purple-500/10">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Listing</p>
             <p className="text-sm font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }}>
-              $0.036000
+              $0.003600
             </p>
           </div>
         </div>
@@ -317,20 +355,33 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
 
           {/* Pending rewards */}
           {canClaim && (
-            <div className="flex items-center justify-between p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
-              <div>
-                <p className="text-xs font-medium text-amber-400">Pending Rewards</p>
-                <p className="text-[10px] text-muted-foreground">~{pendingRewardTokens} M tokens ({lastClaimDaysAgo} day{lastClaimDaysAgo > 1 ? "s" : ""})</p>
+            <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-2">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-amber-400">Pending Rewards</p>
+                  <p className="text-[10px] text-muted-foreground">~{pendingRewardTokens} M tokens · ${(parseFloat(plan?.dailyRewardUsdt ?? "0") * lastClaimDaysAgo).toFixed(4)} USDT ({lastClaimDaysAgo} day{lastClaimDaysAgo > 1 ? "s" : ""})</p>
+                </div>
               </div>
-              <button
-                onClick={handleClaimRewards}
-                disabled={claiming}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glow-button text-white text-xs font-bold transition-all disabled:opacity-50"
-                data-testid="button-claim-rewards"
-              >
-                {claiming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                Claim
-              </button>
+              <div className="flex gap-2">
+                <button
+                  onClick={handleClaimRewards}
+                  disabled={claiming || claimingUsdt}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg glow-button text-white text-xs font-bold transition-all disabled:opacity-50"
+                  data-testid="button-claim-rewards"
+                >
+                  {claiming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                  Claim M Tokens
+                </button>
+                <button
+                  onClick={handleClaimUsdt}
+                  disabled={claiming || claimingUsdt}
+                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-all hover:bg-emerald-500/30 disabled:opacity-50"
+                  data-testid="button-claim-usdt"
+                >
+                  {claimingUsdt ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <DollarSign className="w-3.5 h-3.5" />}
+                  Withdraw USDT
+                </button>
+              </div>
             </div>
           )}
 
@@ -400,8 +451,8 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
         </div>
       )}
 
-      {/* New Stake Form (only if no active plan) */}
-      {!plan && (
+      {/* New Stake Form (show when no active/running plan) */}
+      {(!plan || plan.unstaked || !plan.isActive) && (
         <div className="glass-card rounded-2xl p-5 space-y-4" data-testid="card-new-stake">
           <div className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
@@ -476,7 +527,49 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
         </div>
       )}
 
-      {/* How It Works */}
+      {/* Override Income + Transaction History */}
+      {data && (data.overrideIncome?.length > 0 || data.tokenTransactions?.length > 0) && (
+        <div className="glass-card rounded-2xl p-5 space-y-3" data-testid="card-transactions">
+          <div className="flex items-center gap-2">
+            <BarChart3 className="w-4 h-4 text-cyan-400" />
+            <p className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>Transaction History</p>
+          </div>
+
+          {data.overrideIncome?.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Override / Matching Income · Total: ${parseFloat(data.overrideTotalUsdt ?? "0").toFixed(4)} USDT</p>
+              {data.overrideIncome.slice(0, 10).map((row) => (
+                <div key={row.id} className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.04]" data-testid={`row-override-${row.id}`}>
+                  <div>
+                    <p className="text-[10px] font-medium text-emerald-400">Level {row.level} matching</p>
+                    <p className="text-[9px] text-muted-foreground">{row.fromWallet.slice(0, 8)}…{row.fromWallet.slice(-4)} · {new Date(row.createdAt).toLocaleDateString()}</p>
+                  </div>
+                  <span className="text-xs font-bold text-emerald-400">+${parseFloat(row.amountUsdt).toFixed(4)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {data.tokenTransactions?.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-2">Token Transactions</p>
+              {data.tokenTransactions.slice(0, 15).map((tx) => (
+                <div key={tx.id} className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.04]" data-testid={`row-token-tx-${tx.id}`}>
+                  <div>
+                    <p className="text-[10px] font-medium capitalize text-purple-300">{tx.txType.replace(/_/g, " ")}</p>
+                    <p className="text-[9px] text-muted-foreground">{tx.note ?? ""} · {new Date(tx.createdAt).toLocaleDateString()}</p>
+                  </div>
+                  <div className="text-right">
+                    {parseFloat(tx.tokenAmount) > 0 && <p className="text-[10px] font-bold text-amber-400">{parseFloat(tx.tokenAmount).toFixed(4)} M</p>}
+                    {tx.usdtAmount && parseFloat(tx.usdtAmount) > 0 && <p className="text-[10px] font-bold text-emerald-400">${parseFloat(tx.usdtAmount).toFixed(4)}</p>}
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
       <div className="premium-card rounded-2xl p-5 space-y-3">
         <p className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>How Paid Staking Works</p>
         <div className="space-y-2.5">

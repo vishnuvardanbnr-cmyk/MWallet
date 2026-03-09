@@ -20,9 +20,9 @@ const selectStakingSchema = z.object({
 });
 
 // Override rates per level (basis: 1.0 = 100%)
-const OVERRIDE_RATES = [0, 0.05, 0.03, 0.02, 0.015, 0.01, 0.005, 0.005, 0.005, 0.005, 0.005];
+const OVERRIDE_RATES = [0, 0.01, 0.01, 0.01, 0.01, 0.01, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005];
 // Max levels eligible by package index (0=NONE,1=STARTER,2=BASIC,3=PRO,4=ELITE,5=STOCKIEST,6=SS)
-const OVERRIDE_MAX_LEVELS = [0, 1, 2, 3, 4, 6, 10];
+const OVERRIDE_MAX_LEVELS = [0, 1, 2, 3, 4, 6, 15];
 
 const BSC_TESTNET_RPC = "https://data-seed-prebsc-1-s1.binance.org:8545/";
 const MLM_READ_ABI = [
@@ -38,7 +38,7 @@ async function distributeStakingOverride(fromWallet: string, usdtProfit: number)
     const mlm = new ethers.Contract(MLM_CONTRACT_ADDR, MLM_READ_ABI, provider);
 
     let current = fromWallet;
-    for (let level = 1; level <= 10; level++) {
+    for (let level = 1; level <= 15; level++) {
       const info = await mlm.getUserInfo(current);
       const sponsor: string = info[1];
       if (!sponsor || sponsor === ZERO_ADDR) break;
@@ -101,7 +101,7 @@ export async function registerRoutes(
       }
 
       const econ = await storage.getTokenEconomics();
-      const TOKEN_PRICE = parseFloat(econ.listingPrice) || 0.036;
+      const TOKEN_PRICE = parseFloat(econ.listingPrice) || 0.0036;
       const multiplier = 0.1;
       const totalUsd = activationFee * multiplier;
       const totalTokens = totalUsd / TOKEN_PRICE;
@@ -576,13 +576,16 @@ export async function registerRoutes(
   app.get("/api/paidstaking/:walletAddress", async (req, res) => {
     try {
       const addr = req.params.walletAddress.toLowerCase();
-      const [activePlan, allPlans, mTokenBal, usdtBal] = await Promise.all([
+      const [activePlan, allPlans, mTokenBal, usdtBal, tokenTxns, overrideIncome] = await Promise.all([
         storage.getActivePaidStakingPlan(addr),
         storage.getAllPaidStakingPlans(addr),
         storage.getMTokenBalance(addr),
         storage.getVirtualUsdtBalance(addr),
+        storage.getTokenTransactions(addr),
+        storage.getStakingOverrideIncome(addr),
       ]);
       const { buyPrice, sellPrice } = await getTokenPrice();
+      const overrideTotal = overrideIncome.reduce((s, r) => s + parseFloat(r.amountUsdt), 0);
       res.json({
         activePlan,
         allPlans,
@@ -590,6 +593,9 @@ export async function registerRoutes(
         usdtBalance: usdtBal?.balance ?? "0",
         currentBuyPrice: buyPrice.toFixed(8),
         currentSellPrice: sellPrice.toFixed(8),
+        tokenTransactions: tokenTxns,
+        overrideIncome,
+        overrideTotalUsdt: overrideTotal.toFixed(4),
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -610,12 +616,6 @@ export async function registerRoutes(
       const usdtBal = await storage.getVirtualUsdtBalance(addr);
       if (!usdtBal || parseFloat(usdtBal.balance) < usdtAmt) {
         return res.status(400).json({ message: "Insufficient virtual USDT balance" });
-      }
-
-      // Check no active plan
-      const existing = await storage.getActivePaidStakingPlan(addr);
-      if (existing) {
-        return res.status(400).json({ message: "You already have an active paid staking plan" });
       }
 
       const { buyPrice } = await getTokenPrice();
@@ -719,6 +719,45 @@ export async function registerRoutes(
       distributeStakingOverride(addr, totalUsdtReward).catch(() => {});
 
       res.json({ rewardTokens: rewardTokens.toFixed(8), daysRewarded: daysSince, usdtValue: totalUsdtReward.toFixed(4), priceUsed: buyPrice.toFixed(8) });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/paidstaking/claim-usdt-rewards — withdraw daily staking rewards directly as USDT
+  app.post("/api/paidstaking/claim-usdt-rewards", async (req, res) => {
+    try {
+      const { walletAddress } = req.body;
+      if (!walletAddress) return res.status(400).json({ message: "walletAddress required" });
+      const addr = walletAddress.toLowerCase();
+
+      const plan = await storage.getActivePaidStakingPlan(addr);
+      if (!plan) return res.status(404).json({ message: "No active paid staking plan found" });
+
+      const now = new Date();
+      const lastClaim = plan.lastRewardClaimDate ? new Date(plan.lastRewardClaimDate) : new Date(plan.startDate);
+      const daysSince = Math.floor((now.getTime() - lastClaim.getTime()) / (1000 * 60 * 60 * 24));
+
+      if (daysSince < 1) return res.status(400).json({ message: "Rewards can only be claimed once per day" });
+
+      const dailyUsdtValue = parseFloat(plan.dailyRewardUsdt);
+      const totalUsdtReward = dailyUsdtValue * daysSince;
+
+      await storage.creditVirtualUsdt(addr, totalUsdtReward.toFixed(4));
+      await storage.updatePaidStakingRewards(plan.id, "0", now);
+
+      await storage.logTokenTransaction({
+        walletAddress: addr,
+        txType: "paid_stake_usdt_claim",
+        tokenAmount: "0",
+        usdtAmount: totalUsdtReward.toFixed(4),
+        priceAtTxn: "0",
+        note: `Daily USDT claim: ${daysSince} day(s) × $${dailyUsdtValue.toFixed(4)}/day`,
+      });
+
+      distributeStakingOverride(addr, totalUsdtReward).catch(() => {});
+
+      res.json({ usdtClaimed: totalUsdtReward.toFixed(4), daysRewarded: daysSince });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
