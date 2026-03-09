@@ -289,6 +289,7 @@ function App() {
                       <BinaryDetailsPage
                         incomeInfo={web3.incomeInfo!}
                         binaryInfo={web3.binaryInfo!}
+                        slabInfo={web3.slabInfo}
                         formatAmount={web3.formatAmount}
                         tokenDecimals={web3.tokenDecimals}
                         getTransactionsFromContract={web3.getTransactionsFromContract}

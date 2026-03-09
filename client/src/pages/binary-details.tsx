@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
-import { GitBranch, ArrowLeft, Loader2, Clock, BarChart3, ArrowDownLeft, ArrowDownRight, ChevronLeft, ChevronRight, Zap, CalendarDays, TrendingUp } from "lucide-react";
+import { GitBranch, ArrowLeft, Loader2, Clock, BarChart3, ArrowDownLeft, ArrowDownRight, ChevronLeft, ChevronRight, Zap, CalendarDays, TrendingUp, Layers, Info } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import type { IncomeInfo, BinaryInfo } from "@/hooks/use-web3";
+import { Badge } from "@/components/ui/badge";
+import type { IncomeInfo, BinaryInfo, SlabInfo } from "@/hooks/use-web3";
 
 interface ContractTx {
   type: string;
@@ -15,14 +16,16 @@ interface ContractTx {
 interface BinaryDetailsProps {
   incomeInfo: IncomeInfo;
   binaryInfo: BinaryInfo;
+  slabInfo: SlabInfo | null;
   formatAmount: (val: bigint) => string;
+  tokenDecimals: number;
   getTransactionsFromContract: (offset: number, limit: number) => Promise<{ transactions: ContractTx[]; total: number }>;
   claimBinaryIncome: () => Promise<void>;
 }
 
 const ITEMS_PER_PAGE = 10;
 
-export default function BinaryDetails({ incomeInfo, binaryInfo, formatAmount, getTransactionsFromContract, claimBinaryIncome }: BinaryDetailsProps) {
+export default function BinaryDetails({ incomeInfo, binaryInfo, slabInfo, formatAmount, tokenDecimals, getTransactionsFromContract, claimBinaryIncome }: BinaryDetailsProps) {
   const [, navigate] = useLocation();
   const [transactions, setTransactions] = useState<ContractTx[]>([]);
   const [loadingTxs, setLoadingTxs] = useState(true);
@@ -258,7 +261,78 @@ export default function BinaryDetails({ incomeInfo, binaryInfo, formatAmount, ge
         </div>
       </div>
 
-      <div className="glass-card rounded-2xl p-5 slide-in border border-purple-500/10" style={{ animationDelay: '0.38s' }} data-testid="card-binary-pending-match">
+      <div className="glass-card rounded-2xl slide-in" style={{ animationDelay: '0.38s' }} data-testid="card-slab-commission">
+        <div className="p-5 border-b border-white/[0.06]">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-cyan-500/15 flex items-center justify-center">
+              <Layers className="h-4 w-4 text-cyan-400" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
+                <span className="gradient-text">Slab-Based Binary Volume</span>
+              </h2>
+              <p className="text-[10px] text-muted-foreground">Per-slab carry volumes, matchable amounts & potential income</p>
+            </div>
+          </div>
+        </div>
+        <div className="p-5 space-y-3">
+          {[
+            { levels: "Lv 1-3",   slabIdx: 0, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
+            { levels: "Lv 4-6",   slabIdx: 1, color: "text-purple-400",  bg: "bg-purple-500/10",  border: "border-purple-500/20" },
+            { levels: "Lv 7-9",   slabIdx: 2, color: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/20"  },
+            { levels: "Lv 10-20", slabIdx: 3, color: "text-cyan-400",    bg: "bg-cyan-500/10",    border: "border-cyan-500/20"   },
+          ].map((slab) => {
+            const rate = slabInfo ? Number(slabInfo.rates[slab.slabIdx]) / 100 : [30, 20, 10, 5][slab.slabIdx];
+            const carryL = slabInfo ? slabInfo.carryLeftSlabs[slab.slabIdx] : 0n;
+            const carryR = slabInfo ? slabInfo.carryRightSlabs[slab.slabIdx] : 0n;
+            const matchable = slabInfo ? slabInfo.matchableSlabs[slab.slabIdx] : 0n;
+            const potentialIncome = slabInfo ? slabInfo.potentialIncomeSlabs[slab.slabIdx] : 0n;
+            return (
+              <div key={slab.slabIdx} className={`rounded-xl ${slab.bg} border ${slab.border} overflow-hidden`} data-testid={`row-slab-binary-${slab.slabIdx}`}>
+                <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.04]">
+                  <div className="flex items-center gap-2">
+                    <p className={`text-xs font-bold ${slab.color}`}>{slab.levels}</p>
+                    <Badge variant="outline" className={`text-[10px] ${slab.border} ${slab.color} px-1.5 py-0`}>
+                      {rate}%
+                    </Badge>
+                  </div>
+                  <p className={`text-sm font-bold ${slab.color}`} style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-slab-binary-income-${slab.slabIdx}`}>
+                    ${formatAmount(potentialIncome)}
+                  </p>
+                </div>
+                <div className="grid grid-cols-3 divide-x divide-white/[0.04]">
+                  <div className="px-3 py-2 text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Left Carry</p>
+                    <p className="text-xs font-semibold text-amber-400" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-slab-binary-left-${slab.slabIdx}`}>
+                      ${formatAmount(carryL)}
+                    </p>
+                  </div>
+                  <div className="px-3 py-2 text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Right Carry</p>
+                    <p className="text-xs font-semibold text-cyan-400" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-slab-binary-right-${slab.slabIdx}`}>
+                      ${formatAmount(carryR)}
+                    </p>
+                  </div>
+                  <div className="px-3 py-2 text-center">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Matchable</p>
+                    <p className="text-xs font-semibold text-foreground" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-slab-binary-matchable-${slab.slabIdx}`}>
+                      ${formatAmount(matchable)}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          <div className="flex items-start gap-2 mt-1 p-3 rounded-xl bg-white/[0.02] border border-white/[0.06]">
+            <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Volume is split across slabs by downline depth: Lv 1-3 earns <span className="text-foreground font-medium">30%</span>, Lv 4-6 earns <span className="text-foreground font-medium">20%</span>, Lv 7-9 earns <span className="text-foreground font-medium">10%</span>, Lv 10-20 earns <span className="text-foreground font-medium">5%</span>. Each slab matches the minimum of left and right carry at that level.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <div className="glass-card rounded-2xl p-5 slide-in border border-purple-500/10" style={{ animationDelay: '0.42s' }} data-testid="card-binary-pending-match">
         <div className="flex items-center gap-3 mb-3">
           <div className="h-9 w-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
             <GitBranch className="h-4 w-4 text-purple-400" />
