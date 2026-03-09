@@ -1,10 +1,24 @@
 import { useState, useEffect, useCallback } from "react";
-import { DollarSign, TrendingUp, ArrowDownToLine, Coins, Zap, Shield, Copy, ChevronRight, User, Wallet, CheckCircle, AlertCircle, Loader2, Clock, Timer } from "lucide-react";
+import { DollarSign, TrendingUp, ArrowDownToLine, Coins, Zap, Shield, Copy, ChevronRight, User, Wallet, CheckCircle, AlertCircle, Loader2, Clock, Timer, Star, Trophy } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { PACKAGE_NAMES, PACKAGE_PRICES_USD, STATUS_NAMES } from "@/lib/contract";
+import { PACKAGE_NAMES, PACKAGE_PRICES_USD, STATUS_NAMES, formatTokenAmount } from "@/lib/contract";
+
 import type { UserInfo, IncomeInfo, BinaryInfo } from "@/hooks/use-web3";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
+
+const STAR_RANKS = [
+  { rank: 1,  title: "Star 1",  totalQual: 5_000,       allocation: 250 },
+  { rank: 2,  title: "Star 2",  totalQual: 20_000,      allocation: 1_000 },
+  { rank: 3,  title: "Star 3",  totalQual: 60_000,      allocation: 3_000 },
+  { rank: 4,  title: "Star 4",  totalQual: 200_000,     allocation: 10_000 },
+  { rank: 5,  title: "Star 5",  totalQual: 600_000,     allocation: 30_000 },
+  { rank: 6,  title: "Star 6",  totalQual: 2_000_000,   allocation: 100_000 },
+  { rank: 7,  title: "Star 7",  totalQual: 6_000_000,   allocation: 300_000 },
+  { rank: 8,  title: "Star 8",  totalQual: 20_000_000,  allocation: 1_000_000 },
+  { rank: 9,  title: "Star 9",  totalQual: 60_000_000,  allocation: 3_000_000 },
+  { rank: 10, title: "Star 10", totalQual: 100_000_000, allocation: 5_000_000 },
+];
 
 interface ProfileOnChain {
   displayName: string;
@@ -175,6 +189,11 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
   const packageName = PACKAGE_NAMES[packageIndex] || "Unknown";
   const statusLabel = STATUS_NAMES[userInfo.status] || "Unknown";
   const isActive = userInfo.status === 1;
+  const leftUSDT = binaryInfo ? parseFloat(formatTokenAmount(binaryInfo.leftBusiness, tokenDecimals)) : 0;
+  const rightUSDT = binaryInfo ? parseFloat(formatTokenAmount(binaryInfo.rightBusiness, tokenDecimals)) : 0;
+  const minLeg = Math.min(leftUSDT, rightUSDT);
+  const currentRankIndex = STAR_RANKS.reduce((best, r, i) => (minLeg >= r.totalQual / 2 ? i : best), -1);
+  const starRank = currentRankIndex >= 0 ? STAR_RANKS[currentRankIndex] : null;
   const remaining = incomeInfo.totalEarnings > incomeInfo.totalWithdrawn
     ? incomeInfo.totalEarnings - incomeInfo.totalWithdrawn : BigInt(0);
 
@@ -216,6 +235,11 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
                   <Badge variant="outline" className="text-[10px] border-purple-500/30 bg-purple-500/5" data-testid="badge-package">
                     {packageName}
                   </Badge>
+                  {starRank && (
+                    <Badge variant="outline" className="text-[10px] border-amber-500/40 bg-amber-500/10 text-amber-400 flex items-center gap-1" data-testid="badge-star-rank">
+                      <Star className="h-2.5 w-2.5" /> {starRank.title} Achiever
+                    </Badge>
+                  )}
                 </div>
               </div>
               <button
@@ -267,6 +291,37 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
         <StatCard label="Total Withdrawn" value={formatAmount(incomeInfo.totalWithdrawn)} icon={ArrowDownToLine} iconColor="text-cyan-400" accentGlow="bg-cyan-500/15" delay="0.15s" />
         <StatCard label="Available" value={formatAmount(remaining)} icon={Coins} iconColor="text-emerald-400" accentGlow="bg-emerald-500/15" delay="0.2s" />
       </div>
+
+      {starRank && (
+        <div className="glass-card rounded-2xl p-5 slide-in relative overflow-hidden" style={{ animationDelay: '0.22s' }} data-testid="card-star-rank">
+          <div className="absolute inset-0 bg-gradient-to-br from-amber-500/8 via-transparent to-yellow-600/5 pointer-events-none" />
+          <div className="relative flex items-center justify-between">
+            <div className="flex items-center gap-3">
+              <div className="h-11 w-11 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0">
+                <Trophy className="h-5 w-5 text-amber-400" />
+              </div>
+              <div>
+                <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">M Plan Star Rank</p>
+                <p className="text-xl font-bold text-amber-400 flex items-center gap-1.5" style={{ fontFamily: 'var(--font-display)' }}>
+                  <Star className="h-4 w-4" /> {starRank.title} Achiever
+                </p>
+              </div>
+            </div>
+            <div className="text-right">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Allocation Reward</p>
+              <p className="text-lg font-bold text-emerald-400" style={{ fontFamily: 'var(--font-display)' }}>
+                ${starRank.allocation.toLocaleString()}
+              </p>
+              <p className="text-[10px] text-muted-foreground">USDT staking reward</p>
+            </div>
+          </div>
+          <div className="relative mt-3 pt-3 border-t border-white/[0.06] flex items-center justify-between text-[11px]">
+            <span className="text-muted-foreground">Left Team: <span className="text-cyan-400 font-medium">${leftUSDT.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+            <span className="text-muted-foreground">Smaller Leg: <span className="text-amber-400 font-medium">${minLeg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+            <span className="text-muted-foreground">Right Team: <span className="text-cyan-400 font-medium">${rightUSDT.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+          </div>
+        </div>
+      )}
 
       {incomeInfo.maxIncome > BigInt(0) && (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 slide-in" style={{ animationDelay: '0.22s' }}>
