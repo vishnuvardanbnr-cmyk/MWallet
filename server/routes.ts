@@ -507,6 +507,69 @@ export async function registerRoutes(
     }
   });
 
+  // ── Leadership Rewards ──────────────────────────────────────────────────────
+
+  const STAR_RANK_DATA: Record<number, { totalQual: number; allocation: number }> = {
+    1:  { totalQual: 5_000,       allocation: 250 },
+    2:  { totalQual: 20_000,      allocation: 1_000 },
+    3:  { totalQual: 50_000,      allocation: 2_500 },
+    4:  { totalQual: 100_000,     allocation: 8_000 },
+    5:  { totalQual: 500_000,     allocation: 40_000 },
+    6:  { totalQual: 1_000_000,   allocation: 80_000 },
+    7:  { totalQual: 5_000_000,   allocation: 400_000 },
+    8:  { totalQual: 10_000_000,  allocation: 1_000_000 },
+    9:  { totalQual: 50_000_000,  allocation: 5_000_000 },
+    10: { totalQual: 100_000_000, allocation: 10_000_000 },
+  };
+
+  // GET /api/leadership/:walletAddress — returns claimed star ranks
+  app.get("/api/leadership/:walletAddress", async (req, res) => {
+    try {
+      const claimed = await storage.getClaimedLeadershipRanks(req.params.walletAddress);
+      res.json(claimed);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/leadership/claim — claim a star rank reward as virtual USDT
+  app.post("/api/leadership/claim", async (req, res) => {
+    try {
+      const { walletAddress, starRank, leftBusiness, rightBusiness } = req.body;
+      if (!walletAddress || !starRank || leftBusiness == null || rightBusiness == null) {
+        return res.status(400).json({ message: "walletAddress, starRank, leftBusiness, rightBusiness are required" });
+      }
+      const rank = parseInt(starRank);
+      if (!STAR_RANK_DATA[rank]) {
+        return res.status(400).json({ message: "Invalid star rank (must be 1-10)" });
+      }
+
+      const rankInfo = STAR_RANK_DATA[rank];
+      const left = parseFloat(leftBusiness);
+      const right = parseFloat(rightBusiness);
+      const minLeg = Math.min(left, right);
+      const required = rankInfo.totalQual / 2;
+
+      if (minLeg < required) {
+        return res.status(400).json({ message: `Not qualified: weaker leg needs $${required.toLocaleString()} USDT, currently $${minLeg.toFixed(2)}` });
+      }
+
+      const addr = walletAddress.toLowerCase();
+      const alreadyClaimed = await storage.hasClaimedLeadershipRank(addr, rank);
+      if (alreadyClaimed) {
+        return res.status(400).json({ message: `Star ${rank} reward already claimed` });
+      }
+
+      const allocationStr = rankInfo.allocation.toFixed(4);
+      const reward = await storage.claimLeadershipReward(addr, rank, allocationStr);
+      await storage.creditVirtualUsdt(addr, allocationStr);
+
+      res.json({ reward, credited: allocationStr, message: `$${rankInfo.allocation.toLocaleString()} USDT credited to your wallet for achieving Star ${rank}!` });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── Paid Staking ────────────────────────────────────────────────────────────
 
   // GET /api/paidstaking/:walletAddress

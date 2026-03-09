@@ -1,4 +1,4 @@
-import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome, usdtDeposits, type UsdtDeposit } from "@shared/schema";
+import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome, usdtDeposits, type UsdtDeposit, leadershipRewards, type LeadershipReward } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -63,6 +63,10 @@ export interface IStorage {
   updateTicketStatus(id: number, status: string): Promise<SupportTicket | undefined>;
   addTicketMessage(data: InsertTicketMessage): Promise<TicketMessage>;
   getTicketMessages(ticketId: number): Promise<TicketMessage[]>;
+  // Leadership Rewards
+  getClaimedLeadershipRanks(walletAddress: string): Promise<LeadershipReward[]>;
+  hasClaimedLeadershipRank(walletAddress: string, starRank: number): Promise<boolean>;
+  claimLeadershipReward(walletAddress: string, starRank: number, allocationUsdt: string): Promise<LeadershipReward>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -496,6 +500,28 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(usdtDeposits)
       .where(eq(usdtDeposits.walletAddress, walletAddress.toLowerCase()))
       .orderBy(desc(usdtDeposits.createdAt));
+  }
+
+  async getClaimedLeadershipRanks(walletAddress: string): Promise<LeadershipReward[]> {
+    return db.select().from(leadershipRewards)
+      .where(eq(leadershipRewards.walletAddress, walletAddress.toLowerCase()))
+      .orderBy(leadershipRewards.starRank);
+  }
+
+  async hasClaimedLeadershipRank(walletAddress: string, starRank: number): Promise<boolean> {
+    const [row] = await db.select().from(leadershipRewards)
+      .where(and(
+        eq(leadershipRewards.walletAddress, walletAddress.toLowerCase()),
+        eq(leadershipRewards.starRank, starRank)
+      ));
+    return !!row;
+  }
+
+  async claimLeadershipReward(walletAddress: string, starRank: number, allocationUsdt: string): Promise<LeadershipReward> {
+    const [row] = await db.insert(leadershipRewards)
+      .values({ walletAddress: walletAddress.toLowerCase(), starRank, allocationUsdt })
+      .returning();
+    return row;
   }
 }
 

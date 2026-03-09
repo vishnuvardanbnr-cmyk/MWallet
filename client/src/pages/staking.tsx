@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from "react";
 import { useLocation } from "wouter";
-import { Loader2, ArrowLeft, Coins, CheckCircle, AlertCircle, Clock, Download, ChevronLeft, ChevronRight, Timer, Star, Trophy, TrendingUp, ChevronDown, ChevronUp } from "lucide-react";
+import { Loader2, ArrowLeft, Coins, CheckCircle, AlertCircle, Clock, Download, ChevronLeft, ChevronRight, Timer, Star, Trophy, TrendingUp, ChevronDown, ChevronUp, Gift } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatTokenAmount } from "@/lib/contract";
 import type { BinaryInfo } from "@/hooks/use-web3";
+import { useToast } from "@/hooks/use-toast";
 
 const CLAIMS_PER_PAGE = 10;
 
@@ -68,6 +69,7 @@ interface StakingPageProps {
 
 export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }: StakingPageProps) {
   const [, navigate] = useLocation();
+  const { toast } = useToast();
   const [activePlan, setActivePlan] = useState<StakingPlan | null>(null);
   const [allPlans, setAllPlans] = useState<StakingPlan[]>([]);
   const [mwallet, setMwallet] = useState<MwalletBalance>({ balance: "0", totalClaimed: "0" });
@@ -79,11 +81,12 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
   const [claiming, setClaiming] = useState(false);
   const [claimResult, setClaimResult] = useState<ClaimResult | null>(null);
   const [showRankTable, setShowRankTable] = useState(false);
+  const [claimedRanks, setClaimedRanks] = useState<Set<number>>(new Set());
+  const [claimingRank, setClaimingRank] = useState<number | null>(null);
 
   const leftUSDT = binaryInfo ? parseFloat(formatTokenAmount(binaryInfo.leftBusiness, tokenDecimals)) : 0;
   const rightUSDT = binaryInfo ? parseFloat(formatTokenAmount(binaryInfo.rightBusiness, tokenDecimals)) : 0;
   const minLeg = Math.min(leftUSDT, rightUSDT);
-  const totalTeam = leftUSDT + rightUSDT;
 
   const currentRankIndex = STAR_RANKS.reduce((best, r, i) => (minLeg >= r.totalQual / 2 ? i : best), -1);
   const currentRank = currentRankIndex >= 0 ? STAR_RANKS[currentRankIndex] : null;
@@ -95,23 +98,55 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [activeRes, plansRes, walletRes] = await Promise.all([
+      const [activeRes, plansRes, walletRes, leadershipRes] = await Promise.all([
         fetch(`/api/staking/${account.toLowerCase()}/active`),
         fetch(`/api/staking/${account.toLowerCase()}`),
         fetch(`/api/mwallet/${account.toLowerCase()}`),
+        fetch(`/api/leadership/${account.toLowerCase()}`),
       ]);
       const activeData = activeRes.ok ? await activeRes.json() : null;
       const plansData = plansRes.ok ? await plansRes.json() : [];
       const walletData = walletRes.ok ? await walletRes.json() : null;
+      const leadershipData = leadershipRes.ok ? await leadershipRes.json() : [];
       setActivePlan(activeData || null);
       setAllPlans(Array.isArray(plansData) ? plansData : []);
       setMwallet(walletData || { balance: "0", totalClaimed: "0" });
+      if (Array.isArray(leadershipData)) {
+        setClaimedRanks(new Set(leadershipData.map((r: { starRank: number }) => r.starRank)));
+      }
     } catch {
       setActivePlan(null);
     } finally {
       setLoading(false);
     }
   }, [account]);
+
+  const handleClaimRank = async (rank: number, allocation: number) => {
+    setClaimingRank(rank);
+    try {
+      const res = await fetch("/api/leadership/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          walletAddress: account,
+          starRank: rank,
+          leftBusiness: leftUSDT.toFixed(4),
+          rightBusiness: rightUSDT.toFixed(4),
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        toast({ title: "Claim Failed", description: data.message, variant: "destructive" });
+      } else {
+        toast({ title: "Reward Claimed!", description: data.message });
+        setClaimedRanks(prev => new Set([...prev, rank]));
+      }
+    } catch {
+      toast({ title: "Network Error", description: "Could not claim reward, please try again.", variant: "destructive" });
+    } finally {
+      setClaimingRank(null);
+    }
+  };
 
   const fetchClaims = useCallback(async (page: number) => {
     setClaimsLoading(true);
@@ -563,6 +598,42 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
           </div>
         )}
 
+        {/* Claimable rewards list */}
+        {STAR_RANKS.filter(r => {
+          const qualified = minLeg >= r.totalQual / 2;
+          const notClaimed = !claimedRanks.has(r.rank);
+          return qualified && notClaimed;
+        }).length > 0 && (
+          <div className="mb-5 space-y-2" data-testid="section-claimable-rewards">
+            <p className="text-[10px] text-amber-400 uppercase tracking-wider font-semibold flex items-center gap-1.5">
+              <Gift className="h-3 w-3" /> Unclaimed Rewards
+            </p>
+            {STAR_RANKS.filter(r => minLeg >= r.totalQual / 2 && !claimedRanks.has(r.rank)).map(r => (
+              <div key={r.rank} className="flex items-center justify-between p-3 rounded-xl bg-amber-500/10 border border-amber-500/25" data-testid={`card-claimable-${r.rank}`}>
+                <div className="flex items-center gap-2">
+                  <Star className="h-4 w-4 text-amber-400" />
+                  <div>
+                    <p className="text-sm font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>{r.title}</p>
+                    <p className="text-[10px] text-muted-foreground">Staking allocation reward</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <span className="text-sm font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }}>{formatUSD(r.allocation)}</span>
+                  <button
+                    onClick={() => handleClaimRank(r.rank, r.allocation)}
+                    disabled={claimingRank === r.rank}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg glow-button text-white text-xs font-bold transition-all disabled:opacity-50"
+                    data-testid={`button-claim-rank-${r.rank}`}
+                  >
+                    {claimingRank === r.rank ? <Loader2 className="h-3 w-3 animate-spin" /> : <Gift className="h-3 w-3" />}
+                    Claim
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+
         {/* Toggle full ranking table */}
         <button
           onClick={() => setShowRankTable(!showRankTable)}
@@ -579,17 +650,18 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
               <thead>
                 <tr className="border-b border-white/[0.07]">
                   <th className="text-left py-2 pr-3 text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Rank</th>
-                  <th className="text-right py-2 pr-3 text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Total Qual.</th>
                   <th className="text-right py-2 pr-3 text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Each Side</th>
-                  <th className="text-right py-2 pr-3 text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Staking %</th>
-                  <th className="text-right py-2 text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Allocation</th>
+                  <th className="text-right py-2 pr-3 text-[10px] text-muted-foreground uppercase tracking-wider font-medium">%</th>
+                  <th className="text-right py-2 text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Reward</th>
                 </tr>
               </thead>
               <tbody>
                 {STAR_RANKS.map((r) => {
-                  const isAchieved = currentRank && r.rank <= currentRank.rank;
+                  const isAchieved = minLeg >= r.totalQual / 2;
                   const isCurrent = currentRank?.rank === r.rank;
                   const isNext = nextRank?.rank === r.rank;
+                  const isClaimed = claimedRanks.has(r.rank);
+                  const isClaimable = isAchieved && !isClaimed;
                   return (
                     <tr
                       key={r.rank}
@@ -598,16 +670,33 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
                     >
                       <td className="py-2.5 pr-3">
                         <div className="flex items-center gap-1.5">
-                          <Star className={`h-3 w-3 ${isAchieved ? "text-amber-400" : "text-muted-foreground/30"}`} />
+                          <Star className={`h-3 w-3 shrink-0 ${isAchieved ? "text-amber-400" : "text-muted-foreground/30"}`} />
                           <span className={`font-semibold ${isCurrent ? "text-amber-400" : isAchieved ? "text-foreground" : "text-muted-foreground"}`} style={{ fontFamily: "var(--font-display)" }}>{r.title}</span>
                           {isCurrent && <Badge className="text-[9px] bg-amber-500/15 text-amber-400 border-amber-500/25 ml-1 py-0">YOU</Badge>}
-                          {isNext && !isCurrent && <Badge className="text-[9px] bg-purple-500/10 text-purple-400 border-purple-500/20 ml-1 py-0">NEXT</Badge>}
+                          {isNext && <Badge className="text-[9px] bg-purple-500/10 text-purple-400 border-purple-500/20 ml-1 py-0">NEXT</Badge>}
                         </div>
                       </td>
-                      <td className={`py-2.5 pr-3 text-right font-medium ${isAchieved ? "text-foreground" : "text-muted-foreground"}`}>{formatUSD(r.totalQual)}</td>
                       <td className={`py-2.5 pr-3 text-right ${isAchieved ? "text-cyan-400" : "text-muted-foreground"}`}>{formatUSD(r.totalQual / 2)}</td>
                       <td className={`py-2.5 pr-3 text-right font-medium ${isAchieved ? "text-emerald-400" : "text-muted-foreground"}`}>{r.stakingPct}%</td>
-                      <td className={`py-2.5 text-right font-bold ${isCurrent ? "text-amber-400" : isAchieved ? "text-emerald-400" : "text-muted-foreground"}`} style={{ fontFamily: "var(--font-display)" }}>{formatUSD(r.allocation)}</td>
+                      <td className="py-2 text-right">
+                        {isClaimed ? (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-medium">
+                            <CheckCircle className="h-3 w-3" /> Claimed
+                          </span>
+                        ) : isClaimable ? (
+                          <button
+                            onClick={() => handleClaimRank(r.rank, r.allocation)}
+                            disabled={claimingRank === r.rank}
+                            className="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-amber-500/15 text-amber-400 text-[10px] font-bold border border-amber-500/25 hover:bg-amber-500/25 transition-all disabled:opacity-50"
+                            data-testid={`button-table-claim-${r.rank}`}
+                          >
+                            {claimingRank === r.rank ? <Loader2 className="h-3 w-3 animate-spin" /> : <Gift className="h-3 w-3" />}
+                            {formatUSD(r.allocation)}
+                          </button>
+                        ) : (
+                          <span className={`font-bold text-[11px] ${isAchieved ? "text-emerald-400" : "text-muted-foreground"}`} style={{ fontFamily: "var(--font-display)" }}>{formatUSD(r.allocation)}</span>
+                        )}
+                      </td>
                     </tr>
                   );
                 })}

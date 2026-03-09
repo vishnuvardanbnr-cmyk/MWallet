@@ -215,6 +215,18 @@ export const stakingOverrideIncome = pgTable("staking_override_income", {
 
 export type StakingOverrideIncome = typeof stakingOverrideIncome.$inferSelect;
 
+// ── Leadership Rewards ────────────────────────────────────────────────────────
+
+export const leadershipRewards = pgTable("leadership_rewards", {
+  id: serial("id").primaryKey(),
+  walletAddress: varchar("wallet_address", { length: 42 }).notNull(),
+  starRank: integer("star_rank").notNull(),
+  allocationUsdt: numeric("allocation_usdt", { precision: 20, scale: 4 }).notNull(),
+  claimedAt: timestamp("claimed_at").notNull().defaultNow(),
+});
+
+export type LeadershipReward = typeof leadershipRewards.$inferSelect;
+
 export interface HardwareProduct {
   id: string;
   name: string;
