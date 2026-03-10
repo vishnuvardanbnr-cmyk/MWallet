@@ -1,11 +1,28 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
   <defs>
-    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#f59e0b"/>
-      <stop offset="50%" stop-color="#a855f7"/>
-      <stop offset="100%" stop-color="#06b6d4"/>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#fde68a"/>
+      <stop offset="35%" stop-color="#f0c040"/>
+      <stop offset="65%" stop-color="#d4af37"/>
+      <stop offset="100%" stop-color="#a07820"/>
+    </linearGradient>
+    <linearGradient id="goldDark" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#c9a227"/>
+      <stop offset="100%" stop-color="#7a5c10"/>
     </linearGradient>
   </defs>
-  <rect width="32" height="32" rx="8" fill="url(#g)"/>
-  <text x="16" y="23" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="800" font-size="19" fill="white" letter-spacing="-0.5">M</text>
+  <!-- Background -->
+  <rect width="64" height="64" rx="12" fill="#0a0804"/>
+  <!-- Shield outer -->
+  <path d="M32 4 L54 13 L54 36 C54 50 43 60 32 62 C21 60 10 50 10 36 L10 13 Z" fill="url(#goldDark)" opacity="0.9"/>
+  <!-- Shield inner -->
+  <path d="M32 8 L50 16 L50 36 C50 48 41 57 32 59 C23 57 14 48 14 36 L14 16 Z" fill="#0d0a05" stroke="url(#goldGrad)" stroke-width="0.8"/>
+  <!-- Top bar -->
+  <rect x="22" y="15" width="20" height="1.5" rx="0.75" fill="url(#goldGrad)" opacity="0.75"/>
+  <!-- M letter -->
+  <path d="M18 47 L18 23 L22 23 L32 37 L42 23 L46 23 L46 47 L42 47 L42 31 L33.5 43 L30.5 43 L22 31 L22 47 Z" fill="url(#goldGrad)"/>
+  <!-- Bottom bar -->
+  <rect x="22" y="49" width="20" height="1.5" rx="0.75" fill="url(#goldGrad)" opacity="0.75"/>
+  <!-- Top gem -->
+  <circle cx="32" cy="11" r="1.8" fill="url(#goldGrad)" opacity="0.9"/>
 </svg>
