@@ -11,24 +11,24 @@ async function main() {
   console.log("Deployer:", deployer.address);
   console.log("Balance:", hre.ethers.formatEther(balance), "BNB");
 
-  const gwei2 = hre.ethers.parseUnits("2", "gwei");
+  const gwei1 = hre.ethers.parseUnits("1", "gwei");
 
   console.log("\nDeploying MLMContract...");
   const MLMFactory = await hre.ethers.getContractFactory("MLMContract");
   const mlm = await MLMFactory.deploy(
     USDT_TESTNET, TOKEN_DECIMALS, ADMIN_WALLET, ADMIN_WALLET,
-    { gasPrice: gwei2, gasLimit: 9000000 }
+    { gasPrice: gwei1, gasLimit: 9000000 }
   );
   await mlm.waitForDeployment();
   const mlmAddr = await mlm.getAddress();
   console.log("MLMContract:", mlmAddr);
 
   console.log("Linking board handler...");
-  await (await mlm.setBoardHandler(EXISTING_BOARD_ADDR, { gasPrice: gwei2 })).wait();
+  await (await mlm.setBoardHandler(EXISTING_BOARD_ADDR, { gasPrice: gwei1 })).wait();
   console.log("setBoardHandler done");
 
   const board = await hre.ethers.getContractAt("BoardMatrixHandler", EXISTING_BOARD_ADDR);
-  await (await board.setMLMContract(mlmAddr, { gasPrice: gwei2 })).wait();
+  await (await board.setMLMContract(mlmAddr, { gasPrice: gwei1 })).wait();
   console.log("setMLMContract done");
 
   console.log("\nVITE_CONTRACT_ADDRESS=" + mlmAddr);

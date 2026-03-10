@@ -350,8 +350,8 @@
       ]
     },
     "/home/runner/workspace/contracts/MLMContract.sol": {
-      "lastModificationDate": 1773139189368,
-      "contentHash": "78cad7977357e9f6768665bfee17300d",
+      "lastModificationDate": 1773139872118,
+      "contentHash": "1b045d87001131bfa5addb6ef6315401",
       "sourceName": "contracts/MLMContract.sol",
       "solcConfig": {
         "version": "0.8.20",

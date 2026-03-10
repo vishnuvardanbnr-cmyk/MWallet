@@ -35,11 +35,12 @@ const ITEMS_PER_PAGE = 10;
 
 const WITHDRAWAL_MATCH_DESC: Record<number, string> = {
   0: "Activate a package to unlock",
-  1: "0.1% per level, up to 3 levels",
-  2: "0.1% per level, up to 5 levels",
-  3: "0.1% per level, up to 9 levels",
-  4: "0.1% per level, up to 12 levels",
-  5: "1% per level, up to 15 levels",
+  1: "1% · Level 1 only",
+  2: "1% · Levels 1–3",
+  3: "1% · Levels 1–5",
+  4: "1% (L1–5) · 0.5% (L6–9)",
+  5: "1% (L1–5) · 0.5% (L6–12)",
+  6: "1% (L1–5) · 0.5% (L6–15)",
 };
 
 // 5× package price = maxIncomeLimit from contract

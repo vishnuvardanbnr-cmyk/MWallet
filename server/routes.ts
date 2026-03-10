@@ -29,7 +29,7 @@ const MLM_READ_ABI = [
   "function getUserInfo(address _user) external view returns (uint256 userId, address sponsor, address binaryParent, address leftChild, address rightChild, uint8 placementSide, uint8 userPackage, uint8 status, uint256 walletBalance, uint256 tempWalletBalance, uint256 totalEarnings, uint256 directReferralCount, uint256 joinedAt)",
 ];
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
-const MLM_CONTRACT_ADDR = "0x643Fc81A92228fF1fE94C8C62c073DFCB2550F99";
+const MLM_CONTRACT_ADDR = "0x284dcb5C8F2407c135713a093A4fB42Ef2b1bCBF";
 
 async function distributeStakingOverride(fromWallet: string, usdtProfit: number): Promise<void> {
   try {

@@ -722,13 +722,12 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
         } else if (_pkg == Package.BASIC) {
             if (_level <= 3) return 1000;
         } else if (_pkg == Package.PRO) {
-            if (_level <= 4) return 1000;
-            if (_level == 5) return 500;
+            if (_level <= 5) return 1000;
         } else if (_pkg == Package.ELITE) {
             if (_level <= 5) return 1000;
             if (_level <= 9) return 500;
         } else if (_pkg == Package.STOCKIEST) {
-            if (_level <= 4) return 1000;
+            if (_level <= 5) return 1000;
             if (_level <= 12) return 500;
         } else if (_pkg == Package.SUPER_STOCKIEST) {
             if (_level <= 5) return 1000;
