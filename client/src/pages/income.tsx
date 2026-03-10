@@ -35,11 +35,11 @@ const ITEMS_PER_PAGE = 10;
 
 const WITHDRAWAL_MATCH_DESC: Record<number, string> = {
   0: "Activate a package to unlock",
-  1: "1% per level, up to 3 levels",
-  2: "1% per level, up to 5 levels",
-  3: "1% per level, up to 9 levels",
-  4: "1% per level, up to 12 levels",
-  5: "10% per level, up to 15 levels",
+  1: "0.1% per level, up to 3 levels",
+  2: "0.1% per level, up to 5 levels",
+  3: "0.1% per level, up to 9 levels",
+  4: "0.1% per level, up to 12 levels",
+  5: "1% per level, up to 15 levels",
 };
 
 // 5× package price = maxIncomeLimit from contract
@@ -98,7 +98,7 @@ export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, 
     { title: "Direct Sponsor", amount: incomeInfo.totalDirectIncome, icon: Users, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/10", gradient: "#f59e0b", description: DIRECT_SPONSOR_DESC[pkg] || "10-30% from direct referrals" },
     { title: "Binary Matching", amount: incomeInfo.totalBinaryIncome + binaryInfo.claimableBinaryIncome, icon: GitBranch, color: "text-yellow-300", bg: "bg-yellow-600/10", border: "border-yellow-600/10", gradient: "#d4af37", description: BINARY_MATCH_DESC[pkg] || "30% of matching volume" },
     { title: "Matching on Binary", amount: incomeInfo.totalMatchingOverrideIncome, icon: Layers, color: "text-amber-300", bg: "bg-amber-600/10", border: "border-amber-600/10", gradient: "#c9a227", description: MATCHING_OVERRIDE_DESC[pkg] || "1% per level from downline binary income" },
-    { title: "Withdrawal Match", amount: incomeInfo.totalWithdrawalMatchIncome, icon: RefreshCw, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10", gradient: "#10b981", description: WITHDRAWAL_MATCH_DESC[pkg] || "0.5-5% from downline withdrawals" },
+    { title: "Withdrawal Match", amount: incomeInfo.totalWithdrawalMatchIncome, icon: RefreshCw, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10", gradient: "#10b981", description: WITHDRAWAL_MATCH_DESC[pkg] || "0.1% per level from downline withdrawals" },
   ];
 
   const getPercentage = (amount: bigint) => {
