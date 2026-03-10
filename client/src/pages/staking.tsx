@@ -626,7 +626,7 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
                     data-testid={`button-claim-rank-${r.rank}`}
                   >
                     {claimingRank === r.rank ? <Loader2 className="h-3 w-3 animate-spin" /> : <Gift className="h-3 w-3" />}
-                    Claim
+                    Auto-Stake
                   </button>
                 </div>
               </div>
@@ -681,7 +681,7 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
                       <td className="py-2 text-right">
                         {isClaimed ? (
                           <span className="inline-flex items-center gap-1 text-[10px] text-emerald-400 font-medium">
-                            <CheckCircle className="h-3 w-3" /> Claimed
+                            <CheckCircle className="h-3 w-3" /> Staked
                           </span>
                         ) : isClaimable ? (
                           <button
@@ -691,7 +691,7 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
                             data-testid={`button-table-claim-${r.rank}`}
                           >
                             {claimingRank === r.rank ? <Loader2 className="h-3 w-3 animate-spin" /> : <Gift className="h-3 w-3" />}
-                            {formatUSD(r.allocation)}
+                            Auto-Stake
                           </button>
                         ) : (
                           <span className={`font-bold text-[11px] ${isAchieved ? "text-emerald-400" : "text-muted-foreground"}`} style={{ fontFamily: "var(--font-display)" }}>{formatUSD(r.allocation)}</span>

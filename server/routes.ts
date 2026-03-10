@@ -594,11 +594,60 @@ export async function registerRoutes(
         return res.status(400).json({ message: `Star ${rank} reward already claimed` });
       }
 
-      const allocationStr = rankInfo.allocation.toFixed(4);
+      const usdtAmt = rankInfo.allocation;
+      const allocationStr = usdtAmt.toFixed(4);
       const reward = await storage.claimLeadershipReward(addr, rank, allocationStr);
-      await storage.creditVirtualUsdt(addr, allocationStr);
 
-      res.json({ reward, credited: allocationStr, message: `$${rankInfo.allocation.toLocaleString()} USDT credited to your wallet for achieving Star ${rank}!` });
+      // Auto-create a paid staking plan with the rank reward instead of crediting virtual wallet
+      const { buyPrice } = await getTokenPrice();
+      const theoreticalTokens = usdtAmt / buyPrice;
+      const mintedTokens = theoreticalTokens * 0.9;
+      const userTokens   = theoreticalTokens * 0.7;
+      const adminTokens  = theoreticalTokens * 0.2;
+      const dailyRewardUsdt = usdtAmt * 0.003; // 0.3% daily
+
+      const startDate = new Date();
+      const endDate = new Date(startDate);
+      endDate.setMonth(endDate.getMonth() + 10);
+
+      const stakingPlan = await storage.createPaidStakingPlan({
+        walletAddress: addr,
+        usdtInvested:        usdtAmt.toFixed(4),
+        buyPriceAtEntry:     buyPrice.toFixed(8),
+        totalTokensMinted:   mintedTokens.toFixed(8),
+        userTokens:          userTokens.toFixed(8),
+        adminTokens:         adminTokens.toFixed(8),
+        dailyRewardUsdt:     dailyRewardUsdt.toFixed(4),
+        startDate,
+        endDate,
+      });
+
+      // Update global token economics
+      const econ = await storage.getTokenEconomics();
+      await storage.updateTokenEconomics({
+        circulatingSupply: (parseFloat(econ.circulatingSupply) + mintedTokens).toFixed(8),
+        liquidity:         (parseFloat(econ.liquidity) + usdtAmt).toFixed(8),
+      });
+
+      // Credit tokens to user's M-token balance
+      await storage.addMTokenMainBalance(addr, userTokens.toFixed(8));
+
+      // Log the staking transaction
+      await storage.logTokenTransaction({
+        walletAddress: addr,
+        txType:      "paid_stake",
+        tokenAmount: mintedTokens.toFixed(8),
+        usdtAmount:  usdtAmt.toFixed(4),
+        priceAtTxn:  buyPrice.toFixed(8),
+        note:        `Auto-staked Star ${rank} rank reward: $${usdtAmt.toLocaleString()} USDT`,
+      });
+
+      res.json({
+        reward,
+        stakingPlan,
+        autoStaked: allocationStr,
+        message: `$${rankInfo.allocation.toLocaleString()} USDT auto-staked for Star ${rank} rank! Earning $${dailyRewardUsdt.toFixed(2)}/day starting now.`,
+      });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
