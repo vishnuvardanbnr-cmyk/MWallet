@@ -46,10 +46,10 @@ function ScrollToTop() {
 function ConnectScreen({ onConnect }: { onConnect: () => void }) {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      <div className="absolute inset-0 bg-gradient-to-br from-amber-500/5 via-purple-500/5 to-cyan-500/5" />
-      <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full bg-purple-600/[0.08] blur-[180px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-[-10%] w-[400px] h-[400px] rounded-full bg-cyan-500/[0.06] blur-[150px] pointer-events-none" />
-      <div className="absolute top-[40%] right-[20%] w-[300px] h-[300px] rounded-full bg-amber-500/[0.05] blur-[120px] pointer-events-none" />
+      <div className="absolute inset-0 bg-gradient-to-br from-amber-600/4 via-yellow-600/3 to-amber-800/4" />
+      <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full bg-amber-600/[0.06] blur-[180px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[400px] h-[400px] rounded-full bg-yellow-600/[0.04] blur-[150px] pointer-events-none" />
+      <div className="absolute top-[40%] right-[20%] w-[300px] h-[300px] rounded-full bg-amber-500/[0.04] blur-[120px] pointer-events-none" />
 
       <div className="text-center space-y-8 max-w-md relative z-10 slide-in">
         <div className="floating">
@@ -59,9 +59,6 @@ function ConnectScreen({ onConnect }: { onConnect: () => void }) {
         </div>
 
         <div className="premium-card rounded-2xl p-8 space-y-6">
-          <div className="w-16 h-16 mx-auto rounded-2xl bg-gradient-to-br from-amber-500/20 via-purple-500/20 to-cyan-500/20 border border-white/[0.08] flex items-center justify-center pulse-glow">
-            <Wallet className="w-8 h-8 text-purple-400" />
-          </div>
           <div>
             <h2 className="text-xl font-bold text-foreground mb-2" style={{ fontFamily: 'var(--font-display)' }}>
               <span className="gradient-text">Welcome to M-Vault</span>
