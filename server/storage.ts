@@ -54,6 +54,8 @@ export interface IStorage {
   updateOrderStatus(id: string, status: string): Promise<HardwareOrder | undefined>;
   logStakingOverrideIncome(recipientWallet: string, fromWallet: string, amountUsdt: string, level: number): Promise<StakingOverrideIncome>;
   getStakingOverrideIncome(recipientWallet: string): Promise<StakingOverrideIncome[]>;
+  getAllActivePaidStakingPlans(): Promise<PaidStakingPlan[]>;
+  updatePlanOverrideDate(id: number, date: Date): Promise<void>;
   findDepositByTxHash(txHash: string): Promise<UsdtDeposit | undefined>;
   recordUsdtDeposit(walletAddress: string, txHash: string, amount: string): Promise<UsdtDeposit>;
   getUsdtDeposits(walletAddress: string): Promise<UsdtDeposit[]>;
@@ -479,6 +481,15 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(stakingOverrideIncome)
       .where(eq(stakingOverrideIncome.recipientWallet, recipientWallet.toLowerCase()))
       .orderBy(desc(stakingOverrideIncome.createdAt));
+  }
+
+  async getAllActivePaidStakingPlans(): Promise<PaidStakingPlan[]> {
+    return db.select().from(paidStakingPlans)
+      .where(and(eq(paidStakingPlans.isActive, true), eq(paidStakingPlans.unstaked, false)));
+  }
+
+  async updatePlanOverrideDate(id: number, date: Date): Promise<void> {
+    await db.update(paidStakingPlans).set({ lastOverrideDate: date }).where(eq(paidStakingPlans.id, id));
   }
 
   async findDepositByTxHash(txHash: string): Promise<UsdtDeposit | undefined> {

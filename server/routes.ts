@@ -58,6 +58,40 @@ async function distributeStakingOverride(fromWallet: string, usdtProfit: number)
   }
 }
 
+// Runs hourly; distributes override income for each completed day across all active plans.
+// Override is credited the moment a day elapses, independent of when users claim.
+async function runDailyOverrideDistribution(): Promise<void> {
+  try {
+    const plans = await storage.getAllActivePaidStakingPlans();
+    const now = new Date();
+    // Midnight UTC of today as the cutoff
+    const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+
+    for (const plan of plans) {
+      const baseline = plan.lastOverrideDate
+        ? new Date(plan.lastOverrideDate)
+        : new Date(plan.startDate);
+
+      const msPerDay = 1000 * 60 * 60 * 24;
+      const daysDue = Math.floor((todayStart.getTime() - baseline.getTime()) / msPerDay);
+      if (daysDue <= 0) continue;
+
+      const dailyUsdt = parseFloat(plan.dailyRewardUsdt as string);
+      if (dailyUsdt <= 0) continue;
+
+      // Cap backfill at 7 days to prevent flooding on first run for old plans
+      const daysToProcess = Math.min(daysDue, 7);
+      for (let d = 0; d < daysToProcess; d++) {
+        await distributeStakingOverride(plan.walletAddress, dailyUsdt);
+      }
+
+      await storage.updatePlanOverrideDate(plan.id, todayStart);
+    }
+  } catch (_err) {
+    // Non-fatal background job
+  }
+}
+
 export async function registerRoutes(
   httpServer: Server,
   app: Express
@@ -716,8 +750,6 @@ export async function registerRoutes(
         note: `${daysSince} day(s) reward @ $${dailyUsdtValue.toFixed(4)}/day`,
       });
 
-      distributeStakingOverride(addr, totalUsdtReward).catch(() => {});
-
       res.json({ rewardTokens: rewardTokens.toFixed(8), daysRewarded: daysSince, usdtValue: totalUsdtReward.toFixed(4), priceUsed: buyPrice.toFixed(8) });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -754,8 +786,6 @@ export async function registerRoutes(
         priceAtTxn: "0",
         note: `Daily USDT claim: ${daysSince} day(s) × $${dailyUsdtValue.toFixed(4)}/day`,
       });
-
-      distributeStakingOverride(addr, totalUsdtReward).catch(() => {});
 
       res.json({ usdtClaimed: totalUsdtReward.toFixed(4), daysRewarded: daysSince });
     } catch (err: any) {
@@ -803,8 +833,6 @@ export async function registerRoutes(
         priceAtTxn: sellPrice.toFixed(8),
         note: `Sold ${tokens.toFixed(4)} reward tokens at sell price $${sellPrice.toFixed(8)}`,
       });
-
-      distributeStakingOverride(addr, usdtOut).catch(() => {});
 
       res.json({ usdtReceived: usdtOut.toFixed(4), tokensBurned: tokens.toFixed(8), sellPriceUsed: sellPrice.toFixed(8) });
     } catch (err: any) {
@@ -859,8 +887,6 @@ export async function registerRoutes(
         priceAtTxn: sellPrice.toFixed(8),
         note: `Unstaked: ${userTokens.toFixed(2)} tokens burned → $${usdtFromTokens.toFixed(2)} USDT + $${usdtBonus.toFixed(2)} bonus`,
       });
-
-      distributeStakingOverride(addr, totalUsdt).catch(() => {});
 
       res.json({ usdtReceived: totalUsdt.toFixed(4), fromTokens: usdtFromTokens.toFixed(4), bonusUsdt: usdtBonus.toFixed(4), tokensBurned: userTokens.toFixed(8), sellPriceUsed: sellPrice.toFixed(8) });
     } catch (err: any) {
@@ -1086,6 +1112,10 @@ export async function registerRoutes(
       res.status(500).json({ message: err.message });
     }
   });
+
+  // Distribute staking override income daily for all active plans, independent of user claims
+  runDailyOverrideDistribution(); // run once immediately on startup to catch any missed days
+  setInterval(runDailyOverrideDistribution, 60 * 60 * 1000); // then every hour
 
   return httpServer;
 }

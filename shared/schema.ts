@@ -145,6 +145,7 @@ export const paidStakingPlans = pgTable("paid_staking_plans", {
   unstaked: boolean("unstaked").notNull().default(false),
   unstakeDate: timestamp("unstake_date"),
   usdtReturnedOnUnstake: numeric("usdt_returned_on_unstake", { precision: 20, scale: 4 }),
+  lastOverrideDate: timestamp("last_override_date"),
 });
 export const insertPaidStakingPlanSchema = createInsertSchema(paidStakingPlans).omit({ id: true, totalRewardTokensClaimed: true, lastRewardClaimDate: true, isActive: true, unstaked: true, unstakeDate: true, usdtReturnedOnUnstake: true });
 export type InsertPaidStakingPlan = z.infer<typeof insertPaidStakingPlanSchema>;
