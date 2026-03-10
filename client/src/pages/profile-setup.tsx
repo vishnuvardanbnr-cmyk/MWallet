@@ -161,7 +161,7 @@ export default function ProfileSetupPage({ account, saveProfileOnChain, onComple
         <div className="glass-card rounded-2xl p-8 space-y-6">
           <div className="text-center space-y-3">
             <div className="w-16 h-16 mx-auto rounded-2xl gradient-icon flex items-center justify-center pulse-glow">
-              <UserCircle className="h-8 w-8 text-cyan-400" />
+              <UserCircle className="h-8 w-8 text-amber-300" />
             </div>
             <h1 className="text-2xl font-bold gradient-text" data-testid="text-profile-title" style={{ fontFamily: 'var(--font-display)' }}>Complete Your Profile</h1>
             <p className="text-sm text-muted-foreground" data-testid="text-profile-description">Set up your profile details. Saved on-chain.</p>
@@ -176,7 +176,7 @@ export default function ProfileSetupPage({ account, saveProfileOnChain, onComple
                 value={displayName}
                 onChange={(e) => setDisplayName(e.target.value)}
                 disabled={loading}
-                className="bg-white/[0.03] border-purple-500/20"
+                className="bg-white/[0.03] border-yellow-600/20"
                 data-testid="input-display-name"
               />
             </div>
@@ -188,7 +188,7 @@ export default function ProfileSetupPage({ account, saveProfileOnChain, onComple
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
                 disabled={loading}
-                className="bg-white/[0.03] border-purple-500/20"
+                className="bg-white/[0.03] border-yellow-600/20"
                 data-testid="input-email"
               />
             </div>
@@ -199,7 +199,7 @@ export default function ProfileSetupPage({ account, saveProfileOnChain, onComple
                 type="button"
                 onClick={() => setShowDropdown(!showDropdown)}
                 disabled={loading}
-                className="w-full flex items-center justify-between px-3 py-2 rounded-md text-sm bg-white/[0.03] border border-purple-500/20 text-left transition-colors hover:bg-white/[0.06]"
+                className="w-full flex items-center justify-between px-3 py-2 rounded-md text-sm bg-white/[0.03] border border-yellow-600/20 text-left transition-colors hover:bg-white/[0.06]"
                 data-testid="button-country-dropdown"
               >
                 <span className={country ? "text-foreground" : "text-muted-foreground"}>
@@ -209,7 +209,7 @@ export default function ProfileSetupPage({ account, saveProfileOnChain, onComple
               </button>
 
               {showDropdown && (
-                <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl border border-purple-500/20 shadow-2xl overflow-hidden" style={{ background: "hsl(222 47% 8%)", backdropFilter: "blur(30px)" }}>
+                <div className="absolute left-0 right-0 top-full mt-1 z-50 rounded-xl border border-yellow-600/20 shadow-2xl overflow-hidden" style={{ background: "hsl(222 47% 8%)", backdropFilter: "blur(30px)" }}>
                   <div className="p-2 border-b border-white/[0.06]">
                     <div className="relative">
                       <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
@@ -218,7 +218,7 @@ export default function ProfileSetupPage({ account, saveProfileOnChain, onComple
                         placeholder="Search country..."
                         value={searchQuery}
                         onChange={(e) => setSearchQuery(e.target.value)}
-                        className="w-full pl-8 pr-3 py-2 text-sm bg-white/[0.03] border border-purple-500/15 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-purple-500/40"
+                        className="w-full pl-8 pr-3 py-2 text-sm bg-white/[0.03] border border-yellow-600/15 rounded-lg text-foreground placeholder:text-muted-foreground focus:outline-none focus:border-yellow-600/40"
                         data-testid="input-country-search"
                         autoFocus
                       />
@@ -231,7 +231,7 @@ export default function ProfileSetupPage({ account, saveProfileOnChain, onComple
                         type="button"
                         onClick={() => handleCountrySelect(c)}
                         className={`w-full flex items-center justify-between px-3 py-2.5 text-sm text-left transition-colors hover:bg-white/[0.06] ${
-                          country === c.name ? "bg-purple-500/10 text-purple-300" : "text-foreground"
+                          country === c.name ? "bg-yellow-600/10 text-yellow-200" : "text-foreground"
                         }`}
                         data-testid={`option-country-${c.flag}`}
                       >
@@ -255,7 +255,7 @@ export default function ProfileSetupPage({ account, saveProfileOnChain, onComple
                 value={phone}
                 onChange={(e) => setPhone(e.target.value)}
                 disabled={loading}
-                className="bg-white/[0.03] border-purple-500/20"
+                className="bg-white/[0.03] border-yellow-600/20"
                 data-testid="input-phone"
               />
             </div>

@@ -220,7 +220,7 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
       <div className="flex items-center justify-center py-20">
         <div className="text-center space-y-4">
           <div className="w-12 h-12 mx-auto rounded-xl gradient-icon flex items-center justify-center pulse-glow">
-            <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
+            <Loader2 className="w-6 h-6 animate-spin text-yellow-300" />
           </div>
           <p className="text-sm text-muted-foreground">Loading paid staking...</p>
         </div>
@@ -243,10 +243,10 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
       <div className="glass-card rounded-2xl p-4" data-testid="card-token-price">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-purple-400" />
+            <BarChart3 className="w-4 h-4 text-yellow-300" />
             <span className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>M Token Price</span>
           </div>
-          <button onClick={loadData} className="text-purple-400 hover:text-purple-300 transition-colors" data-testid="button-refresh-price">
+          <button onClick={loadData} className="text-yellow-300 hover:text-yellow-200 transition-colors" data-testid="button-refresh-price">
             <RefreshCw className="w-3.5 h-3.5" />
           </button>
         </div>
@@ -263,9 +263,9 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
               ${sellPrice.toFixed(6)}
             </p>
           </div>
-          <div className="text-center p-3 rounded-xl bg-purple-500/5 border border-purple-500/10">
+          <div className="text-center p-3 rounded-xl bg-yellow-600/5 border border-yellow-600/10">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Listing</p>
-            <p className="text-sm font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }}>
+            <p className="text-sm font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }}>
               $0.003600
             </p>
           </div>
@@ -273,7 +273,7 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
         <div className="grid grid-cols-2 gap-3 mt-3">
           <div className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.05]">
             <span className="text-[10px] text-muted-foreground">Liquidity</span>
-            <span className="text-[11px] font-bold text-cyan-400">${parseFloat(price?.liquidity ?? "0").toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
+            <span className="text-[11px] font-bold text-amber-300">${parseFloat(price?.liquidity ?? "0").toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
           </div>
           <div className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.05]">
             <span className="text-[10px] text-muted-foreground">Circulating</span>
@@ -292,9 +292,9 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
           </p>
         </div>
         <div className="premium-card rounded-xl p-3 text-center" data-testid="card-main-tokens">
-          <Coins className="w-4 h-4 mx-auto text-purple-400 mb-1" />
+          <Coins className="w-4 h-4 mx-auto text-yellow-300 mb-1" />
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Staked Tokens</p>
-          <p className="text-sm font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-main-tokens">
+          <p className="text-sm font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }} data-testid="text-main-tokens">
             {mainBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
           </p>
         </div>
@@ -334,11 +334,11 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
             </div>
             <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Entry Price</p>
-              <p className="text-sm font-bold text-cyan-400" style={{ fontFamily: "var(--font-display)" }}>${parseFloat(plan.buyPriceAtEntry).toFixed(6)}</p>
+              <p className="text-sm font-bold text-amber-300" style={{ fontFamily: "var(--font-display)" }}>${parseFloat(plan.buyPriceAtEntry).toFixed(6)}</p>
             </div>
             <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Days Left</p>
-              <p className="text-sm font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }}>{daysLeft} days</p>
+              <p className="text-sm font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }}>{daysLeft} days</p>
             </div>
           </div>
 
@@ -349,7 +349,7 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
               <span>{progressPct.toFixed(1)}%</span>
             </div>
             <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
-              <div className="h-full rounded-full bg-gradient-to-r from-purple-500 to-cyan-500 transition-all duration-500" style={{ width: `${progressPct}%` }} />
+              <div className="h-full rounded-full bg-gradient-to-r from-yellow-600 to-amber-400 transition-all duration-500" style={{ width: `${progressPct}%` }} />
             </div>
           </div>
 
@@ -427,7 +427,7 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
             </div>
             <button
               onClick={() => setSellRewardAmount(rewardBalance.toFixed(8))}
-              className="px-2 text-[10px] text-purple-400 hover:text-purple-300 font-medium uppercase tracking-wider shrink-0"
+              className="px-2 text-[10px] text-yellow-300 hover:text-yellow-200 font-medium uppercase tracking-wider shrink-0"
               data-testid="button-max-rewards"
             >
               MAX
@@ -454,8 +454,8 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
       {/* New Stake Form — always visible so users can start additional plans */}
       <div className="glass-card rounded-2xl p-5 space-y-4" data-testid="card-new-stake">
           <div className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
-              <Coins className="h-4 w-4 text-purple-400" />
+            <div className="h-9 w-9 rounded-xl bg-yellow-600/15 flex items-center justify-center">
+              <Coins className="h-4 w-4 text-yellow-300" />
             </div>
             <div>
               <p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Start Paid Staking</p>
@@ -468,7 +468,7 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
               <span className="text-xs text-muted-foreground">USDT Amount to Stake</span>
               <button
                 onClick={() => setStakeAmount(usdtBalance.toFixed(2))}
-                className="text-[10px] text-purple-400 hover:text-purple-300 font-medium uppercase tracking-wider"
+                className="text-[10px] text-yellow-300 hover:text-yellow-200 font-medium uppercase tracking-wider"
                 data-testid="button-max-stake"
               >
                 MAX
@@ -493,11 +493,11 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
           </div>
 
           {previewTokens && (
-            <div className="space-y-2 p-3 rounded-xl bg-purple-500/5 border border-purple-500/15">
-              <p className="text-[10px] text-purple-400 uppercase tracking-wider font-medium">Stake Preview</p>
+            <div className="space-y-2 p-3 rounded-xl bg-yellow-600/5 border border-yellow-600/15">
+              <p className="text-[10px] text-yellow-300 uppercase tracking-wider font-medium">Stake Preview</p>
               <div className="grid grid-cols-2 gap-2 text-xs">
                 <div className="flex justify-between"><span className="text-muted-foreground">Entry price</span><span className="font-medium">${buyPrice.toFixed(6)}</span></div>
-                <div className="flex justify-between"><span className="text-muted-foreground">Tokens minted</span><span className="font-bold text-purple-400">{previewTokens.minted} M</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Tokens minted</span><span className="font-bold text-yellow-300">{previewTokens.minted} M</span></div>
                 <div className="flex justify-between col-span-2 pt-1 border-t border-white/[0.05]">
                   <span className="text-muted-foreground">Daily reward</span>
                   <span className="font-bold text-amber-400">${previewTokens.dailyReward} USDT value/day</span>
@@ -529,7 +529,7 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
       {data && (data.overrideIncome?.length > 0 || data.tokenTransactions?.length > 0) && (
         <div className="glass-card rounded-2xl p-5 space-y-3" data-testid="card-transactions">
           <div className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-cyan-400" />
+            <BarChart3 className="w-4 h-4 text-amber-300" />
             <p className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>Transaction History</p>
           </div>
 
@@ -554,7 +554,7 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
               {data.tokenTransactions.slice(0, 15).map((tx) => (
                 <div key={tx.id} className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.04]" data-testid={`row-token-tx-${tx.id}`}>
                   <div>
-                    <p className="text-[10px] font-medium capitalize text-purple-300">{tx.txType.replace(/_/g, " ")}</p>
+                    <p className="text-[10px] font-medium capitalize text-yellow-200">{tx.txType.replace(/_/g, " ")}</p>
                     <p className="text-[9px] text-muted-foreground">{tx.note ?? ""} · {new Date(tx.createdAt).toLocaleDateString()}</p>
                   </div>
                   <div className="text-right">
@@ -573,10 +573,10 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
         <div className="space-y-2.5">
           {[
             { icon: DollarSign, color: "text-emerald-400", title: "Deposit USDT", desc: "Admin credits USDT to your account. Use it to stake." },
-            { icon: Coins, color: "text-purple-400", title: "90% Tokens Minted", desc: "At current buy price — 70% staked for you, 20% to admin wallet." },
+            { icon: Coins, color: "text-yellow-300", title: "90% Tokens Minted", desc: "At current buy price — 70% staked for you, 20% to admin wallet." },
             { icon: TrendingUp, color: "text-amber-400", title: "0.3% Daily Rewards", desc: "Based on your original USDT investment. Claim any time, once per day." },
             { icon: Flame, color: "text-orange-400", title: "Sell Rewards → Price Rises", desc: "Reward tokens burn from supply when sold, raising M token price." },
-            { icon: CheckCircle2, color: "text-cyan-400", title: "Unstake After 10 Months", desc: "70% tokens sold at sell price + 20% of original USDT returned." },
+            { icon: CheckCircle2, color: "text-amber-300", title: "Unstake After 10 Months", desc: "70% tokens sold at sell price + 20% of original USDT returned." },
           ].map((item) => (
             <div key={item.title} className="flex items-start gap-3">
               <div className="w-7 h-7 rounded-lg bg-white/[0.03] border border-white/[0.06] flex items-center justify-center shrink-0">

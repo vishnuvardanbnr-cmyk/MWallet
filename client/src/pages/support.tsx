@@ -113,7 +113,7 @@ function NewTicketForm({ onSubmit, onCancel }: { onSubmit: (subject: string, cat
             placeholder="Brief description of your issue"
             value={subject}
             onChange={(e) => setSubject(e.target.value)}
-            className="bg-white/[0.03] border-purple-500/20"
+            className="bg-white/[0.03] border-yellow-600/20"
             data-testid="input-ticket-subject"
           />
         </div>
@@ -122,7 +122,7 @@ function NewTicketForm({ onSubmit, onCancel }: { onSubmit: (subject: string, cat
           <div className="space-y-2">
             <label className="text-sm text-muted-foreground">Category</label>
             <Select value={category} onValueChange={setCategory} data-testid="select-ticket-category">
-              <SelectTrigger className="bg-white/[0.03] border-purple-500/20" data-testid="select-ticket-category">
+              <SelectTrigger className="bg-white/[0.03] border-yellow-600/20" data-testid="select-ticket-category">
                 <SelectValue placeholder="Select category" />
               </SelectTrigger>
               <SelectContent>
@@ -135,7 +135,7 @@ function NewTicketForm({ onSubmit, onCancel }: { onSubmit: (subject: string, cat
           <div className="space-y-2">
             <label className="text-sm text-muted-foreground">Priority</label>
             <Select value={priority} onValueChange={setPriority} data-testid="select-ticket-priority">
-              <SelectTrigger className="bg-white/[0.03] border-purple-500/20" data-testid="select-ticket-priority">
+              <SelectTrigger className="bg-white/[0.03] border-yellow-600/20" data-testid="select-ticket-priority">
                 <SelectValue placeholder="Select priority" />
               </SelectTrigger>
               <SelectContent>
@@ -155,7 +155,7 @@ function NewTicketForm({ onSubmit, onCancel }: { onSubmit: (subject: string, cat
             value={message}
             onChange={(e) => setMessage(e.target.value)}
             rows={4}
-            className="w-full px-3 py-2 rounded-md bg-white/[0.03] border border-purple-500/20 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500/30"
+            className="w-full px-3 py-2 rounded-md bg-white/[0.03] border border-yellow-600/20 text-sm resize-none focus:outline-none focus:ring-2 focus:ring-purple-500/30"
             data-testid="input-ticket-message"
           />
         </div>
@@ -163,7 +163,7 @@ function NewTicketForm({ onSubmit, onCancel }: { onSubmit: (subject: string, cat
         <div className="flex gap-3">
           <button
             onClick={onCancel}
-            className="flex-1 py-2.5 px-4 rounded-xl border border-purple-500/20 text-sm font-medium text-muted-foreground hover:bg-white/[0.03] transition-colors"
+            className="flex-1 py-2.5 px-4 rounded-xl border border-yellow-600/20 text-sm font-medium text-muted-foreground hover:bg-white/[0.03] transition-colors"
             data-testid="button-cancel-ticket"
           >
             Cancel
@@ -218,7 +218,7 @@ function ChatView({ messages, ticket, account, onSend, onBack, onClose, onReopen
 
   return (
     <div className="glass-card rounded-2xl overflow-hidden slide-in gradient-border flex flex-col" style={{ height: "calc(100vh - 220px)", minHeight: "400px" }} data-testid="card-chat">
-      <div className="p-4 border-b border-purple-500/10 flex items-center justify-between">
+      <div className="p-4 border-b border-yellow-600/10 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <button
             onClick={onBack}
@@ -276,13 +276,13 @@ function ChatView({ messages, ticket, account, onSend, onBack, onClose, onReopen
             <div key={msg.id} className={`flex ${isMe ? "justify-end" : "justify-start"}`} data-testid={`message-${msg.id}`}>
               <div className={`max-w-[80%] rounded-2xl px-4 py-2.5 ${
                 isMe
-                  ? "bg-gradient-to-r from-purple-600/30 to-amber-500/20 border border-purple-500/20"
+                  ? "bg-gradient-to-r from-amber-600/20 to-yellow-500/20 border border-yellow-600/20"
                   : isAdminMsg
-                    ? "bg-gradient-to-r from-emerald-600/20 to-cyan-500/10 border border-emerald-500/20"
+                    ? "bg-gradient-to-r from-emerald-600/20 to-amber-400/10 border border-emerald-500/20"
                     : "bg-white/[0.05] border border-white/[0.08]"
               }`}>
                 <div className="flex items-center gap-2 mb-1">
-                  <span className={`text-[10px] font-medium ${isAdminMsg ? "text-emerald-400" : "text-purple-400"}`}>
+                  <span className={`text-[10px] font-medium ${isAdminMsg ? "text-emerald-400" : "text-yellow-300"}`}>
                     {isAdminMsg ? "Support Team" : isMe ? "You" : "User"}
                   </span>
                   <span className="text-[10px] text-muted-foreground">{formatTime(msg.createdAt)}</span>
@@ -296,7 +296,7 @@ function ChatView({ messages, ticket, account, onSend, onBack, onClose, onReopen
       </div>
 
       {ticket.status !== "closed" && (
-        <div className="p-3 border-t border-purple-500/10">
+        <div className="p-3 border-t border-yellow-600/10">
           <div className="flex gap-2">
             <Input
               ref={inputRef}
@@ -304,7 +304,7 @@ function ChatView({ messages, ticket, account, onSend, onBack, onClose, onReopen
               value={input}
               onChange={(e) => setInput(e.target.value)}
               onKeyDown={handleKeyDown}
-              className="bg-white/[0.03] border-purple-500/20"
+              className="bg-white/[0.03] border-yellow-600/20"
               data-testid="input-chat-message"
             />
             <button
@@ -327,8 +327,8 @@ function TicketList({ tickets, onSelect, onNewTicket, isAdmin = false }: { ticke
     <div className="glass-card rounded-2xl p-6 slide-in gradient-border" style={{ animationDelay: '0.15s' }} data-testid="card-tickets">
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
-            <Ticket className="h-4 w-4 text-purple-400" />
+          <div className="h-9 w-9 rounded-xl bg-yellow-600/15 flex items-center justify-center">
+            <Ticket className="h-4 w-4 text-yellow-300" />
           </div>
           <div>
             <h2 className="text-lg font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }}>My Tickets</h2>
@@ -358,12 +358,12 @@ function TicketList({ tickets, onSelect, onNewTicket, isAdmin = false }: { ticke
             <button
               key={ticket.id}
               onClick={() => onSelect(ticket.id)}
-              className="w-full p-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-transparent hover:border-purple-500/10 transition-all text-left group"
+              className="w-full p-3 rounded-xl bg-white/[0.03] hover:bg-white/[0.06] border border-transparent hover:border-yellow-600/10 transition-all text-left group"
               data-testid={`ticket-item-${ticket.id}`}
             >
               <div className="flex items-center justify-between mb-1">
                 <div className="flex items-center gap-2">
-                  <span className="text-sm font-medium group-hover:text-purple-300 transition-colors">{ticket.subject}</span>
+                  <span className="text-sm font-medium group-hover:text-yellow-200 transition-colors">{ticket.subject}</span>
                   <Badge variant="outline" className={`text-[9px] ${getStatusColor(ticket.status)}`}>
                     {getStatusIcon(ticket.status)}
                     <span className="ml-1">{ticket.status.replace("_", " ")}</span>
@@ -378,7 +378,7 @@ function TicketList({ tickets, onSelect, onNewTicket, isAdmin = false }: { ticke
                 {isAdmin && (
                   <>
                     <span className="text-[11px] text-muted-foreground/50">&middot;</span>
-                    <span className="text-[11px] font-mono text-purple-400/70">{ticket.walletAddress.slice(0, 6)}...{ticket.walletAddress.slice(-4)}</span>
+                    <span className="text-[11px] font-mono text-yellow-300/70">{ticket.walletAddress.slice(0, 6)}...{ticket.walletAddress.slice(-4)}</span>
                   </>
                 )}
                 {ticket.priority === "high" || ticket.priority === "urgent" ? (
@@ -452,7 +452,7 @@ export default function Support({ account, isAdmin = false }: SupportProps) {
           <div className="glass-card rounded-2xl p-6 slide-in" style={{ animationDelay: '0.2s' }} data-testid="card-faq">
             <div className="flex items-center gap-3 mb-6">
               <div className="h-9 w-9 rounded-xl gradient-icon flex items-center justify-center">
-                <HelpCircle className="h-4 w-4 text-purple-400" />
+                <HelpCircle className="h-4 w-4 text-yellow-300" />
               </div>
               <div>
                 <h2 className="text-lg font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }}>FAQ</h2>
@@ -461,7 +461,7 @@ export default function Support({ account, isAdmin = false }: SupportProps) {
             </div>
             <Accordion type="single" collapsible className="w-full" data-testid="accordion-faq">
               {faqs.map((faq, index) => (
-                <AccordionItem key={index} value={`item-${index}`} className="border-purple-500/10" data-testid={`faq-item-${index}`}>
+                <AccordionItem key={index} value={`item-${index}`} className="border-yellow-600/10" data-testid={`faq-item-${index}`}>
                   <AccordionTrigger className="text-sm hover:no-underline" data-testid={`faq-trigger-${index}`}>{faq.question}</AccordionTrigger>
                   <AccordionContent data-testid={`faq-content-${index}`}>
                     <p className="text-muted-foreground text-sm">{faq.answer}</p>

@@ -131,7 +131,7 @@ export default function DeepPlacementPage({ userInfo, account }: DeepPlacementPa
         <p className="text-sm font-medium mb-3">Select a Node for Placement</p>
         {loading ? (
           <div className="flex items-center justify-center py-10">
-            <Loader2 className="h-6 w-6 animate-spin text-purple-400" />
+            <Loader2 className="h-6 w-6 animate-spin text-yellow-300" />
           </div>
         ) : tree.length === 0 ? (
           <div className="text-center py-8">
@@ -150,16 +150,16 @@ export default function DeepPlacementPage({ userInfo, account }: DeepPlacementPa
                   disabled={!hasSlots}
                   className={`w-full text-left p-3 rounded-xl border transition-all ${
                     isSelected
-                      ? "border-purple-500/50 bg-purple-500/10"
+                      ? "border-purple-500/50 bg-yellow-600/10"
                       : hasSlots
-                        ? "border-white/[0.06] bg-white/[0.02] hover:border-purple-500/20"
+                        ? "border-white/[0.06] bg-white/[0.02] hover:border-yellow-600/20"
                         : "border-white/[0.04] bg-white/[0.01] opacity-50"
                   }`}
                   data-testid={`button-dp-node-${node.userId}`}
                 >
                   <div className="flex items-center justify-between">
                     <div className="flex items-center gap-2">
-                      <div className={`h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold ${isSelected ? "bg-purple-500/20 text-purple-400" : "bg-white/[0.05] text-muted-foreground"}`}>
+                      <div className={`h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold ${isSelected ? "bg-yellow-600/20 text-yellow-300" : "bg-white/[0.05] text-muted-foreground"}`}>
                         {node.userId}
                       </div>
                       <div>
@@ -174,12 +174,12 @@ export default function DeepPlacementPage({ userInfo, account }: DeepPlacementPa
                         <Badge variant="outline" className="text-[9px] border-emerald-500/20 text-emerald-400">L Open</Badge>
                       )}
                       {node.hasRightSlot && (
-                        <Badge variant="outline" className="text-[9px] border-cyan-500/20 text-cyan-400">R Open</Badge>
+                        <Badge variant="outline" className="text-[9px] border-amber-600/20 text-amber-300">R Open</Badge>
                       )}
                       {!hasSlots && (
                         <Badge variant="outline" className="text-[9px] border-muted-foreground/20 text-muted-foreground">Full</Badge>
                       )}
-                      {isSelected && <CheckCircle className="h-4 w-4 text-purple-400" />}
+                      {isSelected && <CheckCircle className="h-4 w-4 text-yellow-300" />}
                     </div>
                   </div>
                 </button>

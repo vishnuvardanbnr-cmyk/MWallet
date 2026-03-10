@@ -106,8 +106,8 @@ export default function Settings({ account, userInfo, profileOnChain, saveProfil
 
       <div className="glass-card rounded-2xl p-5 slide-in gradient-border" style={{ animationDelay: '0.15s' }} data-testid="card-sponsor-info">
         <div className="flex items-center gap-2 mb-4">
-          <div className="h-8 w-8 rounded-xl bg-purple-500/15 flex items-center justify-center">
-            <Shield className="h-4 w-4 text-purple-400" />
+          <div className="h-8 w-8 rounded-xl bg-yellow-600/15 flex items-center justify-center">
+            <Shield className="h-4 w-4 text-yellow-300" />
           </div>
           <h3 className="text-sm font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }}>Sponsor Information</h3>
         </div>
@@ -120,7 +120,7 @@ export default function Settings({ account, userInfo, profileOnChain, saveProfil
           </div>
         ) : sponsorLoading ? (
           <div className="flex items-center justify-center py-4 gap-2">
-            <Loader2 className="h-4 w-4 animate-spin text-purple-400" />
+            <Loader2 className="h-4 w-4 animate-spin text-yellow-300" />
             <p className="text-sm text-muted-foreground">Loading sponsor details...</p>
           </div>
         ) : (
@@ -133,18 +133,18 @@ export default function Settings({ account, userInfo, profileOnChain, saveProfil
                 </p>
               </div>
               {sponsorPackage > 0 && (
-                <Badge variant="outline" className="text-[10px] border-purple-500/20 text-purple-400" data-testid="badge-sponsor-package">
+                <Badge variant="outline" className="text-[10px] border-yellow-600/20 text-yellow-300" data-testid="badge-sponsor-package">
                   {PACKAGE_NAMES[sponsorPackage] || "Unknown"}
                 </Badge>
               )}
             </div>
 
-            <div className="h-px bg-gradient-to-r from-transparent via-purple-500/10 to-transparent" />
+            <div className="h-px bg-gradient-to-r from-transparent via-yellow-500/10 to-transparent" />
 
             <div>
               <p className="text-xs text-muted-foreground mb-0.5">Sponsor Wallet</p>
               <div className="flex items-center gap-2">
-                <p className="font-mono text-xs text-purple-300/80" data-testid="text-sponsor-wallet">{shortenAddress(userInfo.sponsor)}</p>
+                <p className="font-mono text-xs text-yellow-200/80" data-testid="text-sponsor-wallet">{shortenAddress(userInfo.sponsor)}</p>
                 <button
                   onClick={() => {
                     navigator.clipboard.writeText(userInfo.sponsor);
@@ -162,10 +162,10 @@ export default function Settings({ account, userInfo, profileOnChain, saveProfil
 
             {sponsorEmail && (
               <>
-                <div className="h-px bg-gradient-to-r from-transparent via-purple-500/10 to-transparent" />
+                <div className="h-px bg-gradient-to-r from-transparent via-yellow-500/10 to-transparent" />
                 <div>
                   <p className="text-xs text-muted-foreground mb-0.5">Sponsor Email</p>
-                  <p className="text-xs text-purple-300/80" data-testid="text-sponsor-email">{sponsorEmail}</p>
+                  <p className="text-xs text-yellow-200/80" data-testid="text-sponsor-email">{sponsorEmail}</p>
                 </div>
               </>
             )}
@@ -191,14 +191,14 @@ export default function Settings({ account, userInfo, profileOnChain, saveProfil
                 placeholder={field.placeholder}
                 value={field.value}
                 onChange={(e) => field.setter(e.target.value)}
-                className="bg-white/[0.03] border-purple-500/20"
+                className="bg-white/[0.03] border-yellow-600/20"
                 data-testid={`input-${field.label.toLowerCase().replace(" ", "-")}`}
               />
             </div>
           ))}
         </div>
 
-        <div className="h-px bg-gradient-to-r from-transparent via-purple-500/20 to-transparent my-6" />
+        <div className="h-px bg-gradient-to-r from-transparent via-yellow-500/20 to-transparent my-6" />
 
         <button
           onClick={handleSave}

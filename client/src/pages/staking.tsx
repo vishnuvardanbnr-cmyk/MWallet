@@ -228,7 +228,7 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <Loader2 className="h-8 w-8 animate-spin text-purple-400" />
+        <Loader2 className="h-8 w-8 animate-spin text-yellow-300" />
       </div>
     );
   }
@@ -246,8 +246,8 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
           <ArrowLeft className="h-4 w-4" /> Back to Dashboard
         </button>
         <div className="flex items-center gap-3">
-          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-amber-500/20 via-purple-500/20 to-cyan-500/20 flex items-center justify-center">
-            <Coins className="h-6 w-6 text-purple-400" />
+          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-amber-500/20 via-yellow-500/20 to-amber-400/20 flex items-center justify-center">
+            <Coins className="h-6 w-6 text-yellow-300" />
           </div>
           <div>
             <h1 className="text-2xl font-bold" data-testid="text-staking-details-title" style={{ fontFamily: "var(--font-display)" }}>
@@ -261,10 +261,10 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 slide-in" style={{ animationDelay: "0.05s" }}>
         <div className="glass-card rounded-2xl p-4">
           <div className="flex items-center gap-1.5 mb-2">
-            <Coins className="h-3.5 w-3.5 text-purple-400" />
+            <Coins className="h-3.5 w-3.5 text-yellow-300" />
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider">M Coin Balance</p>
           </div>
-          <p className="text-xl font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-mwallet-balance">
+          <p className="text-xl font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }} data-testid="text-mwallet-balance">
             {parseFloat(mwallet.balance).toFixed(2)}
           </p>
         </div>
@@ -288,7 +288,7 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
         </div>
         <div className="glass-card rounded-2xl p-4">
           <div className="flex items-center gap-1.5 mb-2">
-            <Clock className="h-3.5 w-3.5 text-cyan-400" />
+            <Clock className="h-3.5 w-3.5 text-amber-300" />
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Plan Duration</p>
           </div>
           <p className="text-xl font-bold" style={{ fontFamily: "var(--font-display)" }} data-testid="text-plan-duration">
@@ -309,7 +309,7 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
               ) : (
                 <Badge variant="outline" className="border-muted-foreground/30 text-muted-foreground">Completed</Badge>
               )}
-              <Badge variant="outline" className="border-purple-500/30 text-purple-400">
+              <Badge variant="outline" className="border-yellow-600/30 text-yellow-300">
                 10% Return
               </Badge>
             </div>
@@ -319,7 +319,7 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
             <div className="flex flex-wrap items-end justify-between gap-2">
               <div>
                 <p className="text-xs text-muted-foreground">Tokens Claimed</p>
-                <p className="text-2xl font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }}>
+                <p className="text-2xl font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }}>
                   {progress.claimed.toFixed(2)}
                 </p>
               </div>
@@ -332,7 +332,7 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
             </div>
             <div className="h-3 rounded-full bg-white/[0.06] overflow-hidden">
               <div
-                className="h-full rounded-full bg-gradient-to-r from-amber-500 via-purple-500 to-cyan-500 transition-all duration-500"
+                className="h-full rounded-full bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-400 transition-all duration-500"
                 style={{ width: `${progress.percent}%` }}
               />
             </div>
@@ -413,7 +413,7 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
 
         {claimsLoading ? (
           <div className="flex items-center justify-center py-10">
-            <Loader2 className="h-6 w-6 animate-spin text-purple-400" />
+            <Loader2 className="h-6 w-6 animate-spin text-yellow-300" />
           </div>
         ) : claims.length > 0 ? (
           <div className="divide-y divide-white/[0.04]">
@@ -497,7 +497,7 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
             {allPlans.map((p) => (
               <div key={p.id} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]" data-testid={`row-plan-${p.id}`}>
                 <div className="flex items-center gap-3">
-                  <Clock className="h-4 w-4 text-purple-400" />
+                  <Clock className="h-4 w-4 text-yellow-300" />
                   <div>
                     <p className="text-sm font-medium">{p.planMonths}-month plan</p>
                     <p className="text-[11px] text-muted-foreground">{shortDate(p.startDate)} - {shortDate(p.endDate)}</p>
@@ -544,11 +544,11 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
         <div className="grid grid-cols-2 gap-3 mb-5">
           <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Left Leg Volume</p>
-            <p className="text-sm font-bold text-cyan-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-left-leg">{formatUSD(leftUSDT)}</p>
+            <p className="text-sm font-bold text-amber-300" style={{ fontFamily: "var(--font-display)" }} data-testid="text-left-leg">{formatUSD(leftUSDT)}</p>
           </div>
           <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Right Leg Volume</p>
-            <p className="text-sm font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-right-leg">{formatUSD(rightUSDT)}</p>
+            <p className="text-sm font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }} data-testid="text-right-leg">{formatUSD(rightUSDT)}</p>
           </div>
           <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Current Rank</p>
@@ -569,7 +569,7 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
           <div className="mb-5 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]">
             <div className="flex items-center justify-between mb-2">
               <div className="flex items-center gap-1.5">
-                <TrendingUp className="h-3.5 w-3.5 text-purple-400" />
+                <TrendingUp className="h-3.5 w-3.5 text-yellow-300" />
                 <span className="text-xs font-semibold" style={{ fontFamily: "var(--font-display)" }}>Progress to {nextRank.title}</span>
               </div>
               <span className="text-[11px] text-muted-foreground">{progressPct.toFixed(1)}%</span>
@@ -665,7 +665,7 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
                   return (
                     <tr
                       key={r.rank}
-                      className={`border-b border-white/[0.04] transition-colors ${isCurrent ? "bg-amber-500/10" : isNext ? "bg-purple-500/5" : ""}`}
+                      className={`border-b border-white/[0.04] transition-colors ${isCurrent ? "bg-amber-500/10" : isNext ? "bg-yellow-600/5" : ""}`}
                       data-testid={`row-rank-${r.rank}`}
                     >
                       <td className="py-2.5 pr-3">
@@ -673,10 +673,10 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
                           <Star className={`h-3 w-3 shrink-0 ${isAchieved ? "text-amber-400" : "text-muted-foreground/30"}`} />
                           <span className={`font-semibold ${isCurrent ? "text-amber-400" : isAchieved ? "text-foreground" : "text-muted-foreground"}`} style={{ fontFamily: "var(--font-display)" }}>{r.title}</span>
                           {isCurrent && <Badge className="text-[9px] bg-amber-500/15 text-amber-400 border-amber-500/25 ml-1 py-0">YOU</Badge>}
-                          {isNext && <Badge className="text-[9px] bg-purple-500/10 text-purple-400 border-purple-500/20 ml-1 py-0">NEXT</Badge>}
+                          {isNext && <Badge className="text-[9px] bg-yellow-600/10 text-yellow-300 border-yellow-600/20 ml-1 py-0">NEXT</Badge>}
                         </div>
                       </td>
-                      <td className={`py-2.5 pr-3 text-right ${isAchieved ? "text-cyan-400" : "text-muted-foreground"}`}>{formatUSD(r.totalQual / 2)}</td>
+                      <td className={`py-2.5 pr-3 text-right ${isAchieved ? "text-amber-300" : "text-muted-foreground"}`}>{formatUSD(r.totalQual / 2)}</td>
                       <td className={`py-2.5 pr-3 text-right font-medium ${isAchieved ? "text-emerald-400" : "text-muted-foreground"}`}>{r.stakingPct}%</td>
                       <td className="py-2 text-right">
                         {isClaimed ? (

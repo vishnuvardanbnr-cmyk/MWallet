@@ -211,13 +211,13 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
   return (
     <div className="p-4 sm:p-6 space-y-5 relative z-10">
       <div className="relative rounded-2xl overflow-hidden slide-in" data-testid="card-welcome-banner">
-        <div className="absolute inset-0 bg-gradient-to-br from-purple-600/10 via-transparent to-cyan-600/10" />
+        <div className="absolute inset-0 bg-gradient-to-br from-amber-600/8 via-transparent to-yellow-600/8" />
         <div className="absolute top-0 right-0 w-48 h-48 bg-gradient-to-bl from-amber-500/8 to-transparent rounded-full blur-2xl" />
         <div className="earnings-card rounded-2xl overflow-hidden">
           <div className="relative p-6 pb-5">
             <div className="flex items-center gap-4 mb-1">
               <div className="relative">
-                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-amber-500 via-purple-500 to-cyan-500 flex items-center justify-center shrink-0 shadow-lg shadow-purple-500/25">
+                <div className="h-14 w-14 rounded-2xl bg-gradient-to-br from-amber-500 via-yellow-500 to-amber-400 flex items-center justify-center shrink-0 shadow-lg shadow-amber-500/25">
                   <User className="h-7 w-7 text-white" />
                 </div>
                 {isActive && <div className="absolute -bottom-0.5 -right-0.5 w-4 h-4 rounded-full bg-emerald-500 border-2 border-[#0a0e1a] flex items-center justify-center"><Zap className="h-2.5 w-2.5 text-white" /></div>}
@@ -232,7 +232,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
                   <Badge variant={isActive ? "default" : "destructive"} className="text-[10px]" data-testid="badge-status">
                     {statusLabel}
                   </Badge>
-                  <Badge variant="outline" className="text-[10px] border-purple-500/30 bg-purple-500/5" data-testid="badge-package">
+                  <Badge variant="outline" className="text-[10px] border-yellow-600/30 bg-yellow-600/5" data-testid="badge-package">
                     {packageName}
                   </Badge>
                   {starRank && (
@@ -244,7 +244,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
               </div>
               <button
                 onClick={() => setLocation("/profile")}
-                className="text-[11px] text-purple-400 flex items-center gap-1 shrink-0 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/20 transition-all hover:bg-purple-500/15"
+                className="text-[11px] text-yellow-300 flex items-center gap-1 shrink-0 px-3 py-1.5 rounded-lg bg-yellow-600/10 border border-yellow-600/20 transition-all hover:bg-yellow-600/15"
                 data-testid="link-edit-profile"
               >
                 Edit <ChevronRight className="h-3 w-3" />
@@ -256,7 +256,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
             <div className="grid grid-cols-3 divide-x divide-white/[0.06]">
               <div className="p-4 cursor-pointer transition-colors hover:bg-white/[0.02]" onClick={copyUserId} data-testid="button-copy-user-id">
                 <div className="flex items-center gap-1.5 mb-1.5">
-                  <Shield className="h-3 w-3 text-purple-400" />
+                  <Shield className="h-3 w-3 text-yellow-300" />
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">User ID</p>
                 </div>
                 <div className="flex items-center gap-1.5">
@@ -267,10 +267,10 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
 
               <div className="p-4" data-testid="text-profile-wallet">
                 <div className="flex items-center gap-1.5 mb-1.5">
-                  <Wallet className="h-3 w-3 text-cyan-400" />
+                  <Wallet className="h-3 w-3 text-amber-300" />
                   <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">Wallet</p>
                 </div>
-                <p className="text-sm font-medium font-mono truncate text-cyan-300/80">{shortenAddress(account)}</p>
+                <p className="text-sm font-medium font-mono truncate text-amber-200/80">{shortenAddress(account)}</p>
               </div>
 
               <div className="p-4" data-testid="text-profile-package">
@@ -287,8 +287,8 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
 
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
         <StatCard label="Wallet Balance" value={formatAmount(userInfo.walletBalance)} icon={DollarSign} iconColor="text-amber-400" accentGlow="bg-amber-500/15" delay="0.05s" />
-        <StatCard label="Total Earnings" value={formatAmount(incomeInfo.totalEarnings)} icon={TrendingUp} iconColor="text-purple-400" accentGlow="bg-purple-500/15" delay="0.1s" />
-        <StatCard label="Total Withdrawn" value={formatAmount(incomeInfo.totalWithdrawn)} icon={ArrowDownToLine} iconColor="text-cyan-400" accentGlow="bg-cyan-500/15" delay="0.15s" />
+        <StatCard label="Total Earnings" value={formatAmount(incomeInfo.totalEarnings)} icon={TrendingUp} iconColor="text-yellow-300" accentGlow="bg-yellow-600/15" delay="0.1s" />
+        <StatCard label="Total Withdrawn" value={formatAmount(incomeInfo.totalWithdrawn)} icon={ArrowDownToLine} iconColor="text-amber-300" accentGlow="bg-amber-600/15" delay="0.15s" />
         <StatCard label="Direct Refs" value={Number(userInfo.directReferralCount).toString()} icon={Users} iconColor="text-emerald-400" accentGlow="bg-emerald-500/15" delay="0.2s" />
       </div>
 
@@ -316,9 +316,9 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
             </div>
           </div>
           <div className="relative mt-3 pt-3 border-t border-white/[0.06] flex items-center justify-between text-[11px]">
-            <span className="text-muted-foreground">Left Team: <span className="text-cyan-400 font-medium">${leftUSDT.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+            <span className="text-muted-foreground">Left Team: <span className="text-amber-300 font-medium">${leftUSDT.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
             <span className="text-muted-foreground">Smaller Leg: <span className="text-amber-400 font-medium">${minLeg.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
-            <span className="text-muted-foreground">Right Team: <span className="text-cyan-400 font-medium">${rightUSDT.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
+            <span className="text-muted-foreground">Right Team: <span className="text-amber-300 font-medium">${rightUSDT.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span></span>
           </div>
         </div>
       )}
@@ -327,8 +327,8 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
         <div className="grid grid-cols-1 md:grid-cols-2 gap-3 sm:gap-4 slide-in" style={{ animationDelay: '0.22s' }}>
           <div className="glass-card rounded-2xl p-5" data-testid="card-max-income-progress">
             <div className="flex items-center gap-2 mb-3">
-              <div className="h-8 w-8 rounded-lg bg-purple-500/15 flex items-center justify-center">
-                <TrendingUp className="h-4 w-4 text-purple-400" />
+              <div className="h-8 w-8 rounded-lg bg-yellow-600/15 flex items-center justify-center">
+                <TrendingUp className="h-4 w-4 text-yellow-300" />
               </div>
               <div>
                 <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">Max Income Limit</p>
@@ -339,12 +339,12 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
                 className="h-full rounded-full transition-all duration-700"
                 style={{
                   width: `${Math.min(100, Number((incomeInfo.totalEarnings * BigInt(100)) / incomeInfo.maxIncome))}%`,
-                  background: 'linear-gradient(90deg, #a855f7, #ec4899)',
+                  background: 'linear-gradient(90deg, #a07820, #d4af37, #f0c040)',
                 }}
               />
             </div>
             <div className="flex items-center justify-between text-[11px]">
-              <span className="text-muted-foreground">Earned: <span className="text-purple-400 font-medium">${formatAmount(incomeInfo.totalEarnings)}</span></span>
+              <span className="text-muted-foreground">Earned: <span className="text-yellow-300 font-medium">${formatAmount(incomeInfo.totalEarnings)}</span></span>
               <span className="text-muted-foreground">Max: <span className="text-foreground font-medium">${formatAmount(incomeInfo.maxIncome)}</span></span>
             </div>
             {(() => {
@@ -449,7 +449,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
                       disabled={reactivating}
                       className={`p-2 rounded-lg text-center transition-all text-[11px] font-medium ${
                         selectedReactivatePkg === pkg
-                          ? "bg-purple-500/20 border border-purple-500/40 text-purple-400"
+                          ? "bg-yellow-600/20 border border-yellow-600/40 text-yellow-300"
                           : "bg-white/[0.03] border border-white/[0.06] text-muted-foreground hover:bg-white/[0.06]"
                       }`}
                       data-testid={`button-reactivate-pkg-${pkg}`}
@@ -562,8 +562,8 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
                 <defs>
                   <linearGradient id="poolGradient" x1="0%" y1="0%" x2="100%" y2="0%">
                     <stop offset="0%" stopColor="#f59e0b" />
-                    <stop offset="50%" stopColor="#a855f7" />
-                    <stop offset="100%" stopColor="#06b6d4" />
+                    <stop offset="50%" stopColor="#d4af37" />
+                    <stop offset="100%" stopColor="#c9a227" />
                   </linearGradient>
                 </defs>
               </svg>
@@ -574,7 +574,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
             </div>
             <button
               onClick={() => setLocation("/board")}
-              className="text-xs text-purple-400 flex items-center gap-1"
+              className="text-xs text-yellow-300 flex items-center gap-1"
               data-testid="link-view-pool"
             >
               View Board Pool <ChevronRight className="h-3 w-3" />
@@ -587,8 +587,8 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
         <div className="glass-card rounded-2xl p-6 slide-in" style={{ animationDelay: '0.35s' }} data-testid="card-staking-active">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-3">
-              <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-amber-500/20 via-purple-500/20 to-cyan-500/20 flex items-center justify-center">
-                <Coins className="h-5 w-5 text-purple-400" />
+              <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-amber-500/20 via-yellow-500/20 to-amber-400/20 flex items-center justify-center">
+                <Coins className="h-5 w-5 text-yellow-300" />
               </div>
               <div>
                 <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>
@@ -599,7 +599,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
             </div>
             <button
               onClick={() => setLocation("/staking")}
-              className="text-[11px] text-purple-400 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-purple-500/10 border border-purple-500/15"
+              className="text-[11px] text-yellow-300 flex items-center gap-1 px-3 py-1.5 rounded-lg bg-yellow-600/10 border border-yellow-600/15"
               data-testid="link-staking-details"
             >
               View Details <ChevronRight className="h-3 w-3" />
@@ -626,19 +626,19 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
             </div>
             <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
               <div className="flex items-center gap-1.5 mb-1">
-                <Timer className="h-3 w-3 text-purple-400" />
+                <Timer className="h-3 w-3 text-yellow-300" />
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Daily</p>
               </div>
-              <p className="text-sm font-bold text-purple-400" style={{ fontFamily: 'var(--font-display)' }}>
+              <p className="text-sm font-bold text-yellow-300" style={{ fontFamily: 'var(--font-display)' }}>
                 {parseFloat(stakingPlan.dailyTokens).toFixed(2)}
               </p>
             </div>
             <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
               <div className="flex items-center gap-1.5 mb-1">
-                <Clock className="h-3 w-3 text-cyan-400" />
+                <Clock className="h-3 w-3 text-amber-300" />
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Days Left</p>
               </div>
-              <p className="text-sm font-bold text-cyan-400" style={{ fontFamily: 'var(--font-display)' }}>
+              <p className="text-sm font-bold text-amber-300" style={{ fontFamily: 'var(--font-display)' }}>
                 {stakingProgress.daysLeft}
               </p>
             </div>
@@ -647,8 +647,8 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
       ) : (
         <div className="glass-card rounded-2xl p-6 slide-in" style={{ animationDelay: '0.35s' }} data-testid="card-staking-select">
           <div className="flex items-center gap-3 mb-5">
-            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-amber-500/20 via-purple-500/20 to-cyan-500/20 flex items-center justify-center">
-              <Coins className="h-5 w-5 text-purple-400" />
+            <div className="h-11 w-11 rounded-xl bg-gradient-to-br from-amber-500/20 via-yellow-500/20 to-amber-400/20 flex items-center justify-center">
+              <Coins className="h-5 w-5 text-yellow-300" />
             </div>
             <div>
               <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>
@@ -661,13 +661,13 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
           {stakingPlansComputed.length > 0 && (() => {
             const plan = stakingPlansComputed[0];
             return (
-              <div className="p-4 rounded-xl border-2 border-purple-500/40 bg-purple-500/5 mb-4" data-testid="card-staking-plan-15">
+              <div className="p-4 rounded-xl border-2 border-yellow-600/40 bg-yellow-600/5 mb-4" data-testid="card-staking-plan-15">
                 <div className="flex items-center justify-between mb-3">
                   <div className="flex items-center gap-2">
-                    <Clock className="h-4 w-4 text-purple-400" />
+                    <Clock className="h-4 w-4 text-yellow-300" />
                     <span className="font-bold text-sm" style={{ fontFamily: 'var(--font-display)' }}>10 Months</span>
                   </div>
-                  <Badge className="bg-purple-500/20 text-purple-400 border-purple-500/30">10% Return</Badge>
+                  <Badge className="bg-yellow-600/20 text-yellow-300 border-yellow-600/30">10% Return</Badge>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -680,8 +680,8 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
                   </div>
                 </div>
                 <div className="mt-2 flex items-center gap-1.5">
-                  <CheckCircle className="h-3.5 w-3.5 text-purple-400" />
-                  <span className="text-[11px] text-purple-400 font-medium">300 days · Token price $0.0036</span>
+                  <CheckCircle className="h-3.5 w-3.5 text-yellow-300" />
+                  <span className="text-[11px] text-yellow-300 font-medium">300 days · Token price $0.0036</span>
                 </div>
               </div>
             );

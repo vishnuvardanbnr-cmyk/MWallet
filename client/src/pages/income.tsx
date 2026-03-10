@@ -26,8 +26,8 @@ interface IncomeProps {
 
 const typeConfig: Record<string, { color: string; bg: string; border: string; icon: typeof Users }> = {
   "Direct Sponsor": { color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/10", icon: Users },
-  "Binary Matching": { color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/10", icon: GitBranch },
-  "Matching on Binary": { color: "text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-500/10", icon: Layers },
+  "Binary Matching": { color: "text-yellow-300", bg: "bg-yellow-600/10", border: "border-yellow-600/10", icon: GitBranch },
+  "Matching on Binary": { color: "text-amber-300", bg: "bg-amber-600/10", border: "border-amber-600/10", icon: Layers },
   "Withdrawal Match": { color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10", icon: RefreshCw },
 };
 
@@ -96,8 +96,8 @@ export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, 
   const pkg = userPackage;
   const incomeTypes = [
     { title: "Direct Sponsor", amount: incomeInfo.totalDirectIncome, icon: Users, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/10", gradient: "#f59e0b", description: DIRECT_SPONSOR_DESC[pkg] || "10-30% from direct referrals" },
-    { title: "Binary Matching", amount: incomeInfo.totalBinaryIncome + binaryInfo.claimableBinaryIncome, icon: GitBranch, color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/10", gradient: "#a855f7", description: BINARY_MATCH_DESC[pkg] || "30% of matching volume" },
-    { title: "Matching on Binary", amount: incomeInfo.totalMatchingOverrideIncome, icon: Layers, color: "text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-500/10", gradient: "#06b6d4", description: MATCHING_OVERRIDE_DESC[pkg] || "1% per level from downline binary income" },
+    { title: "Binary Matching", amount: incomeInfo.totalBinaryIncome + binaryInfo.claimableBinaryIncome, icon: GitBranch, color: "text-yellow-300", bg: "bg-yellow-600/10", border: "border-yellow-600/10", gradient: "#d4af37", description: BINARY_MATCH_DESC[pkg] || "30% of matching volume" },
+    { title: "Matching on Binary", amount: incomeInfo.totalMatchingOverrideIncome, icon: Layers, color: "text-amber-300", bg: "bg-amber-600/10", border: "border-amber-600/10", gradient: "#c9a227", description: MATCHING_OVERRIDE_DESC[pkg] || "1% per level from downline binary income" },
     { title: "Withdrawal Match", amount: incomeInfo.totalWithdrawalMatchIncome, icon: RefreshCw, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10", gradient: "#10b981", description: WITHDRAWAL_MATCH_DESC[pkg] || "0.5-5% from downline withdrawals" },
   ];
 
@@ -211,8 +211,8 @@ export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, 
           <div className="p-5">
             <div className="flex flex-wrap items-center justify-between gap-4">
               <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
-                  <GitBranch className="h-4 w-4 text-purple-400" />
+                <div className="h-9 w-9 rounded-xl bg-yellow-600/15 flex items-center justify-center">
+                  <GitBranch className="h-4 w-4 text-yellow-300" />
                 </div>
                 <div>
                   <p className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
@@ -226,7 +226,7 @@ export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, 
               <Button
                 onClick={handleClaim}
                 disabled={claiming}
-                className="bg-gradient-to-r from-amber-500 via-purple-500 to-cyan-500 text-white font-semibold px-6"
+                className="bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-400 text-white font-semibold px-6"
                 data-testid="button-claim-binary"
               >
                 {claiming ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
@@ -267,7 +267,7 @@ export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, 
               {item.title === "Binary Matching" && (
                 <button
                   onClick={() => navigate("/binary")}
-                  className="flex items-center gap-1 mt-3 text-[11px] font-medium text-purple-400 transition-colors"
+                  className="flex items-center gap-1 mt-3 text-[11px] font-medium text-yellow-300 transition-colors"
                   data-testid="link-binary-details"
                 >
                   View Details <ExternalLink className="h-3 w-3" />
@@ -288,12 +288,12 @@ export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, 
             ${formatAmount(binaryInfo.leftBusiness)}
           </p>
         </div>
-        <div className="glass-card rounded-2xl p-4 border border-cyan-500/10" data-testid="card-right-volume">
+        <div className="glass-card rounded-2xl p-4 border border-amber-600/10" data-testid="card-right-volume">
           <div className="flex items-center gap-2 mb-2">
-            <ArrowDownRight className="h-4 w-4 text-cyan-400" />
+            <ArrowDownRight className="h-4 w-4 text-amber-300" />
             <p className="text-xs text-muted-foreground uppercase tracking-wider">Right Volume</p>
           </div>
-          <p className="text-lg font-bold text-cyan-400" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-right-volume">
+          <p className="text-lg font-bold text-amber-300" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-right-volume">
             ${formatAmount(binaryInfo.rightBusiness)}
           </p>
         </div>
@@ -306,12 +306,12 @@ export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, 
             ${formatAmount(binaryInfo.carryLeft)}
           </p>
         </div>
-        <div className="glass-card rounded-2xl p-4 border border-cyan-500/10" data-testid="card-right-carry">
+        <div className="glass-card rounded-2xl p-4 border border-amber-600/10" data-testid="card-right-carry">
           <div className="flex items-center gap-2 mb-2">
-            <BarChart3 className="h-4 w-4 text-cyan-400" />
+            <BarChart3 className="h-4 w-4 text-amber-300" />
             <p className="text-xs text-muted-foreground uppercase tracking-wider">Right Carry</p>
           </div>
-          <p className="text-lg font-bold text-cyan-400" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-right-carry">
+          <p className="text-lg font-bold text-amber-300" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-right-carry">
             ${formatAmount(binaryInfo.carryRight)}
           </p>
         </div>
@@ -320,8 +320,8 @@ export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, 
       <div className="glass-card rounded-2xl slide-in" style={{ animationDelay: '0.38s' }} data-testid="card-slab-commission">
         <div className="p-5 border-b border-white/[0.06]">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-cyan-500/15 flex items-center justify-center">
-              <Layers className="h-4 w-4 text-cyan-400" />
+            <div className="h-9 w-9 rounded-xl bg-amber-600/15 flex items-center justify-center">
+              <Layers className="h-4 w-4 text-amber-300" />
             </div>
             <div>
               <h2 className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
@@ -334,9 +334,9 @@ export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, 
         <div className="p-5 space-y-3">
           {[
             { levels: "Lv 1-3", slabIdx: 0, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", gradient: "#10b981" },
-            { levels: "Lv 4-6", slabIdx: 1, color: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/20", gradient: "#a855f7" },
+            { levels: "Lv 4-6", slabIdx: 1, color: "text-yellow-300", bg: "bg-yellow-600/10", border: "border-yellow-600/20", gradient: "#d4af37" },
             { levels: "Lv 7-9", slabIdx: 2, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", gradient: "#f59e0b" },
-            { levels: "Lv 10-20", slabIdx: 3, color: "text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-500/20", gradient: "#06b6d4" },
+            { levels: "Lv 10-20", slabIdx: 3, color: "text-amber-300", bg: "bg-amber-600/10", border: "border-amber-600/20", gradient: "#c9a227" },
           ].map((slab) => {
             const rate = slabInfo ? Number(slabInfo.rates[slab.slabIdx]) / 100 : [30, 20, 10, 5][slab.slabIdx];
             const carryL = slabInfo ? slabInfo.carryLeftSlabs[slab.slabIdx] : 0n;
@@ -366,7 +366,7 @@ export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, 
                   </div>
                   <div className="px-3 py-2 text-center">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Right Carry</p>
-                    <p className="text-xs font-semibold text-cyan-400" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-slab-right-${slab.slabIdx}`}>
+                    <p className="text-xs font-semibold text-amber-300" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-slab-right-${slab.slabIdx}`}>
                       ${formatAmount(carryR)}
                     </p>
                   </div>
@@ -392,8 +392,8 @@ export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, 
       <div className="glass-card rounded-2xl slide-in" style={{ animationDelay: '0.4s' }} data-testid="card-income-transactions">
         <div className="p-5 border-b border-white/[0.06]">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-cyan-500/15 flex items-center justify-center">
-              <ArrowUpRight className="h-4 w-4 text-cyan-400" />
+            <div className="h-9 w-9 rounded-xl bg-amber-600/15 flex items-center justify-center">
+              <ArrowUpRight className="h-4 w-4 text-amber-300" />
             </div>
             <div>
               <h2 className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>

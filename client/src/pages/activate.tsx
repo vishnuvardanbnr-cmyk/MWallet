@@ -21,16 +21,16 @@ const ICON_COLORS = [
   "from-slate-300 to-slate-500",
   "from-amber-400 to-orange-500",
   "from-amber-300 to-yellow-400",
-  "from-purple-400 to-pink-500",
+  "from-amber-500 to-yellow-400",
   "from-rose-400 to-amber-400",
 ];
 const CARD_BORDERS = [
   "",
-  "border-cyan-500/20 hover:border-cyan-500/40",
+  "border-amber-600/20 hover:border-cyan-500/40",
   "border-slate-400/20 hover:border-slate-400/40",
   "border-amber-500/20 hover:border-amber-500/40",
   "border-yellow-400/20 hover:border-yellow-400/40",
-  "border-purple-500/20 hover:border-purple-500/40",
+  "border-yellow-600/20 hover:border-yellow-600/40",
   "border-rose-400/20 hover:border-rose-400/40",
 ];
 
@@ -98,7 +98,7 @@ export default function ActivatePage({ account, approveToken, activatePackage, f
         <Logo size="sm" />
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 text-sm text-muted-foreground/80 rounded-xl px-3 py-1.5 bg-white/[0.03] border border-white/[0.06]" data-testid="text-wallet-address">
-            <Wallet className="h-3.5 w-3.5 text-cyan-400" />
+            <Wallet className="h-3.5 w-3.5 text-amber-300" />
             <span className="font-mono text-xs">{shortenAddress(account)}</span>
           </div>
           <Button variant="ghost" size="icon" onClick={disconnect} className="text-muted-foreground hover:text-red-400" data-testid="button-disconnect">
@@ -109,9 +109,9 @@ export default function ActivatePage({ account, approveToken, activatePackage, f
 
       <div className="flex-1 flex flex-col items-center px-4 pb-6 relative z-10 overflow-y-auto" style={{ scrollBehavior: "smooth" }}>
         <div className="text-center mb-8 mt-4 slide-in">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-purple-500/10 border border-purple-500/20 mb-4">
-            <TrendingUp className="h-3.5 w-3.5 text-purple-400" />
-            <span className="text-[11px] font-medium text-purple-400" style={{ fontFamily: 'var(--font-display)' }}>Start Earning Today</span>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-600/10 border border-yellow-600/20 mb-4">
+            <TrendingUp className="h-3.5 w-3.5 text-yellow-300" />
+            <span className="text-[11px] font-medium text-yellow-300" style={{ fontFamily: 'var(--font-display)' }}>Start Earning Today</span>
           </div>
           <h1 className="text-3xl font-bold mb-2" data-testid="text-activate-title" style={{ fontFamily: 'var(--font-display)' }}>
             <span className="gradient-text">Choose Your Package</span>
@@ -161,7 +161,7 @@ export default function ActivatePage({ account, approveToken, activatePackage, f
 
                 <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all duration-300 ${
                   isSelected
-                    ? "bg-gradient-to-br from-amber-400 to-purple-500 shadow-md shadow-purple-500/30"
+                    ? "bg-gradient-to-br from-amber-400 to-yellow-400 shadow-md shadow-amber-500/30"
                     : "border border-white/[0.1]"
                 }`}>
                   {isSelected && <Check className="h-3 w-3 text-white" />}
@@ -173,8 +173,8 @@ export default function ActivatePage({ account, approveToken, activatePackage, f
 
         <div className="w-full max-w-lg premium-card rounded-xl p-5 mb-6 slide-in" style={{ animationDelay: '0.5s' }}>
           <div className="flex items-center gap-2 mb-4">
-            <div className="h-8 w-8 rounded-lg bg-cyan-500/15 flex items-center justify-center">
-              <Info className="h-4 w-4 text-cyan-400" />
+            <div className="h-8 w-8 rounded-lg bg-amber-600/15 flex items-center justify-center">
+              <Info className="h-4 w-4 text-amber-300" />
             </div>
             <span className="text-sm font-semibold" style={{ fontFamily: 'var(--font-display)' }}>
               <span className="gradient-text">What You Get</span>

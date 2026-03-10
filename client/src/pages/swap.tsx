@@ -166,7 +166,7 @@ export default function SwapPage({ account, fetchUserData }: SwapPageProps) {
       <div className="flex items-center justify-center py-20">
         <div className="text-center space-y-4">
           <div className="w-12 h-12 mx-auto rounded-xl gradient-icon flex items-center justify-center pulse-glow">
-            <Loader2 className="w-6 h-6 animate-spin text-purple-400" />
+            <Loader2 className="w-6 h-6 animate-spin text-yellow-300" />
           </div>
           <p className="text-sm text-muted-foreground">Loading swap data...</p>
         </div>
@@ -186,7 +186,7 @@ export default function SwapPage({ account, fetchUserData }: SwapPageProps) {
         <button
           onClick={() => syncRewards(false)}
           disabled={syncing}
-          className="inline-flex items-center gap-1.5 text-xs text-purple-400 hover:text-purple-300 transition-colors disabled:opacity-50"
+          className="inline-flex items-center gap-1.5 text-xs text-yellow-300 hover:text-yellow-200 transition-colors disabled:opacity-50"
           data-testid="button-sync-rewards"
         >
           <RefreshCw className={`w-3 h-3 ${syncing ? "animate-spin" : ""}`} />
@@ -222,7 +222,7 @@ export default function SwapPage({ account, fetchUserData }: SwapPageProps) {
         <div className="flex items-center justify-center gap-2 text-xs text-muted-foreground" data-testid="text-btc-price">
           <Bitcoin className="w-3.5 h-3.5 text-orange-400" />
           <span>1 BTC = ${btcPrice.toLocaleString()}</span>
-          <button onClick={fetchBtcPrice} className="text-purple-400 hover:text-purple-300 transition-colors" data-testid="button-refresh-price">
+          <button onClick={fetchBtcPrice} className="text-yellow-300 hover:text-yellow-200 transition-colors" data-testid="button-refresh-price">
             <RefreshCw className="w-3 h-3" />
           </button>
         </div>
@@ -238,7 +238,7 @@ export default function SwapPage({ account, fetchUserData }: SwapPageProps) {
               <span className="text-xs text-muted-foreground">You Pay (Virtual USDT)</span>
               <button
                 onClick={() => setSwapAmount(balance.toFixed(2))}
-                className="text-[10px] text-purple-400 hover:text-purple-300 font-medium uppercase tracking-wider"
+                className="text-[10px] text-yellow-300 hover:text-yellow-200 font-medium uppercase tracking-wider"
                 data-testid="button-max-amount"
               >
                 MAX
@@ -267,8 +267,8 @@ export default function SwapPage({ account, fetchUserData }: SwapPageProps) {
           </div>
 
           <div className="flex justify-center -my-1.5 relative z-10">
-            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-purple-500/20 to-cyan-500/10 border border-white/[0.08] flex items-center justify-center">
-              <ArrowDownUp className="w-4 h-4 text-purple-400" />
+            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-yellow-600/20 to-amber-400/10 border border-white/[0.08] flex items-center justify-center">
+              <ArrowDownUp className="w-4 h-4 text-yellow-300" />
             </div>
           </div>
 
@@ -309,7 +309,7 @@ export default function SwapPage({ account, fetchUserData }: SwapPageProps) {
                 href={`${BSC_SCAN}${completedTxn.bscTxHash}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center gap-1 text-[11px] text-purple-400 hover:text-purple-300"
+                className="flex items-center gap-1 text-[11px] text-yellow-300 hover:text-yellow-200"
                 data-testid="link-bscscan"
               >
                 <ExternalLink className="h-3 w-3" /> View on BscScan
@@ -378,7 +378,7 @@ export default function SwapPage({ account, fetchUserData }: SwapPageProps) {
                   </Badge>
                   {txn.bscTxHash && (
                     <a href={`${BSC_SCAN}${txn.bscTxHash}`} target="_blank" rel="noopener noreferrer" data-testid={`link-scan-${txn.id}`}>
-                      <ExternalLink className="w-3 h-3 text-purple-400 hover:text-purple-300" />
+                      <ExternalLink className="w-3 h-3 text-yellow-300 hover:text-yellow-200" />
                     </a>
                   )}
                 </div>
@@ -399,7 +399,7 @@ export default function SwapPage({ account, fetchUserData }: SwapPageProps) {
             { step: "4", title: "Receive BTCB on BSC", desc: "Our liquidity wallet swaps USDT → BTCB via PancakeSwap and sends it to your wallet" },
           ].map((item) => (
             <div key={item.step} className="flex items-start gap-3">
-              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-purple-500/20 to-cyan-500/10 border border-white/[0.08] flex items-center justify-center shrink-0">
+              <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-yellow-600/20 to-amber-400/10 border border-white/[0.08] flex items-center justify-center shrink-0">
                 <span className="text-xs font-bold gradient-text">{item.step}</span>
               </div>
               <div>

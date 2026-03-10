@@ -31,10 +31,10 @@ export function MobileNav() {
               }`}
               data-testid={`nav-mobile-${item.title.toLowerCase()}`}
             >
-              <div className={`relative p-1.5 rounded-xl transition-all duration-300 ${active ? "bg-gradient-to-br from-purple-500/20 to-cyan-500/10" : ""}`}>
-                <item.icon className={`h-5 w-5 transition-all duration-300 ${active ? "text-purple-400" : ""}`} />
+              <div className={`relative p-1.5 rounded-xl transition-all duration-300 ${active ? "bg-gradient-to-br from-yellow-600/20 to-amber-400/10" : ""}`}>
+                <item.icon className={`h-5 w-5 transition-all duration-300 ${active ? "text-yellow-300" : ""}`} />
                 {active && (
-                  <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-full bg-gradient-to-r from-amber-400 via-purple-400 to-cyan-400" />
+                  <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-5 h-0.5 rounded-full bg-gradient-to-r from-amber-400 via-yellow-400 to-amber-300" />
                 )}
               </div>
               <span className={`text-[10px] font-medium transition-all duration-300 ${active ? "gradient-text" : ""}`} style={{ fontFamily: 'var(--font-display)' }}>

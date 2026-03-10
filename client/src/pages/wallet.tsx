@@ -195,8 +195,8 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
   const getTxColor = (type: string) => {
     switch (type) {
       case "Activation": return { text: "text-amber-400", bg: "bg-amber-500/10" };
-      case "Upgrade": return { text: "text-purple-400", bg: "bg-purple-500/10" };
-      case "Reactivation": return { text: "text-cyan-400", bg: "bg-cyan-500/10" };
+      case "Upgrade": return { text: "text-yellow-300", bg: "bg-yellow-600/10" };
+      case "Reactivation": return { text: "text-amber-300", bg: "bg-amber-600/10" };
       case "Withdrawal": return { text: "text-emerald-400", bg: "bg-emerald-500/10" };
       default: return { text: "text-muted-foreground", bg: "bg-white/[0.05]" };
     }
@@ -279,7 +279,7 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
           </button>
           <a
             href="/paid-staking"
-            className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-purple-500/10 border border-purple-500/20 text-purple-400 font-bold text-sm hover:bg-purple-500/20 transition-all"
+            className="flex-1 flex items-center justify-center gap-2 py-3 px-4 rounded-xl bg-yellow-600/10 border border-yellow-600/20 text-yellow-300 font-bold text-sm hover:bg-yellow-600/20 transition-all"
             data-testid="link-paid-staking"
             style={{ fontFamily: 'var(--font-display)' }}
           >
@@ -318,7 +318,7 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
                         href={`https://testnet.bscscan.com/tx/${dep.txHash}`}
                         target="_blank"
                         rel="noopener noreferrer"
-                        className="text-[11px] text-purple-400 flex items-center gap-0.5 hover:underline"
+                        className="text-[11px] text-yellow-300 flex items-center gap-0.5 hover:underline"
                         data-testid={`link-deposit-tx-${i}`}
                       >
                         <ExternalLink className="h-3 w-3" /> Tx
@@ -337,8 +337,8 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
       <div className="glass-card rounded-2xl slide-in" style={{ animationDelay: '0.15s' }} data-testid="card-recent-transactions">
         <div className="flex items-center justify-between gap-3 p-5 border-b border-white/[0.06]">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-purple-500/15 flex items-center justify-center">
-              <WalletIcon className="h-5 w-5 text-purple-400" />
+            <div className="h-10 w-10 rounded-xl bg-yellow-600/15 flex items-center justify-center">
+              <WalletIcon className="h-5 w-5 text-yellow-300" />
             </div>
             <div>
               <h2 className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
@@ -347,14 +347,14 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
               <p className="text-[10px] text-muted-foreground">Activations, upgrades &amp; withdrawals</p>
             </div>
           </div>
-          <button onClick={loadTransactions} disabled={txLoading} className="text-xs text-purple-400 flex items-center gap-1" data-testid="button-refresh-txs">
+          <button onClick={loadTransactions} disabled={txLoading} className="text-xs text-yellow-300 flex items-center gap-1" data-testid="button-refresh-txs">
             <RefreshCw className={`h-3.5 w-3.5 ${txLoading ? "animate-spin" : ""}`} /> Refresh
           </button>
         </div>
 
         {txLoading ? (
           <div className="flex items-center justify-center py-10">
-            <Loader2 className="h-6 w-6 animate-spin text-purple-400" />
+            <Loader2 className="h-6 w-6 animate-spin text-yellow-300" />
           </div>
         ) : recentTxs.length > 0 ? (
           <div className="divide-y divide-white/[0.04]">
@@ -371,7 +371,7 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
                     <div>
                       <div className="flex items-center gap-2 flex-wrap">
                         <span className="text-sm font-medium" data-testid={`text-tx-type-${globalIndex}`}>{tx.type}</span>
-                        <Badge variant="outline" className="text-[10px] border-purple-500/20">{tx.detail}</Badge>
+                        <Badge variant="outline" className="text-[10px] border-yellow-600/20">{tx.detail}</Badge>
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-0.5">{formatTimestamp(tx.timestamp)}</p>
                     </div>
@@ -417,11 +417,11 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
 
       {/* Withdraw Dialog */}
       <Dialog open={showWithdrawDialog} onOpenChange={setShowWithdrawDialog}>
-        <DialogContent className="glass-card border-purple-500/20 sm:max-w-md">
+        <DialogContent className="glass-card border-yellow-600/20 sm:max-w-md">
           <DialogHeader>
             <div className="flex items-center gap-3">
-              <div className="h-10 w-10 rounded-xl bg-purple-500/15 flex items-center justify-center">
-                <ArrowDownToLine className="h-5 w-5 text-purple-400" />
+              <div className="h-10 w-10 rounded-xl bg-yellow-600/15 flex items-center justify-center">
+                <ArrowDownToLine className="h-5 w-5 text-yellow-300" />
               </div>
               <div>
                 <DialogTitle className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>
@@ -437,8 +437,8 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
               <p className="text-2xl font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }}>${formatAmount(userInfo.walletBalance)}</p>
             </div>
             <div className="relative">
-              <Input type="number" placeholder="Enter amount to withdraw" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="bg-white/[0.03] border-purple-500/20 pr-16" data-testid="input-withdraw-amount" />
-              <button onClick={setMaxAmount} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-purple-400 font-medium px-2 py-1 rounded-md bg-purple-500/10" data-testid="button-max-amount">MAX</button>
+              <Input type="number" placeholder="Enter amount to withdraw" value={withdrawAmount} onChange={(e) => setWithdrawAmount(e.target.value)} className="bg-white/[0.03] border-yellow-600/20 pr-16" data-testid="input-withdraw-amount" />
+              <button onClick={setMaxAmount} className="absolute right-2 top-1/2 -translate-y-1/2 text-xs text-yellow-300 font-medium px-2 py-1 rounded-md bg-yellow-600/10" data-testid="button-max-amount">MAX</button>
             </div>
             <p className="text-xs text-muted-foreground" data-testid="text-withdraw-rule">Minimum $10, multiples of $10.</p>
             {withdrawAmount && (parseFloat(withdrawAmount) < 10 || parseFloat(withdrawAmount) % 10 !== 0) && (
@@ -486,7 +486,7 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
                 <p className="text-sm text-muted-foreground mt-1">${parseFloat(depositAmount).toFixed(2)} USDT credited to your virtual balance</p>
               </div>
               {depositTxHash && (
-                <a href={`https://testnet.bscscan.com/tx/${depositTxHash}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-purple-400 hover:underline" data-testid="link-deposit-tx-done">
+                <a href={`https://testnet.bscscan.com/tx/${depositTxHash}`} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1 text-xs text-yellow-300 hover:underline" data-testid="link-deposit-tx-done">
                   <ExternalLink className="h-3 w-3" /> View on BSCScan
                 </a>
               )}

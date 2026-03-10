@@ -191,7 +191,7 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden" data-testid="page-register">
       <div className="absolute top-20 -left-40 w-80 h-80 rounded-full bg-amber-500/8 blur-[100px]" />
       <div className="absolute bottom-20 -right-40 w-80 h-80 rounded-full bg-cyan-500/8 blur-[100px]" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-purple-500/5 blur-[120px]" />
+      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-yellow-600/5 blur-[120px]" />
 
       <div className="absolute top-4 right-4 flex items-center gap-2 z-20">
         <div className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="text-wallet-address">
@@ -207,7 +207,7 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
         <div className="glass-card rounded-2xl p-8 space-y-6">
           <div className="text-center space-y-3">
             <div className="w-16 h-16 mx-auto rounded-2xl gradient-icon flex items-center justify-center pulse-glow">
-              <UserPlus className="h-8 w-8 text-purple-400" />
+              <UserPlus className="h-8 w-8 text-yellow-300" />
             </div>
             <h1 className="text-2xl font-bold gradient-text" data-testid="text-register-title" style={{ fontFamily: 'var(--font-display)' }}>Join M-Vault</h1>
             <p className="text-sm text-muted-foreground" data-testid="text-register-description">Register your wallet to start earning</p>
@@ -229,7 +229,7 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
                     value={sponsorId}
                     onChange={(e) => setSponsorId(e.target.value)}
                     disabled={loading}
-                    className={`bg-white/[0.03] border-purple-500/20 pr-10 ${sponsorInfo?.valid ? "border-emerald-500/40" : ""}`}
+                    className={`bg-white/[0.03] border-yellow-600/20 pr-10 ${sponsorInfo?.valid ? "border-emerald-500/40" : ""}`}
                     data-testid="input-sponsor-id"
                   />
                   {validating && (
@@ -246,7 +246,7 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
                 {sponsorInfo?.valid && (
                   <div className="flex items-center justify-between px-1">
                     <p className="text-xs text-emerald-400 font-medium" data-testid="text-sponsor-name">{sponsorInfo.displayName}</p>
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-purple-500/15 text-purple-400" data-testid="text-sponsor-side">
+                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-yellow-600/15 text-yellow-300" data-testid="text-sponsor-side">
                       {sponsorInfo.side}
                     </span>
                   </div>
@@ -276,7 +276,7 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
               <button
                 type="button"
                 onClick={() => setShowTerms(true)}
-                className="text-purple-400 hover:text-purple-300 underline underline-offset-2 font-medium transition-colors"
+                className="text-yellow-300 hover:text-yellow-200 underline underline-offset-2 font-medium transition-colors"
                 data-testid="link-terms"
               >
                 Terms & Conditions
@@ -303,8 +303,8 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
           <div className="relative w-full max-w-lg max-h-[80vh] glass-card rounded-2xl flex flex-col overflow-hidden">
             <div className="flex items-center justify-between p-5 border-b border-white/[0.08]">
               <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-purple-500/15 flex items-center justify-center">
-                  <ScrollText className="h-4 w-4 text-purple-400" />
+                <div className="h-8 w-8 rounded-lg bg-yellow-600/15 flex items-center justify-center">
+                  <ScrollText className="h-4 w-4 text-yellow-300" />
                 </div>
                 <h2 className="text-base font-bold" style={{ fontFamily: 'var(--font-display)' }}>
                   <span className="gradient-text">Terms & Conditions</span>

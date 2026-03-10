@@ -64,15 +64,15 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
   const getTxColor = (type: string) => {
     switch (type) {
       case "Activation": return { text: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/10" };
-      case "Upgrade": return { text: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/10" };
-      case "Reactivation": return { text: "text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-500/10" };
+      case "Upgrade": return { text: "text-yellow-300", bg: "bg-yellow-600/10", border: "border-yellow-600/10" };
+      case "Reactivation": return { text: "text-amber-300", bg: "bg-amber-600/10", border: "border-amber-600/10" };
       case "Withdrawal": return { text: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10" };
       case "Direct Sponsor": return { text: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/10" };
-      case "Binary Matching": return { text: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/10" };
-      case "Matching Override": return { text: "text-cyan-400", bg: "bg-cyan-500/10", border: "border-cyan-500/10" };
+      case "Binary Matching": return { text: "text-yellow-300", bg: "bg-yellow-600/10", border: "border-yellow-600/10" };
+      case "Matching Override": return { text: "text-amber-300", bg: "bg-amber-600/10", border: "border-amber-600/10" };
       case "Withdrawal Match": return { text: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10" };
       case "Board Entry": return { text: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/10" };
-      case "Board Reward": return { text: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/10" };
+      case "Board Reward": return { text: "text-yellow-300", bg: "bg-yellow-600/10", border: "border-yellow-600/10" };
       default: return { text: "text-muted-foreground", bg: "bg-white/[0.05]", border: "border-white/[0.05]" };
     }
   };
@@ -106,7 +106,7 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">All your on-chain activity</p>
         </div>
-        <button onClick={loadTransactions} disabled={txLoading} className="text-xs text-purple-400 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-purple-500/10" data-testid="button-refresh-txs">
+        <button onClick={loadTransactions} disabled={txLoading} className="text-xs text-yellow-300 flex items-center gap-1.5 px-3 py-2 rounded-xl bg-yellow-600/10" data-testid="button-refresh-txs">
           <RefreshCw className={`h-3.5 w-3.5 ${txLoading ? "animate-spin" : ""}`} /> Refresh
         </button>
       </div>
@@ -130,7 +130,7 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
 
       {txLoading ? (
         <div className="flex flex-col items-center justify-center py-20">
-          <Loader2 className="h-8 w-8 animate-spin text-purple-400 mb-3" />
+          <Loader2 className="h-8 w-8 animate-spin text-yellow-300 mb-3" />
           <p className="text-sm text-muted-foreground">Loading transactions...</p>
         </div>
       ) : displayTxs.length > 0 ? (
@@ -149,7 +149,7 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
                     <div>
                       <div className="flex flex-wrap items-center gap-2">
                         <span className="text-sm font-semibold" data-testid={`text-tx-type-${globalIndex}`}>{tx.type}</span>
-                        <Badge variant="outline" className="text-[10px] border-purple-500/20">{tx.detail}</Badge>
+                        <Badge variant="outline" className="text-[10px] border-yellow-600/20">{tx.detail}</Badge>
                       </div>
                       <p className="text-[11px] text-muted-foreground mt-0.5">{formatTimestamp(tx.timestamp)}</p>
                     </div>

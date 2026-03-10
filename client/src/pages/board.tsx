@@ -135,13 +135,13 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
 
   const tierColors = [
     { bg: "bg-amber-500/10", border: "border-amber-500/15", text: "text-amber-400", gradient: "#f59e0b" },
-    { bg: "bg-purple-500/10", border: "border-purple-500/15", text: "text-purple-400", gradient: "#a855f7" },
-    { bg: "bg-cyan-500/10", border: "border-cyan-500/15", text: "text-cyan-400", gradient: "#06b6d4" },
+    { bg: "bg-yellow-600/10", border: "border-yellow-600/15", text: "text-yellow-300", gradient: "#d4af37" },
+    { bg: "bg-amber-600/10", border: "border-amber-600/15", text: "text-amber-300", gradient: "#c9a227" },
     { bg: "bg-emerald-500/10", border: "border-emerald-500/15", text: "text-emerald-400", gradient: "#10b981" },
     { bg: "bg-rose-500/10", border: "border-rose-500/15", text: "text-rose-400", gradient: "#f43f5e" },
     { bg: "bg-amber-500/10", border: "border-amber-500/15", text: "text-amber-400", gradient: "#f59e0b" },
-    { bg: "bg-purple-500/10", border: "border-purple-500/15", text: "text-purple-400", gradient: "#a855f7" },
-    { bg: "bg-cyan-500/10", border: "border-cyan-500/15", text: "text-cyan-400", gradient: "#06b6d4" },
+    { bg: "bg-yellow-600/10", border: "border-yellow-600/15", text: "text-yellow-300", gradient: "#d4af37" },
+    { bg: "bg-amber-600/10", border: "border-amber-600/15", text: "text-amber-300", gradient: "#c9a227" },
     { bg: "bg-emerald-500/10", border: "border-emerald-500/15", text: "text-emerald-400", gradient: "#10b981" },
     { bg: "bg-rose-500/10", border: "border-rose-500/15", text: "text-rose-400", gradient: "#f43f5e" },
   ];
@@ -177,8 +177,8 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
               <defs>
                 <linearGradient id="boardPoolGradient" x1="0%" y1="0%" x2="100%" y2="0%">
                   <stop offset="0%" stopColor="#f59e0b" />
-                  <stop offset="50%" stopColor="#a855f7" />
-                  <stop offset="100%" stopColor="#06b6d4" />
+                  <stop offset="50%" stopColor="#d4af37" />
+                  <stop offset="100%" stopColor="#c9a227" />
                 </linearGradient>
               </defs>
             </svg>
@@ -326,8 +326,8 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
 
       <div className="slide-in" style={{ animationDelay: '0.15s' }}>
         <div className="flex items-center gap-3 mb-4">
-          <div className="h-9 w-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
-            <Trophy className="h-4 w-4 text-purple-400" />
+          <div className="h-9 w-9 rounded-xl bg-yellow-600/15 flex items-center justify-center">
+            <Trophy className="h-4 w-4 text-yellow-300" />
           </div>
           <div>
             <h2 className="text-base font-bold" style={{ fontFamily: 'var(--font-display)' }}>
@@ -340,7 +340,7 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
 
       {loading ? (
         <div className="flex flex-col items-center justify-center py-16">
-          <Loader2 className="h-8 w-8 animate-spin text-purple-400 mb-3" />
+          <Loader2 className="h-8 w-8 animate-spin text-yellow-300 mb-3" />
           <p className="text-sm text-muted-foreground">Loading board data...</p>
         </div>
       ) : (
@@ -415,14 +415,14 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
             <p className="text-xs text-muted-foreground">10% of every withdrawal is added to your BTC pool balance</p>
           </div>
           <div className="flex items-start gap-2.5">
-            <div className="h-5 w-5 rounded-md bg-purple-500/10 flex items-center justify-center shrink-0 mt-0.5">
-              <span className="text-[10px] font-bold text-purple-400">2</span>
+            <div className="h-5 w-5 rounded-md bg-yellow-600/10 flex items-center justify-center shrink-0 mt-0.5">
+              <span className="text-[10px] font-bold text-yellow-300">2</span>
             </div>
             <p className="text-xs text-muted-foreground">Once your BTC pool reaches $50, you can enter Pool 1</p>
           </div>
           <div className="flex items-start gap-2.5">
-            <div className="h-5 w-5 rounded-md bg-cyan-500/10 flex items-center justify-center shrink-0 mt-0.5">
-              <span className="text-[10px] font-bold text-cyan-400">3</span>
+            <div className="h-5 w-5 rounded-md bg-amber-600/10 flex items-center justify-center shrink-0 mt-0.5">
+              <span className="text-[10px] font-bold text-amber-300">3</span>
             </div>
             <p className="text-xs text-muted-foreground">Each pool uses a 2-level matrix (3 + 9 = 12 members to complete)</p>
           </div>

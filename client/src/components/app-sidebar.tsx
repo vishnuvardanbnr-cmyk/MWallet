@@ -47,21 +47,21 @@ export function AppSidebar({ account, userId, disconnect }: AppSidebarProps) {
         <div className="flex items-center gap-2">
           <Logo size="sm" />
         </div>
-        <div className="mt-3 rounded-xl p-3 space-y-2.5 bg-gradient-to-br from-purple-500/8 to-cyan-500/5 border border-white/[0.06]">
+        <div className="mt-3 rounded-xl p-3 space-y-2.5 bg-gradient-to-br from-yellow-600/8 to-amber-400/5 border border-white/[0.06]">
           <div className="flex items-center justify-between gap-2">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider">User ID</p>
             <p className="text-xs font-bold gradient-text" data-testid="text-user-id" style={{ fontFamily: 'var(--font-display)' }}>{userId}</p>
           </div>
           <div className="flex items-center justify-between gap-2">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Wallet</p>
-            <p className="text-xs font-mono text-cyan-400/80" data-testid="text-wallet-address">{shortenAddress(account)}</p>
+            <p className="text-xs font-mono text-amber-300/80" data-testid="text-wallet-address">{shortenAddress(account)}</p>
           </div>
         </div>
         <div className="mt-3 flex gap-1.5">
-          <Button variant="outline" size="sm" className="flex-1 text-[11px] border-white/[0.08] bg-white/[0.02] hover:bg-purple-500/10 hover:border-purple-500/20 transition-all" onClick={() => copyReferralLink("left")} data-testid="button-copy-left-link">
+          <Button variant="outline" size="sm" className="flex-1 text-[11px] border-white/[0.08] bg-white/[0.02] hover:bg-yellow-600/10 hover:border-yellow-600/20 transition-all" onClick={() => copyReferralLink("left")} data-testid="button-copy-left-link">
             <Copy className="w-3 h-3" /> Left Link
           </Button>
-          <Button variant="outline" size="sm" className="flex-1 text-[11px] border-white/[0.08] bg-white/[0.02] hover:bg-purple-500/10 hover:border-purple-500/20 transition-all" onClick={() => copyReferralLink("right")} data-testid="button-copy-right-link">
+          <Button variant="outline" size="sm" className="flex-1 text-[11px] border-white/[0.08] bg-white/[0.02] hover:bg-yellow-600/10 hover:border-yellow-600/20 transition-all" onClick={() => copyReferralLink("right")} data-testid="button-copy-right-link">
             <Copy className="w-3 h-3" /> Right Link
           </Button>
         </div>

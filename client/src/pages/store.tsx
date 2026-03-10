@@ -20,7 +20,7 @@ export default function StorePage() {
 
       {isLoading && (
         <div className="flex items-center justify-center py-20" data-testid="status-loading">
-          <Loader2 className="w-8 h-8 animate-spin text-purple-400" />
+          <Loader2 className="w-8 h-8 animate-spin text-yellow-300" />
         </div>
       )}
 
@@ -33,7 +33,7 @@ export default function StorePage() {
 
       {!isLoading && !error && products && products.length === 0 && (
         <div className="glass-card rounded-2xl p-12 text-center" data-testid="status-empty">
-          <Store className="w-16 h-16 text-purple-400/30 mx-auto mb-4" />
+          <Store className="w-16 h-16 text-yellow-300/30 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-foreground mb-2" style={{ fontFamily: 'var(--font-display)' }}>No Products Available</h3>
           <p className="text-sm text-muted-foreground">Products will appear here once they are added by the admin.</p>
         </div>
@@ -42,15 +42,15 @@ export default function StorePage() {
       {!isLoading && products && products.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4" data-testid="grid-products">
           {products.map((product) => (
-            <div key={product.id} className="glass-card rounded-2xl overflow-hidden border border-purple-500/10" data-testid={`card-product-${product.id}`}>
+            <div key={product.id} className="glass-card rounded-2xl overflow-hidden border border-yellow-600/10" data-testid={`card-product-${product.id}`}>
               {product.image && (
                 <div className="aspect-video bg-black/20 flex items-center justify-center overflow-hidden">
                   <img src={product.image} alt={product.name} className="w-full h-full object-cover" data-testid={`img-product-${product.id}`} />
                 </div>
               )}
               {!product.image && (
-                <div className="aspect-video bg-gradient-to-br from-purple-500/10 to-cyan-500/10 flex items-center justify-center">
-                  <Package className="w-12 h-12 text-purple-400/40" />
+                <div className="aspect-video bg-gradient-to-br from-yellow-600/10 to-amber-400/10 flex items-center justify-center">
+                  <Package className="w-12 h-12 text-yellow-300/40" />
                 </div>
               )}
               <div className="p-4 space-y-3">
@@ -69,7 +69,7 @@ export default function StorePage() {
                   <span className="text-lg font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-product-price-${product.id}`}>
                     ${product.price.toLocaleString()}
                   </span>
-                  <Badge variant="outline" className="text-purple-400 border-purple-500/30 text-xs" data-testid={`text-product-category-${product.id}`}>
+                  <Badge variant="outline" className="text-yellow-300 border-yellow-600/30 text-xs" data-testid={`text-product-category-${product.id}`}>
                     {product.category}
                   </Badge>
                 </div>

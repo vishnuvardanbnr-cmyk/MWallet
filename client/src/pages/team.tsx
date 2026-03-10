@@ -13,7 +13,7 @@ const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const PKG_COLORS: Record<number, { text: string; bg: string; border: string }> = {
   1: { text: "text-green-400", bg: "bg-green-500/10", border: "border-green-500/20" },
   2: { text: "text-blue-400", bg: "bg-blue-500/10", border: "border-blue-500/20" },
-  3: { text: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/20" },
+  3: { text: "text-yellow-300", bg: "bg-yellow-600/10", border: "border-yellow-600/20" },
   4: { text: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20" },
   5: { text: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/20" },
 };
@@ -212,7 +212,7 @@ export default function Team({ userInfo, binaryInfo, formatAmount, getDirectRefe
         </div>
         <div className="glass-card rounded-2xl p-4 slide-in" style={{ animationDelay: '0.15s' }}>
           <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Right Business</p>
-          <p className="text-2xl font-bold text-cyan-400" data-testid="text-team-right-business" style={{ fontFamily: 'var(--font-display)' }}>${formatAmount(binaryInfo.rightBusiness)}</p>
+          <p className="text-2xl font-bold text-amber-300" data-testid="text-team-right-business" style={{ fontFamily: 'var(--font-display)' }}>${formatAmount(binaryInfo.rightBusiness)}</p>
         </div>
         <div className="glass-card rounded-2xl p-4 slide-in" style={{ animationDelay: '0.2s' }}>
           <p className="text-xs text-muted-foreground uppercase tracking-wider mb-1">Today's Binary</p>
@@ -239,9 +239,9 @@ export default function Team({ userInfo, binaryInfo, formatAmount, getDirectRefe
             const isLeft = side === "left";
             const whatsappMsg = encodeURIComponent(`Join MVault with my ${side} team referral link:\n${link}`);
             return (
-              <div key={side} className={`rounded-xl p-3 ${isLeft ? "bg-amber-500/[0.04] border border-amber-500/10" : "bg-cyan-500/[0.04] border border-cyan-500/10"}`} data-testid={`card-referral-${side}`}>
+              <div key={side} className={`rounded-xl p-3 ${isLeft ? "bg-amber-500/[0.04] border border-amber-500/10" : "bg-cyan-500/[0.04] border border-amber-600/10"}`} data-testid={`card-referral-${side}`}>
                 <div className="flex items-center justify-between mb-2">
-                  <p className={`text-xs font-bold uppercase tracking-wider ${isLeft ? "text-amber-400" : "text-cyan-400"}`}>{side} Team Link</p>
+                  <p className={`text-xs font-bold uppercase tracking-wider ${isLeft ? "text-amber-400" : "text-amber-300"}`}>{side} Team Link</p>
                 </div>
                 <div className="flex items-center gap-1.5 bg-black/20 rounded-lg px-3 py-2 mb-2">
                   <p className="text-[11px] font-mono text-muted-foreground truncate flex-1" data-testid={`text-referral-link-${side}`}>{link}</p>
@@ -250,7 +250,7 @@ export default function Team({ userInfo, binaryInfo, formatAmount, getDirectRefe
                   <Button
                     variant="outline"
                     size="sm"
-                    className={`flex-1 text-[11px] ${isLeft ? "border-amber-500/20 hover:bg-amber-500/10" : "border-cyan-500/20 hover:bg-cyan-500/10"}`}
+                    className={`flex-1 text-[11px] ${isLeft ? "border-amber-500/20 hover:bg-amber-500/10" : "border-amber-600/20 hover:bg-amber-600/10"}`}
                     onClick={() => {
                       navigator.clipboard.writeText(link);
                       setCopiedSide(side);
@@ -281,8 +281,8 @@ export default function Team({ userInfo, binaryInfo, formatAmount, getDirectRefe
       <div className="glass-card rounded-2xl p-6 slide-in" style={{ animationDelay: '0.25s' }} data-testid="card-binary-tree">
         <div className="flex items-center justify-between mb-5">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-purple-500/15 flex items-center justify-center">
-              <GitBranch className="h-5 w-5 text-purple-400" />
+            <div className="h-10 w-10 rounded-xl bg-yellow-600/15 flex items-center justify-center">
+              <GitBranch className="h-5 w-5 text-yellow-300" />
             </div>
             <div>
               <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>
@@ -292,7 +292,7 @@ export default function Team({ userInfo, binaryInfo, formatAmount, getDirectRefe
             </div>
           </div>
           {treeNode && (
-            <Button variant="outline" size="sm" onClick={navigateUp} className="border-purple-500/20 text-xs" data-testid="button-tree-back">
+            <Button variant="outline" size="sm" onClick={navigateUp} className="border-yellow-600/20 text-xs" data-testid="button-tree-back">
               <ArrowUp className="h-3 w-3 mr-1" /> Back
             </Button>
           )}
@@ -300,17 +300,17 @@ export default function Team({ userInfo, binaryInfo, formatAmount, getDirectRefe
 
         {treeLoading ? (
           <div className="flex items-center justify-center py-10">
-            <Loader2 className="h-6 w-6 animate-spin text-purple-400" />
+            <Loader2 className="h-6 w-6 animate-spin text-yellow-300" />
           </div>
         ) : (
           <div className="flex flex-col items-center">
             <div className="glass-card rounded-xl p-4 w-44 text-center neon-border mb-2" data-testid="card-tree-current">
-              <div className="h-10 w-10 mx-auto rounded-xl bg-purple-500/15 flex items-center justify-center mb-2">
-                <User className="h-5 w-5 text-purple-400" />
+              <div className="h-10 w-10 mx-auto rounded-xl bg-yellow-600/15 flex items-center justify-center mb-2">
+                <User className="h-5 w-5 text-yellow-300" />
               </div>
               <p className="text-xs font-medium text-muted-foreground">{treeNode ? "Viewing" : "You"}</p>
               <p className="text-xs font-mono gradient-text" data-testid="text-tree-current-address">{shortenAddress(treeNode ? treeNode.address : account)}</p>
-              <Badge variant="outline" className="text-[10px] mt-1.5 border-purple-500/30">
+              <Badge variant="outline" className="text-[10px] mt-1.5 border-yellow-600/30">
                 ID: {(treeNode ? treeNode.userId : userInfo.userId).toString()}
               </Badge>
               {treeNode && (
@@ -321,10 +321,10 @@ export default function Team({ userInfo, binaryInfo, formatAmount, getDirectRefe
             </div>
 
             <div className="flex items-center justify-center w-full max-w-xs relative h-8">
-              <div className="absolute w-px h-4 top-0 bg-gradient-to-b from-purple-500/40 to-transparent left-1/2 -translate-x-1/2" />
-              <div className="absolute top-4 left-1/4 right-1/4 h-px bg-gradient-to-r from-amber-500/30 via-purple-500/30 to-cyan-500/30" />
+              <div className="absolute w-px h-4 top-0 bg-gradient-to-b from-yellow-600/40 to-transparent left-1/2 -translate-x-1/2" />
+              <div className="absolute top-4 left-1/4 right-1/4 h-px bg-gradient-to-r from-amber-500/30 via-yellow-500/30 to-amber-400/30" />
               <div className="absolute w-px h-4 bottom-0 bg-gradient-to-b from-transparent to-amber-500/30 left-1/4" />
-              <div className="absolute w-px h-4 bottom-0 bg-gradient-to-b from-transparent to-cyan-500/30 right-1/4" />
+              <div className="absolute w-px h-4 bottom-0 bg-gradient-to-b from-transparent to-amber-400/30 right-1/4" />
             </div>
 
             <div className="grid grid-cols-2 gap-4 w-full max-w-xs">
@@ -344,7 +344,7 @@ export default function Team({ userInfo, binaryInfo, formatAmount, getDirectRefe
                     <TreeNode
                       address={currentRight}
                       label="Right"
-                      color="border-cyan-500/10"
+                      color="border-amber-600/10"
                       packageLevel={pkgs[currentRight]}
                       onClick={() => navigateToNode(currentRight)}
                     />
@@ -358,16 +358,16 @@ export default function Team({ userInfo, binaryInfo, formatAmount, getDirectRefe
           </div>
         )}
 
-        <div className="h-px bg-gradient-to-r from-transparent via-purple-500/15 to-transparent my-5" />
+        <div className="h-px bg-gradient-to-r from-transparent via-yellow-500/15 to-transparent my-5" />
 
         <div className="grid grid-cols-2 gap-4">
           <div className="p-3 rounded-xl bg-amber-500/[0.04] border border-amber-500/10 text-center">
             <p className="text-xs text-muted-foreground mb-1">Left Carry Forward</p>
             <p className="text-sm font-bold text-amber-400" style={{ fontFamily: 'var(--font-display)' }}>${formatAmount(binaryInfo.carryLeft)}</p>
           </div>
-          <div className="p-3 rounded-xl bg-cyan-500/[0.04] border border-cyan-500/10 text-center">
+          <div className="p-3 rounded-xl bg-cyan-500/[0.04] border border-amber-600/10 text-center">
             <p className="text-xs text-muted-foreground mb-1">Right Carry Forward</p>
-            <p className="text-sm font-bold text-cyan-400" style={{ fontFamily: 'var(--font-display)' }}>${formatAmount(binaryInfo.carryRight)}</p>
+            <p className="text-sm font-bold text-amber-300" style={{ fontFamily: 'var(--font-display)' }}>${formatAmount(binaryInfo.carryRight)}</p>
           </div>
         </div>
       </div>
@@ -375,8 +375,8 @@ export default function Team({ userInfo, binaryInfo, formatAmount, getDirectRefe
       <div className="glass-card rounded-2xl p-6 slide-in" style={{ animationDelay: '0.3s' }} data-testid="card-direct-referrals-list">
         <div className="flex items-center justify-between gap-3 mb-5">
           <div className="flex items-center gap-3">
-            <div className="h-10 w-10 rounded-xl bg-cyan-500/15 flex items-center justify-center">
-              <Users className="h-5 w-5 text-cyan-400" />
+            <div className="h-10 w-10 rounded-xl bg-amber-600/15 flex items-center justify-center">
+              <Users className="h-5 w-5 text-amber-300" />
             </div>
             <div>
               <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>
@@ -389,7 +389,7 @@ export default function Team({ userInfo, binaryInfo, formatAmount, getDirectRefe
 
         {loading ? (
           <div className="flex items-center justify-center py-10">
-            <Loader2 className="h-6 w-6 animate-spin text-purple-400" />
+            <Loader2 className="h-6 w-6 animate-spin text-yellow-300" />
           </div>
         ) : referrals.length > 0 ? (
           <div className="space-y-2">
@@ -400,8 +400,8 @@ export default function Team({ userInfo, binaryInfo, formatAmount, getDirectRefe
               return (
                 <div key={index} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.03] border border-white/[0.04]" data-testid={`row-referral-${index}`}>
                   <div className="flex items-center gap-3">
-                    <div className="h-7 w-7 rounded-lg bg-purple-500/10 flex items-center justify-center">
-                      <span className="text-xs font-bold text-purple-400">{currentPage * PAGE_SIZE + index + 1}</span>
+                    <div className="h-7 w-7 rounded-lg bg-yellow-600/10 flex items-center justify-center">
+                      <span className="text-xs font-bold text-yellow-300">{currentPage * PAGE_SIZE + index + 1}</span>
                     </div>
                     <span className="font-mono text-sm gradient-text">{shortenAddress(addr)}</span>
                   </div>
@@ -423,12 +423,12 @@ export default function Team({ userInfo, binaryInfo, formatAmount, getDirectRefe
         )}
 
         {totalPages > 1 && (
-          <div className="flex items-center justify-between gap-2 mt-4 pt-4 border-t border-purple-500/10">
-            <Button variant="outline" size="sm" onClick={() => loadReferrals(currentPage - 1)} disabled={currentPage === 0 || loading} className="border-purple-500/20" data-testid="button-prev-page">
+          <div className="flex items-center justify-between gap-2 mt-4 pt-4 border-t border-yellow-600/10">
+            <Button variant="outline" size="sm" onClick={() => loadReferrals(currentPage - 1)} disabled={currentPage === 0 || loading} className="border-yellow-600/20" data-testid="button-prev-page">
               <ChevronLeft className="h-4 w-4" /> Previous
             </Button>
             <span className="text-xs text-muted-foreground" data-testid="text-page-info">Page {currentPage + 1} of {totalPages}</span>
-            <Button variant="outline" size="sm" onClick={() => loadReferrals(currentPage + 1)} disabled={currentPage >= totalPages - 1 || loading} className="border-purple-500/20" data-testid="button-next-page">
+            <Button variant="outline" size="sm" onClick={() => loadReferrals(currentPage + 1)} disabled={currentPage >= totalPages - 1 || loading} className="border-yellow-600/20" data-testid="button-next-page">
               Next <ChevronRight className="h-4 w-4" />
             </Button>
           </div>

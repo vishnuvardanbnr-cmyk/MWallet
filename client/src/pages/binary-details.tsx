@@ -111,8 +111,8 @@ export default function BinaryDetails({ incomeInfo, binaryInfo, slabInfo, format
           Back to Income
         </button>
         <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-purple-500/15 flex items-center justify-center">
-            <GitBranch className="h-5 w-5 text-purple-400" />
+          <div className="h-10 w-10 rounded-xl bg-yellow-600/15 flex items-center justify-center">
+            <GitBranch className="h-5 w-5 text-yellow-300" />
           </div>
           <div>
             <h1 className="text-2xl font-bold" data-testid="text-binary-details-title" style={{ fontFamily: 'var(--font-display)' }}>
@@ -126,8 +126,8 @@ export default function BinaryDetails({ incomeInfo, binaryInfo, slabInfo, format
       <div className="earnings-card rounded-2xl overflow-hidden slide-in" style={{ animationDelay: '0.05s' }} data-testid="card-binary-claimable">
         <div className="p-5">
           <div className="flex items-center gap-3 mb-4">
-            <div className="h-9 w-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
-              <Zap className="h-4 w-4 text-purple-400" />
+            <div className="h-9 w-9 rounded-xl bg-yellow-600/15 flex items-center justify-center">
+              <Zap className="h-4 w-4 text-yellow-300" />
             </div>
             <div>
               <p className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
@@ -147,7 +147,7 @@ export default function BinaryDetails({ incomeInfo, binaryInfo, slabInfo, format
               <Button
                 onClick={handleClaim}
                 disabled={claiming || dailyPercent >= 100}
-                className="bg-gradient-to-r from-amber-500 via-purple-500 to-cyan-500 text-white font-semibold px-6"
+                className="bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-400 text-white font-semibold px-6"
                 data-testid="button-claim-binary-detail"
               >
                 {claiming ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
@@ -191,7 +191,7 @@ export default function BinaryDetails({ incomeInfo, binaryInfo, slabInfo, format
                 className="h-full rounded-full transition-all duration-700"
                 style={{
                   width: `${dailyPercent}%`,
-                  background: dailyPercent >= 100 ? 'linear-gradient(90deg, #ef4444, #dc2626)' : 'linear-gradient(90deg, #f59e0b, #a855f7)'
+                  background: dailyPercent >= 100 ? 'linear-gradient(90deg, #ef4444, #dc2626)' : 'linear-gradient(90deg, #f59e0b, #d4af37)'
                 }}
               />
             </div>
@@ -204,8 +204,8 @@ export default function BinaryDetails({ incomeInfo, binaryInfo, slabInfo, format
         <div className="earnings-card rounded-2xl overflow-hidden slide-in" style={{ animationDelay: '0.15s' }} data-testid="card-binary-total">
           <div className="p-5">
             <div className="flex items-center gap-3 mb-4">
-              <div className="h-9 w-9 rounded-xl bg-cyan-500/15 flex items-center justify-center">
-                <TrendingUp className="h-4 w-4 text-cyan-400" />
+              <div className="h-9 w-9 rounded-xl bg-amber-600/15 flex items-center justify-center">
+                <TrendingUp className="h-4 w-4 text-amber-300" />
               </div>
               <div>
                 <p className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
@@ -232,12 +232,12 @@ export default function BinaryDetails({ incomeInfo, binaryInfo, slabInfo, format
             ${formatAmount(binaryInfo.leftBusiness)}
           </p>
         </div>
-        <div className="glass-card rounded-2xl p-4 slide-in border border-cyan-500/10" style={{ animationDelay: '0.25s' }} data-testid="card-binary-right-vol">
+        <div className="glass-card rounded-2xl p-4 slide-in border border-amber-600/10" style={{ animationDelay: '0.25s' }} data-testid="card-binary-right-vol">
           <div className="flex items-center gap-2 mb-2">
-            <ArrowDownRight className="h-4 w-4 text-cyan-400" />
+            <ArrowDownRight className="h-4 w-4 text-amber-300" />
             <p className="text-xs text-muted-foreground uppercase tracking-wider">Right Volume</p>
           </div>
-          <p className="text-lg font-bold text-cyan-400" style={{ fontFamily: 'var(--font-display)' }}>
+          <p className="text-lg font-bold text-amber-300" style={{ fontFamily: 'var(--font-display)' }}>
             ${formatAmount(binaryInfo.rightBusiness)}
           </p>
         </div>
@@ -250,12 +250,12 @@ export default function BinaryDetails({ incomeInfo, binaryInfo, slabInfo, format
             ${formatAmount(binaryInfo.carryLeft)}
           </p>
         </div>
-        <div className="glass-card rounded-2xl p-4 slide-in border border-cyan-500/10" style={{ animationDelay: '0.35s' }} data-testid="card-binary-carry-right">
+        <div className="glass-card rounded-2xl p-4 slide-in border border-amber-600/10" style={{ animationDelay: '0.35s' }} data-testid="card-binary-carry-right">
           <div className="flex items-center gap-2 mb-2">
-            <BarChart3 className="h-4 w-4 text-cyan-400" />
+            <BarChart3 className="h-4 w-4 text-amber-300" />
             <p className="text-xs text-muted-foreground uppercase tracking-wider">Right Carry</p>
           </div>
-          <p className="text-lg font-bold text-cyan-400" style={{ fontFamily: 'var(--font-display)' }}>
+          <p className="text-lg font-bold text-amber-300" style={{ fontFamily: 'var(--font-display)' }}>
             ${formatAmount(binaryInfo.carryRight)}
           </p>
         </div>
@@ -264,8 +264,8 @@ export default function BinaryDetails({ incomeInfo, binaryInfo, slabInfo, format
       <div className="glass-card rounded-2xl slide-in" style={{ animationDelay: '0.38s' }} data-testid="card-slab-commission">
         <div className="p-5 border-b border-white/[0.06]">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-cyan-500/15 flex items-center justify-center">
-              <Layers className="h-4 w-4 text-cyan-400" />
+            <div className="h-9 w-9 rounded-xl bg-amber-600/15 flex items-center justify-center">
+              <Layers className="h-4 w-4 text-amber-300" />
             </div>
             <div>
               <h2 className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
@@ -278,9 +278,9 @@ export default function BinaryDetails({ incomeInfo, binaryInfo, slabInfo, format
         <div className="p-5 space-y-3">
           {[
             { levels: "Lv 1-3",   slabIdx: 0, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
-            { levels: "Lv 4-6",   slabIdx: 1, color: "text-purple-400",  bg: "bg-purple-500/10",  border: "border-purple-500/20" },
+            { levels: "Lv 4-6",   slabIdx: 1, color: "text-yellow-300",  bg: "bg-yellow-600/10",  border: "border-yellow-600/20" },
             { levels: "Lv 7-9",   slabIdx: 2, color: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/20"  },
-            { levels: "Lv 10-20", slabIdx: 3, color: "text-cyan-400",    bg: "bg-cyan-500/10",    border: "border-cyan-500/20"   },
+            { levels: "Lv 10-20", slabIdx: 3, color: "text-amber-300",    bg: "bg-amber-600/10",    border: "border-amber-600/20"   },
           ].map((slab) => {
             const rate = slabInfo ? Number(slabInfo.rates[slab.slabIdx]) / 100 : [30, 20, 10, 5][slab.slabIdx];
             const carryL = slabInfo ? slabInfo.carryLeftSlabs[slab.slabIdx] : 0n;
@@ -309,7 +309,7 @@ export default function BinaryDetails({ incomeInfo, binaryInfo, slabInfo, format
                   </div>
                   <div className="px-3 py-2 text-center">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Right Carry</p>
-                    <p className="text-xs font-semibold text-cyan-400" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-slab-binary-right-${slab.slabIdx}`}>
+                    <p className="text-xs font-semibold text-amber-300" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-slab-binary-right-${slab.slabIdx}`}>
                       ${formatAmount(carryR)}
                     </p>
                   </div>
@@ -332,10 +332,10 @@ export default function BinaryDetails({ incomeInfo, binaryInfo, slabInfo, format
         </div>
       </div>
 
-      <div className="glass-card rounded-2xl p-5 slide-in border border-purple-500/10" style={{ animationDelay: '0.42s' }} data-testid="card-binary-pending-match">
+      <div className="glass-card rounded-2xl p-5 slide-in border border-yellow-600/10" style={{ animationDelay: '0.42s' }} data-testid="card-binary-pending-match">
         <div className="flex items-center gap-3 mb-3">
-          <div className="h-9 w-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
-            <GitBranch className="h-4 w-4 text-purple-400" />
+          <div className="h-9 w-9 rounded-xl bg-yellow-600/15 flex items-center justify-center">
+            <GitBranch className="h-4 w-4 text-yellow-300" />
           </div>
           <div>
             <p className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
@@ -353,7 +353,7 @@ export default function BinaryDetails({ incomeInfo, binaryInfo, slabInfo, format
           </div>
           <div>
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Potential Income (30%)</p>
-            <p className="text-lg font-bold text-purple-400" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-binary-potential">
+            <p className="text-lg font-bold text-yellow-300" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-binary-potential">
               ${formatAmount(matchedVolume * BigInt(30) / BigInt(100))}
             </p>
           </div>
@@ -364,8 +364,8 @@ export default function BinaryDetails({ incomeInfo, binaryInfo, slabInfo, format
         <div className="glass-card rounded-2xl slide-in" style={{ animationDelay: '0.4s' }} data-testid="card-binary-daily-summary">
           <div className="p-5 border-b border-white/[0.06]">
             <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
-                <CalendarDays className="h-4 w-4 text-purple-400" />
+              <div className="h-9 w-9 rounded-xl bg-yellow-600/15 flex items-center justify-center">
+                <CalendarDays className="h-4 w-4 text-yellow-300" />
               </div>
               <div>
                 <h2 className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
@@ -379,8 +379,8 @@ export default function BinaryDetails({ incomeInfo, binaryInfo, slabInfo, format
             {dayEntries.map(([day, data]) => (
               <div key={day} className="flex items-center justify-between gap-3 px-5 py-3.5" data-testid={`row-binary-day-${day}`}>
                 <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-lg bg-purple-500/10 flex items-center justify-center shrink-0">
-                    <CalendarDays className="h-3.5 w-3.5 text-purple-400" />
+                  <div className="h-8 w-8 rounded-lg bg-yellow-600/10 flex items-center justify-center shrink-0">
+                    <CalendarDays className="h-3.5 w-3.5 text-yellow-300" />
                   </div>
                   <div>
                     <p className="text-sm font-medium">{day}</p>
@@ -399,8 +399,8 @@ export default function BinaryDetails({ incomeInfo, binaryInfo, slabInfo, format
       <div className="glass-card rounded-2xl slide-in" style={{ animationDelay: '0.45s' }} data-testid="card-binary-claim-history">
         <div className="p-5 border-b border-white/[0.06]">
           <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-cyan-500/15 flex items-center justify-center">
-              <GitBranch className="h-4 w-4 text-cyan-400" />
+            <div className="h-9 w-9 rounded-xl bg-amber-600/15 flex items-center justify-center">
+              <GitBranch className="h-4 w-4 text-amber-300" />
             </div>
             <div>
               <h2 className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
@@ -428,13 +428,13 @@ export default function BinaryDetails({ incomeInfo, binaryInfo, slabInfo, format
               const globalIndex = (currentPage - 1) * ITEMS_PER_PAGE + index;
               return (
                 <div key={`${tx.timestamp}-${globalIndex}`} className="flex items-center gap-3 px-5 py-3.5" data-testid={`row-binary-tx-${globalIndex}`}>
-                  <div className="h-8 w-8 rounded-lg bg-purple-500/10 flex items-center justify-center shrink-0">
-                    <GitBranch className="h-3.5 w-3.5 text-purple-400" />
+                  <div className="h-8 w-8 rounded-lg bg-yellow-600/10 flex items-center justify-center shrink-0">
+                    <GitBranch className="h-3.5 w-3.5 text-yellow-300" />
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 flex-wrap">
                       <p className="text-sm font-medium">Binary Claim</p>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-purple-500/10 text-purple-400 font-medium">
+                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-yellow-600/10 text-yellow-300 font-medium">
                         +${formatAmount(tx.amount)}
                       </span>
                     </div>
