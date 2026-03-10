@@ -51,8 +51,8 @@ interface DashboardProps {
   tokenDecimals: number;
 }
 
-function StatCard({ label, value, icon: Icon, iconColor, accentGlow, delay, borderColor }: {
-  label: string; value: string; icon: any; iconColor: string; accentGlow: string; delay: string; borderColor?: string;
+function StatCard({ label, value, icon: Icon, iconColor, accentGlow, delay, borderColor, showDollar = true }: {
+  label: string; value: string; icon: any; iconColor: string; accentGlow: string; delay: string; borderColor?: string; showDollar?: boolean;
 }) {
   return (
     <div className={`stat-card rounded-2xl p-5 slide-in ${borderColor || ''}`} style={{ animationDelay: delay }} data-testid={`card-stat-${label.toLowerCase().replace(/\s/g, '-')}`}>
@@ -64,15 +64,14 @@ function StatCard({ label, value, icon: Icon, iconColor, accentGlow, delay, bord
       </div>
       <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">{label}</p>
       <p className="text-2xl font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-        <span className="gradient-text">${value}</span>
+        <span className="gradient-text">{showDollar ? '$' : ''}{value}</span>
       </p>
     </div>
   );
 }
 
-const TOKEN_PRICE = 0.0036;
 const STAKING_PLANS = [
-  { months: 10, multiplier: 0.1, returnLabel: "10% Return" },
+  { months: 10, multiplier: 0.1, returnLabel: "0.3% Daily" },
 ];
 
 interface StakingActivePlan {
@@ -89,6 +88,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
   const [, setLocation] = useLocation();
   const { toast } = useToast();
 
+  const [tokenBuyPrice, setTokenBuyPrice] = useState(0.0036);
   const [stakingPlan, setStakingPlan] = useState<StakingActivePlan | null>(null);
   const [selectedMonths, setSelectedMonths] = useState<number | null>(10);
   const [stakingActivating, setStakingActivating] = useState(false);
@@ -99,6 +99,13 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
   const [selectedReactivatePkg, setSelectedReactivatePkg] = useState<number>(userInfo.userPackage || 1);
 
   const packagePrice = PACKAGE_PRICES_USD[userInfo.userPackage] || 0;
+
+  useEffect(() => {
+    fetch("/api/token/price")
+      .then(r => r.json())
+      .then(d => { if (d.buyPrice) setTokenBuyPrice(parseFloat(d.buyPrice)); })
+      .catch(() => {});
+  }, []);
 
   const fetchStaking = useCallback(async () => {
     try {
@@ -140,7 +147,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
 
   const stakingPlansComputed = STAKING_PLANS.map((p) => {
     const totalUsd = packagePrice * p.multiplier;
-    const totalTokens = totalUsd / TOKEN_PRICE;
+    const totalTokens = totalUsd / tokenBuyPrice;
     const totalDays = p.months * 30;
     const dailyTokens = totalTokens / totalDays;
     return { ...p, totalTokens, dailyTokens };
@@ -289,7 +296,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
         <StatCard label="Wallet Balance" value={formatAmount(userInfo.walletBalance)} icon={DollarSign} iconColor="text-amber-400" accentGlow="bg-amber-500/15" delay="0.05s" />
         <StatCard label="Total Earnings" value={formatAmount(incomeInfo.totalEarnings)} icon={TrendingUp} iconColor="text-yellow-300" accentGlow="bg-yellow-600/15" delay="0.1s" />
         <StatCard label="Total Withdrawn" value={formatAmount(incomeInfo.totalWithdrawn)} icon={ArrowDownToLine} iconColor="text-amber-300" accentGlow="bg-amber-600/15" delay="0.15s" />
-        <StatCard label="Direct Refs" value={Number(userInfo.directReferralCount).toString()} icon={Users} iconColor="text-emerald-400" accentGlow="bg-emerald-500/15" delay="0.2s" />
+        <StatCard label="Direct Referrals" value={Number(userInfo.directReferralCount).toString()} icon={Users} iconColor="text-emerald-400" accentGlow="bg-emerald-500/15" delay="0.2s" showDollar={false} />
       </div>
 
       {starRank && (
@@ -652,7 +659,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
             </div>
             <div>
               <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-                <span className="gradient-text">Free M Coin Staking</span>
+                <span className="gradient-text">M-Token Staking</span>
               </h2>
               <p className="text-xs text-muted-foreground">Earn M Coin daily with a 10-month staking plan</p>
             </div>
@@ -667,7 +674,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
                     <Clock className="h-4 w-4 text-yellow-300" />
                     <span className="font-bold text-sm" style={{ fontFamily: 'var(--font-display)' }}>10 Months</span>
                   </div>
-                  <Badge className="bg-yellow-600/20 text-yellow-300 border-yellow-600/30">10% Return</Badge>
+                  <Badge className="bg-yellow-600/20 text-yellow-300 border-yellow-600/30">0.3% Daily</Badge>
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <div>
@@ -681,7 +688,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
                 </div>
                 <div className="mt-2 flex items-center gap-1.5">
                   <CheckCircle className="h-3.5 w-3.5 text-yellow-300" />
-                  <span className="text-[11px] text-yellow-300 font-medium">300 days · Token price $0.0036</span>
+                  <span className="text-[11px] text-yellow-300 font-medium">300 days · Token price ${tokenBuyPrice.toFixed(4)}</span>
                 </div>
               </div>
             );
