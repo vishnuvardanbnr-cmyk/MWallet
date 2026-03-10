@@ -718,21 +718,21 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
 
     function _getWithdrawalMatchRate(Package _pkg, uint256 _level) internal pure returns (uint256) {
         if (_pkg == Package.STARTER) {
-            if (_level <= 1) return 100;
+            if (_level <= 1) return 1000;
         } else if (_pkg == Package.BASIC) {
-            if (_level <= 3) return 100;
+            if (_level <= 3) return 1000;
         } else if (_pkg == Package.PRO) {
-            if (_level <= 4) return 100;
-            if (_level == 5) return 50;
+            if (_level <= 4) return 1000;
+            if (_level == 5) return 500;
         } else if (_pkg == Package.ELITE) {
-            if (_level <= 5) return 100;
-            if (_level <= 9) return 50;
+            if (_level <= 5) return 1000;
+            if (_level <= 9) return 500;
         } else if (_pkg == Package.STOCKIEST) {
-            if (_level <= 4) return 100;
-            if (_level <= 12) return 50;
+            if (_level <= 4) return 1000;
+            if (_level <= 12) return 500;
         } else if (_pkg == Package.SUPER_STOCKIEST) {
-            if (_level <= 5) return 500;
-            if (_level <= 15) return 50;
+            if (_level <= 5) return 1000;
+            if (_level <= 15) return 500;
         }
         return 0;
     }
