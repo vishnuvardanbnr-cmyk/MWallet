@@ -203,7 +203,7 @@ export default function ActivatePage({ account, approveToken, activatePackage, f
               <div className="w-5 h-5 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
                 <Check className="h-3 w-3 text-emerald-400" />
               </div>
-              <span className="text-xs text-muted-foreground">Free M Coin staking with daily token claiming</span>
+              <span className="text-xs text-muted-foreground">Free M-Token staking with daily token claiming</span>
             </div>
           </div>
         </div>

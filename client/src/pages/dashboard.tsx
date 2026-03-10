@@ -599,7 +599,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
               </div>
               <div>
                 <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-                  <span className="gradient-text">M Coin Staking</span>
+                  <span className="gradient-text">M-Token Staking</span>
                 </h2>
                 <p className="text-xs text-muted-foreground">{stakingPlan.planMonths}-month plan active</p>
               </div>
@@ -661,7 +661,7 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
               <h2 className="text-lg font-bold" style={{ fontFamily: 'var(--font-display)' }}>
                 <span className="gradient-text">M-Token Staking</span>
               </h2>
-              <p className="text-xs text-muted-foreground">Earn M Coin daily with a 10-month staking plan</p>
+              <p className="text-xs text-muted-foreground">Earn M Tokens daily with a 10-month staking plan</p>
             </div>
           </div>
 

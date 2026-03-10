@@ -185,7 +185,7 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
       }
       setClaimResult({
         success: true,
-        message: `Claimed ${parseFloat(data.claimed).toFixed(2)} M Coin (${data.days} day${data.days > 1 ? "s" : ""})`,
+        message: `Claimed ${parseFloat(data.claimed).toFixed(2)} M Tokens (${data.days} day${data.days > 1 ? "s" : ""})`,
       });
       fetchData();
       fetchClaims(1);
@@ -251,7 +251,7 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
           </div>
           <div>
             <h1 className="text-2xl font-bold" data-testid="text-staking-details-title" style={{ fontFamily: "var(--font-display)" }}>
-              <span className="gradient-text">M Coin Staking</span>
+              <span className="gradient-text">M-Token Staking</span>
             </h1>
             <p className="text-sm text-muted-foreground">Track your staking progress and claim history</p>
           </div>
@@ -262,7 +262,7 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
         <div className="glass-card rounded-2xl p-4">
           <div className="flex items-center gap-1.5 mb-2">
             <Coins className="h-3.5 w-3.5 text-yellow-300" />
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">M Coin Balance</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">M Token Balance</p>
           </div>
           <p className="text-xl font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }} data-testid="text-mwallet-balance">
             {parseFloat(mwallet.balance).toFixed(2)}
