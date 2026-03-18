@@ -1,4 +1,4 @@
-import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome, usdtDeposits, type UsdtDeposit, leadershipRewards, type LeadershipReward } from "@shared/schema";
+import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome, usdtDeposits, type UsdtDeposit, leadershipRewards, type LeadershipReward, musdtStakingPlans, type MusdtStakingPlan, type InsertMusdtStakingPlan, musdtOverrideIncome, type MusdtOverrideIncome } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -69,6 +69,18 @@ export interface IStorage {
   getClaimedLeadershipRanks(walletAddress: string): Promise<LeadershipReward[]>;
   hasClaimedLeadershipRank(walletAddress: string, starRank: number): Promise<boolean>;
   claimLeadershipReward(walletAddress: string, starRank: number, allocationUsdt: string): Promise<LeadershipReward>;
+  // MUSDT Staking
+  createMusdtStakingPlan(data: InsertMusdtStakingPlan): Promise<MusdtStakingPlan>;
+  getActiveMusdtStakingPlan(walletAddress: string): Promise<MusdtStakingPlan | undefined>;
+  getAllMusdtStakingPlans(walletAddress: string): Promise<MusdtStakingPlan[]>;
+  getAllActiveMusdtStakingPlans(): Promise<MusdtStakingPlan[]>;
+  withdrawMusdtRewards(id: number, amount: string): Promise<MusdtStakingPlan>;
+  creditMusdtOverride(id: number, amount: string): Promise<MusdtStakingPlan>;
+  closeMusdtPlan(id: number): Promise<void>;
+  updateMusdtOverrideDate(id: number, date: Date): Promise<void>;
+  logMusdtOverrideIncome(recipientWallet: string, fromWallet: string, amountUsdt: string, level: number): Promise<MusdtOverrideIncome>;
+  getMusdtOverrideIncome(recipientWallet: string): Promise<MusdtOverrideIncome[]>;
+  getMusdtOverrideTotals(recipientWallet: string): Promise<string>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -533,6 +545,79 @@ export class DatabaseStorage implements IStorage {
       .values({ walletAddress: walletAddress.toLowerCase(), starRank, allocationUsdt })
       .returning();
     return row;
+  }
+
+  async createMusdtStakingPlan(data: InsertMusdtStakingPlan): Promise<MusdtStakingPlan> {
+    const [plan] = await db.insert(musdtStakingPlans).values({ ...data, walletAddress: data.walletAddress.toLowerCase() }).returning();
+    return plan;
+  }
+
+  async getActiveMusdtStakingPlan(walletAddress: string): Promise<MusdtStakingPlan | undefined> {
+    const [plan] = await db.select().from(musdtStakingPlans)
+      .where(and(eq(musdtStakingPlans.walletAddress, walletAddress.toLowerCase()), eq(musdtStakingPlans.isActive, true)));
+    return plan;
+  }
+
+  async getAllMusdtStakingPlans(walletAddress: string): Promise<MusdtStakingPlan[]> {
+    return db.select().from(musdtStakingPlans)
+      .where(eq(musdtStakingPlans.walletAddress, walletAddress.toLowerCase()))
+      .orderBy(desc(musdtStakingPlans.startDate));
+  }
+
+  async getAllActiveMusdtStakingPlans(): Promise<MusdtStakingPlan[]> {
+    return db.select().from(musdtStakingPlans).where(eq(musdtStakingPlans.isActive, true));
+  }
+
+  async withdrawMusdtRewards(id: number, amount: string): Promise<MusdtStakingPlan> {
+    const [plan] = await db.update(musdtStakingPlans)
+      .set({
+        totalWithdrawn: sql`${musdtStakingPlans.totalWithdrawn}::numeric + ${amount}::numeric`,
+        lastWithdrawDate: new Date(),
+      })
+      .where(eq(musdtStakingPlans.id, id))
+      .returning();
+    return plan;
+  }
+
+  async creditMusdtOverride(id: number, amount: string): Promise<MusdtStakingPlan> {
+    const [plan] = await db.update(musdtStakingPlans)
+      .set({ overrideReceived: sql`${musdtStakingPlans.overrideReceived}::numeric + ${amount}::numeric` })
+      .where(eq(musdtStakingPlans.id, id))
+      .returning();
+    return plan;
+  }
+
+  async closeMusdtPlan(id: number): Promise<void> {
+    await db.update(musdtStakingPlans).set({ isActive: false, closedAt: new Date() }).where(eq(musdtStakingPlans.id, id));
+  }
+
+  async updateMusdtOverrideDate(id: number, date: Date): Promise<void> {
+    await db.update(musdtStakingPlans).set({ lastOverrideDate: date }).where(eq(musdtStakingPlans.id, id));
+  }
+
+  async logMusdtOverrideIncome(recipientWallet: string, fromWallet: string, amountUsdt: string, level: number): Promise<MusdtOverrideIncome> {
+    const [row] = await db.insert(musdtOverrideIncome).values({
+      recipientWallet: recipientWallet.toLowerCase(),
+      fromWallet: fromWallet.toLowerCase(),
+      amountUsdt,
+      level,
+    }).returning();
+    return row;
+  }
+
+  async getMusdtOverrideIncome(recipientWallet: string): Promise<MusdtOverrideIncome[]> {
+    return db.select().from(musdtOverrideIncome)
+      .where(eq(musdtOverrideIncome.recipientWallet, recipientWallet.toLowerCase()))
+      .orderBy(desc(musdtOverrideIncome.createdAt))
+      .limit(50);
+  }
+
+  async getMusdtOverrideTotals(recipientWallet: string): Promise<string> {
+    const [row] = await db
+      .select({ total: sql<string>`coalesce(sum(${musdtOverrideIncome.amountUsdt}::numeric), 0)::text` })
+      .from(musdtOverrideIncome)
+      .where(eq(musdtOverrideIncome.recipientWallet, recipientWallet.toLowerCase()));
+    return row?.total ?? "0";
   }
 }
 

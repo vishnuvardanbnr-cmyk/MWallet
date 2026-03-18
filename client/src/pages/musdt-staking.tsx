@@ -1,0 +1,503 @@
+import { useState, useEffect, useCallback } from "react";
+import { DollarSign, TrendingUp, Clock, CheckCircle2, AlertCircle, Loader2, ArrowDownUp, Shield, Users, RefreshCw } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Badge } from "@/components/ui/badge";
+
+interface MusdtStakingPageProps {
+  account: string;
+}
+
+interface MusdtPlan {
+  id: number;
+  walletAddress: string;
+  usdtInvested: string;
+  dailyRewardUsdt: string;
+  totalWithdrawn: string;
+  overrideReceived: string;
+  personalCap: string;
+  totalCap: string;
+  lastWithdrawDate: string | null;
+  startDate: string;
+  minEndDate: string;
+  isActive: boolean;
+  closedAt: string | null;
+}
+
+interface OverrideEntry {
+  id: number;
+  fromWallet: string;
+  amountUsdt: string;
+  level: number;
+  createdAt: string;
+}
+
+interface PageData {
+  activePlan: MusdtPlan | null;
+  allPlans: MusdtPlan[];
+  overrideIncome: OverrideEntry[];
+  overrideTotalUsdt: string;
+  usdtBalance: string;
+}
+
+const OVERRIDE_LEVELS = [
+  { level: 1, rate: "20%" },
+  { level: 2, rate: "10%" },
+  { level: 3, rate: "5%" },
+  { level: 4, rate: "3%" },
+  { level: 5, rate: "2%" },
+  { level: 6, rate: "1%" },
+  { level: 7, rate: "1%" },
+  { level: 8, rate: "1%" },
+  { level: 9, rate: "0.5%" },
+  { level: 10, rate: "0.5%" },
+];
+
+export default function MusdtStakingPage({ account }: MusdtStakingPageProps) {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [data, setData] = useState<PageData | null>(null);
+  const [stakeAmount, setStakeAmount] = useState("");
+  const [staking, setStaking] = useState(false);
+  const [withdrawing, setWithdrawing] = useState(false);
+  const [showOverrideTable, setShowOverrideTable] = useState(false);
+
+  const loadData = useCallback(async () => {
+    try {
+      const res = await fetch(`/api/musdt-staking/${account.toLowerCase()}`);
+      if (res.ok) setData(await res.json());
+    } catch {}
+    setLoading(false);
+  }, [account]);
+
+  useEffect(() => { loadData(); }, [loadData]);
+
+  const handleStake = async () => {
+    const amt = parseFloat(stakeAmount);
+    if (isNaN(amt) || amt <= 0) {
+      toast({ title: "Invalid Amount", description: "Enter a valid USDT amount.", variant: "destructive" });
+      return;
+    }
+    setStaking(true);
+    try {
+      const res = await fetch("/api/musdt-staking/stake", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: account, usdtAmount: amt.toString() }),
+      });
+      const result = await res.json();
+      if (!res.ok) { toast({ title: "Stake Failed", description: result.message, variant: "destructive" }); return; }
+      toast({ title: "MUSDT Staking Activated!", description: `$${amt.toFixed(2)} USDT staked. Earning $${parseFloat(result.dailyRewardUsdt).toFixed(4)}/day. Cap: $${parseFloat(result.personalCap).toFixed(2)} personal / $${parseFloat(result.totalCap).toFixed(2)} total.` });
+      setStakeAmount("");
+      await loadData();
+    } catch { toast({ title: "Network Error", variant: "destructive" }); }
+    finally { setStaking(false); }
+  };
+
+  const handleWithdraw = async () => {
+    setWithdrawing(true);
+    try {
+      const res = await fetch("/api/musdt-staking/withdraw", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: account }),
+      });
+      const result = await res.json();
+      if (!res.ok) { toast({ title: "Withdrawal Failed", description: result.message, variant: "destructive" }); return; }
+      toast({ title: "Withdrawal Successful!", description: `$${parseFloat(result.withdrawn).toFixed(4)} USDT credited to your balance.` });
+      await loadData();
+    } catch { toast({ title: "Network Error", variant: "destructive" }); }
+    finally { setWithdrawing(false); }
+  };
+
+  const plan = data?.activePlan ?? null;
+  const usdtBalance = parseFloat(data?.usdtBalance ?? "0");
+  const overrideTotal = parseFloat(data?.overrideTotalUsdt ?? "0");
+
+  const daysElapsed = plan ? Math.floor((Date.now() - new Date(plan.startDate).getTime()) / 86400000) : 0;
+  const daysToMinEnd = plan ? Math.max(0, Math.ceil((new Date(plan.minEndDate).getTime() - Date.now()) / 86400000)) : 0;
+  const progressPct = plan ? Math.min(100, (daysElapsed / 666) * 100) : 0;
+
+  const invested = parseFloat(plan?.usdtInvested ?? "0");
+  const dailyReward = parseFloat(plan?.dailyRewardUsdt ?? "0");
+  const totalWithdrawn = parseFloat(plan?.totalWithdrawn ?? "0");
+  const overrideReceived = parseFloat(plan?.overrideReceived ?? "0");
+  const personalCap = parseFloat(plan?.personalCap ?? "0");
+  const totalCap = parseFloat(plan?.totalCap ?? "0");
+
+  const totalEarned = daysElapsed * dailyReward;
+  const pendingPersonal = Math.max(0, Math.min(totalEarned - totalWithdrawn, personalCap - totalWithdrawn));
+  const personalProgress = personalCap > 0 ? Math.min(100, (totalWithdrawn / personalCap) * 100) : 0;
+  const totalProgress = totalCap > 0 ? Math.min(100, ((totalWithdrawn + overrideReceived) / totalCap) * 100) : 0;
+  const canWithdraw = pendingPersonal >= 10 && plan?.isActive;
+
+  const previewPersonalCap = stakeAmount ? parseFloat(stakeAmount) * 2 : null;
+  const previewTotalCap = stakeAmount ? parseFloat(stakeAmount) * 3.5 : null;
+  const previewDailyReward = stakeAmount ? parseFloat(stakeAmount) * 0.003 : null;
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center py-20">
+        <div className="text-center space-y-4">
+          <div className="w-12 h-12 mx-auto rounded-xl gradient-icon flex items-center justify-center pulse-glow">
+            <Loader2 className="w-6 h-6 animate-spin text-yellow-300" />
+          </div>
+          <p className="text-sm text-muted-foreground">Loading MUSDT staking...</p>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-5">
+
+      {/* Title */}
+      <div className="text-center space-y-1">
+        <h1 className="text-2xl font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-musdt-title">
+          MUSDT Staking
+        </h1>
+        <p className="text-xs text-muted-foreground">0.3% Daily · 666+ Days · 2x Personal · 3.5x Total with Team</p>
+      </div>
+
+      {/* Stats Row */}
+      <div className="grid grid-cols-3 gap-3">
+        <div className="premium-card rounded-xl p-3 text-center" data-testid="card-usdt-balance">
+          <DollarSign className="w-4 h-4 mx-auto text-emerald-400 mb-1" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">USDT Balance</p>
+          <p className="text-sm font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }}>
+            ${usdtBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+          </p>
+        </div>
+        <div className="premium-card rounded-xl p-3 text-center">
+          <TrendingUp className="w-4 h-4 mx-auto text-amber-400 mb-1" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Daily Rate</p>
+          <p className="text-sm font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>0.3%</p>
+        </div>
+        <div className="premium-card rounded-xl p-3 text-center">
+          <Shield className="w-4 h-4 mx-auto text-yellow-300 mb-1" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Total Cap</p>
+          <p className="text-sm font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }}>3.5x</p>
+        </div>
+      </div>
+
+      {/* Active Plan */}
+      {plan && plan.isActive && (
+        <div className="glass-card rounded-2xl p-5 space-y-4" data-testid="card-active-plan">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-9 w-9 rounded-xl bg-emerald-500/15 flex items-center justify-center">
+                <DollarSign className="h-4 w-4 text-emerald-400" />
+              </div>
+              <div>
+                <p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Active MUSDT Stake</p>
+                <p className="text-[10px] text-muted-foreground">${invested.toLocaleString()} USDT · 666+ days</p>
+              </div>
+            </div>
+            <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Active</Badge>
+          </div>
+
+          {/* Plan Details Grid */}
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Daily Reward</p>
+              <p className="text-sm font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>${dailyReward.toFixed(4)} USDT</p>
+            </div>
+            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Days Elapsed</p>
+              <p className="text-sm font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }}>{daysElapsed} / 666 min</p>
+            </div>
+            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Personal Cap</p>
+              <p className="text-sm font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }}>${personalCap.toFixed(2)} (2x)</p>
+            </div>
+            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Total Cap</p>
+              <p className="text-sm font-bold text-amber-300" style={{ fontFamily: "var(--font-display)" }}>${totalCap.toFixed(2)} (3.5x)</p>
+            </div>
+          </div>
+
+          {/* 666 Day Progress */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+              <span>Minimum duration: {daysElapsed} / 666 days</span>
+              <span>{progressPct.toFixed(1)}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
+              <div className="h-full rounded-full bg-gradient-to-r from-yellow-600 to-amber-400 transition-all duration-500" style={{ width: `${progressPct}%` }} />
+            </div>
+            {daysToMinEnd > 0 && (
+              <p className="text-[10px] text-muted-foreground text-center">Minimum duration ends in {daysToMinEnd} days</p>
+            )}
+          </div>
+
+          {/* Personal Earnings Progress */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+              <span>Personal earnings: ${totalWithdrawn.toFixed(2)} / ${personalCap.toFixed(2)}</span>
+              <span>{personalProgress.toFixed(1)}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
+              <div className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-500" style={{ width: `${personalProgress}%` }} />
+            </div>
+          </div>
+
+          {/* Total Progress (Personal + Override) */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+              <span>Total (personal + override): ${(totalWithdrawn + overrideReceived).toFixed(2)} / ${totalCap.toFixed(2)}</span>
+              <span>{totalProgress.toFixed(1)}%</span>
+            </div>
+            <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
+              <div className="h-full rounded-full bg-gradient-to-r from-amber-600 to-yellow-400 transition-all duration-500" style={{ width: `${totalProgress}%` }} />
+            </div>
+          </div>
+
+          {/* Pending Rewards & Withdraw */}
+          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-3">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium text-amber-400">Pending Personal Rewards</p>
+                <p className="text-[10px] text-muted-foreground">${pendingPersonal.toFixed(4)} USDT available · Min $10 to withdraw</p>
+              </div>
+              <span className="text-lg font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>
+                ${pendingPersonal.toFixed(2)}
+              </span>
+            </div>
+            <button
+              onClick={handleWithdraw}
+              disabled={!canWithdraw || withdrawing}
+              className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg glow-button text-white text-sm font-bold transition-all disabled:opacity-50"
+              data-testid="button-withdraw"
+            >
+              {withdrawing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDownUp className="w-4 h-4" />}
+              {withdrawing ? "Processing..." : `Withdraw $${pendingPersonal.toFixed(2)} USDT`}
+            </button>
+            {!canWithdraw && pendingPersonal < 10 && (
+              <p className="text-[10px] text-center text-muted-foreground">
+                Need ${(10 - pendingPersonal).toFixed(2)} more · ~{Math.ceil((10 - pendingPersonal) / dailyReward)} days away
+              </p>
+            )}
+          </div>
+
+          {/* Override income received summary */}
+          {overrideReceived > 0 && (
+            <div className="flex items-center justify-between p-2.5 rounded-lg bg-purple-500/10 border border-purple-500/20">
+              <div className="flex items-center gap-2">
+                <Users className="w-4 h-4 text-purple-400" />
+                <div>
+                  <p className="text-xs font-medium text-purple-300">Team Override Received</p>
+                  <p className="text-[9px] text-muted-foreground">Auto-credited to USDT balance · cap ${(totalCap - personalCap).toFixed(2)}</p>
+                </div>
+              </div>
+              <span className="text-sm font-bold text-purple-300">${overrideReceived.toFixed(4)}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Closed Plan History */}
+      {!plan && data?.allPlans && data.allPlans.length > 0 && (
+        <div className="glass-card rounded-2xl p-5 space-y-3">
+          <p className="text-sm font-semibold text-muted-foreground" style={{ fontFamily: "var(--font-display)" }}>Previous Plans</p>
+          {data.allPlans.map((p) => (
+            <div key={p.id} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+              <div>
+                <p className="text-xs font-medium">${parseFloat(p.usdtInvested).toFixed(2)} invested</p>
+                <p className="text-[10px] text-muted-foreground">{new Date(p.startDate).toLocaleDateString()} — {p.closedAt ? new Date(p.closedAt).toLocaleDateString() : "ongoing"}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-xs font-bold text-emerald-400">${parseFloat(p.totalWithdrawn).toFixed(2)} withdrawn</p>
+                <Badge className={`text-[10px] ${p.isActive ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-white/5 text-muted-foreground border-white/10"}`}>
+                  {p.isActive ? "Active" : "Closed"}
+                </Badge>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* Override Income Card */}
+      {overrideTotal > 0 && (
+        <div className="glass-card rounded-2xl p-5 space-y-3" data-testid="card-override-income">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-9 w-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
+                <Users className="h-4 w-4 text-purple-400" />
+              </div>
+              <div>
+                <p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Team Override Income</p>
+                <p className="text-[10px] text-muted-foreground">0.3% daily from downline MUSDT staking</p>
+              </div>
+            </div>
+            <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Auto-Credited</Badge>
+          </div>
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 rounded-xl bg-purple-500/5 border border-purple-500/15">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Total Override Earned</p>
+              <p className="text-lg font-bold text-purple-300" style={{ fontFamily: "var(--font-display)" }}>${overrideTotal.toFixed(4)}</p>
+            </div>
+            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Records</p>
+              <p className="text-lg font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }}>{data?.overrideIncome?.length ?? 0}</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+            <p className="text-[10px] text-muted-foreground">Override income is automatically credited to your USDT balance as it accrues. No manual claim needed.</p>
+          </div>
+          {data?.overrideIncome && data.overrideIncome.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Recent Entries</p>
+              {data.overrideIncome.slice(0, 5).map((row) => (
+                <div key={row.id} className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.04]">
+                  <div>
+                    <p className="text-[10px] font-medium text-purple-300">Level {row.level} override</p>
+                    <p className="text-[9px] text-muted-foreground">{row.fromWallet.slice(0, 8)}…{row.fromWallet.slice(-4)} · {new Date(row.createdAt).toLocaleDateString()}</p>
+                  </div>
+                  <span className="text-xs font-bold text-emerald-400">+${parseFloat(row.amountUsdt).toFixed(6)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Stake Form */}
+      {!plan && (
+        <div className="glass-card rounded-2xl p-5 space-y-4" data-testid="card-stake-form">
+          <div className="flex items-center gap-2">
+            <div className="h-9 w-9 rounded-xl bg-yellow-600/15 flex items-center justify-center">
+              <DollarSign className="h-4 w-4 text-yellow-300" />
+            </div>
+            <div>
+              <p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Start MUSDT Staking</p>
+              <p className="text-[10px] text-muted-foreground">0.3%/day · 666 days minimum · 2x personal cap · 3.5x total cap</p>
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
+            <div className="flex items-center justify-between mb-2">
+              <span className="text-xs text-muted-foreground">USDT Amount</span>
+              <button
+                onClick={() => setStakeAmount(usdtBalance.toFixed(2))}
+                className="text-[10px] text-yellow-300 hover:text-yellow-200 font-medium uppercase tracking-wider"
+                data-testid="button-max-stake"
+              >
+                MAX
+              </button>
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                type="number"
+                value={stakeAmount}
+                onChange={(e) => setStakeAmount(e.target.value)}
+                placeholder="0.00"
+                className="flex-1 bg-transparent text-xl font-bold text-foreground outline-none placeholder:text-muted-foreground/30"
+                style={{ fontFamily: "var(--font-display)" }}
+                data-testid="input-stake-amount"
+              />
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+                <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-xs font-bold text-emerald-400">USDT</span>
+              </div>
+            </div>
+            <p className="text-[10px] text-muted-foreground mt-1">Balance: ${usdtBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+          </div>
+
+          {stakeAmount && previewDailyReward !== null && parseFloat(stakeAmount) > 0 && (
+            <div className="space-y-2 p-3 rounded-xl bg-yellow-600/5 border border-yellow-600/15">
+              <p className="text-[10px] text-yellow-300 uppercase tracking-wider font-medium">Stake Preview</p>
+              <div className="grid grid-cols-2 gap-2 text-xs">
+                <div className="flex justify-between"><span className="text-muted-foreground">Daily reward</span><span className="font-bold text-amber-400">${previewDailyReward.toFixed(4)}/day</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Min duration</span><span className="font-bold text-yellow-300">666 days</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Personal cap (2x)</span><span className="font-bold text-emerald-400">${previewPersonalCap?.toFixed(2)}</span></div>
+                <div className="flex justify-between"><span className="text-muted-foreground">Total cap (3.5x)</span><span className="font-bold text-amber-300">${previewTotalCap?.toFixed(2)}</span></div>
+                <div className="flex justify-between col-span-2 pt-1 border-t border-white/[0.05]">
+                  <span className="text-muted-foreground">Override income cap (1.5x)</span>
+                  <span className="font-bold text-purple-300">${((previewTotalCap ?? 0) - (previewPersonalCap ?? 0)).toFixed(2)}</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <button
+            onClick={handleStake}
+            disabled={staking || !stakeAmount || parseFloat(stakeAmount) <= 0 || parseFloat(stakeAmount) > usdtBalance}
+            className="w-full glow-button text-white font-bold py-3.5 px-6 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            style={{ fontFamily: "var(--font-display)" }}
+            data-testid="button-stake"
+          >
+            {staking ? <Loader2 className="w-4 h-4 animate-spin" /> : <DollarSign className="w-4 h-4" />}
+            {staking ? "Processing..." : "Activate MUSDT Staking"}
+          </button>
+
+          {usdtBalance === 0 && (
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
+              <p className="text-xs text-amber-400">You need a USDT balance to stake. Deposit USDT first.</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Override Level Table */}
+      <div className="glass-card rounded-2xl p-5 space-y-3">
+        <button
+          onClick={() => setShowOverrideTable(!showOverrideTable)}
+          className="w-full flex items-center justify-between"
+          data-testid="button-toggle-override-table"
+        >
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-purple-400" />
+            <span className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>Override Level Structure</span>
+          </div>
+          <RefreshCw className={`w-3.5 h-3.5 text-muted-foreground transition-transform ${showOverrideTable ? "rotate-180" : ""}`} />
+        </button>
+
+        {showOverrideTable && (
+          <div className="space-y-2">
+            <div className="p-2.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-xs text-amber-300">
+              <strong>Qualification:</strong> Your MUSDT stake must be ≥ 50% of the downline's investment to receive override at each level.
+            </div>
+            <div className="grid grid-cols-1 gap-1.5">
+              {OVERRIDE_LEVELS.map((item) => (
+                <div key={item.level} className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.04]">
+                  <span className="text-[11px] text-muted-foreground">Level {item.level}</span>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-bold text-purple-300">{item.rate} of downline daily reward</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+            <p className="text-[10px] text-muted-foreground text-center">Override income caps at 1.5x your invested amount (part of the 3.5x total)</p>
+          </div>
+        )}
+      </div>
+
+      {/* How It Works */}
+      <div className="premium-card rounded-2xl p-5 space-y-3">
+        <p className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>How MUSDT Staking Works</p>
+        <div className="space-y-2.5">
+          {[
+            { icon: DollarSign, color: "text-emerald-400", title: "Deposit USDT & Stake", desc: "Use your virtual USDT balance to activate a MUSDT staking plan." },
+            { icon: TrendingUp, color: "text-amber-400", title: "0.3% Daily Rewards", desc: "Earn 0.3% of your invested USDT every day. Withdraw anytime (min $10)." },
+            { icon: Clock, color: "text-yellow-300", title: "666-Day Minimum", desc: "Plan stays active for at least 666 days. At 0.3%/day, that's exactly 2x your investment." },
+            { icon: Shield, color: "text-blue-400", title: "2x Personal Cap", desc: "Your personal daily rewards are capped at 2x your investment. After that, only override income flows in." },
+            { icon: Users, color: "text-purple-400", title: "Team Override up to 3.5x", desc: "Earn override income from downlines' daily rewards (up to 10 levels). Total cap is 3.5x your stake." },
+            { icon: CheckCircle2, color: "text-emerald-400", title: "Auto-Credited Override", desc: "Override income is distributed automatically every day and credited directly to your USDT balance." },
+          ].map((item) => (
+            <div key={item.title} className="flex items-start gap-3">
+              <div className="w-7 h-7 rounded-lg bg-white/[0.03] border border-white/[0.06] flex items-center justify-center shrink-0">
+                <item.icon className={`w-3.5 h-3.5 ${item.color}`} />
+              </div>
+              <div>
+                <p className="text-xs font-medium">{item.title}</p>
+                <p className="text-[10px] text-muted-foreground">{item.desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+    </div>
+  );
+}

@@ -228,6 +228,42 @@ export const leadershipRewards = pgTable("leadership_rewards", {
 
 export type LeadershipReward = typeof leadershipRewards.$inferSelect;
 
+// ── MUSDT Staking ─────────────────────────────────────────────────────────────
+
+export const musdtStakingPlans = pgTable("musdt_staking_plans", {
+  id: serial("id").primaryKey(),
+  walletAddress: varchar("wallet_address", { length: 42 }).notNull(),
+  usdtInvested: numeric("usdt_invested", { precision: 20, scale: 4 }).notNull(),
+  dailyRewardUsdt: numeric("daily_reward_usdt", { precision: 20, scale: 6 }).notNull(),
+  totalWithdrawn: numeric("total_withdrawn", { precision: 20, scale: 4 }).notNull().default("0"),
+  overrideReceived: numeric("override_received", { precision: 20, scale: 4 }).notNull().default("0"),
+  personalCap: numeric("personal_cap", { precision: 20, scale: 4 }).notNull(),
+  totalCap: numeric("total_cap", { precision: 20, scale: 4 }).notNull(),
+  lastWithdrawDate: timestamp("last_withdraw_date"),
+  lastOverrideDate: timestamp("last_override_date"),
+  startDate: timestamp("start_date").notNull().defaultNow(),
+  minEndDate: timestamp("min_end_date").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  closedAt: timestamp("closed_at"),
+});
+
+export const insertMusdtStakingPlanSchema = createInsertSchema(musdtStakingPlans).omit({
+  id: true, totalWithdrawn: true, overrideReceived: true, lastWithdrawDate: true, lastOverrideDate: true, isActive: true, closedAt: true,
+});
+export type InsertMusdtStakingPlan = z.infer<typeof insertMusdtStakingPlanSchema>;
+export type MusdtStakingPlan = typeof musdtStakingPlans.$inferSelect;
+
+export const musdtOverrideIncome = pgTable("musdt_override_income", {
+  id: serial("id").primaryKey(),
+  recipientWallet: varchar("recipient_wallet", { length: 42 }).notNull(),
+  fromWallet: varchar("from_wallet", { length: 42 }).notNull(),
+  amountUsdt: numeric("amount_usdt", { precision: 20, scale: 6 }).notNull(),
+  level: integer("level").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type MusdtOverrideIncome = typeof musdtOverrideIncome.$inferSelect;
+
 export interface HardwareProduct {
   id: string;
   name: string;

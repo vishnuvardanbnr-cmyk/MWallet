@@ -1207,9 +1207,198 @@ export async function registerRoutes(
     }
   });
 
+  // ── MUSDT Staking ────────────────────────────────────────────────────────────
+
+  const MUSDT_OVERRIDE_RATES = [0, 0.20, 0.10, 0.05, 0.03, 0.02, 0.01, 0.01, 0.01, 0.005, 0.005];
+  const MUSDT_MIN_DAYS = 666;
+  const MUSDT_DAILY_RATE = 0.003;
+  const MUSDT_PERSONAL_CAP_MULT = 2.0;
+  const MUSDT_TOTAL_CAP_MULT = 3.5;
+  const MUSDT_MIN_WITHDRAW = 10;
+
+  async function distributeMusdtOverride(fromPlan: any): Promise<void> {
+    try {
+      const { ethers } = await import("ethers");
+      const provider = new ethers.JsonRpcProvider(BSC_TESTNET_RPC);
+      const mlm = new ethers.Contract(MLM_CONTRACT_ADDR, MLM_READ_ABI, provider);
+      const fromInvested = parseFloat(fromPlan.usdtInvested);
+      const dailyFromPlan = parseFloat(fromPlan.dailyRewardUsdt);
+      let current = fromPlan.walletAddress;
+
+      for (let level = 1; level <= 10; level++) {
+        const info = await mlm.getUserInfo(current);
+        const sponsor: string = info[1];
+        if (!sponsor || sponsor === ZERO_ADDR) break;
+
+        const sponsorPlan = await storage.getActiveMusdtStakingPlan(sponsor);
+        if (sponsorPlan) {
+          const sponsorInvested = parseFloat(sponsorPlan.usdtInvested);
+          const qualifies = sponsorInvested >= fromInvested * 0.5;
+          if (qualifies) {
+            const rate = MUSDT_OVERRIDE_RATES[level] ?? 0;
+            const overrideAmt = dailyFromPlan * rate;
+            if (overrideAmt > 0) {
+              const overrideReceived = parseFloat(sponsorPlan.overrideReceived);
+              const overrideCap = sponsorInvested * (MUSDT_TOTAL_CAP_MULT - MUSDT_PERSONAL_CAP_MULT);
+              const canReceive = Math.max(0, overrideCap - overrideReceived);
+              const credited = Math.min(overrideAmt, canReceive);
+              if (credited > 0) {
+                await storage.logMusdtOverrideIncome(sponsor, fromPlan.walletAddress, credited.toFixed(6), level);
+                const updatedPlan = await storage.creditMusdtOverride(sponsorPlan.id, credited.toFixed(6));
+                await storage.creditVirtualUsdt(sponsor, credited.toFixed(6));
+                const totalOut = parseFloat(updatedPlan.totalWithdrawn) + parseFloat(updatedPlan.overrideReceived);
+                if (totalOut >= sponsorInvested * MUSDT_TOTAL_CAP_MULT) {
+                  await storage.closeMusdtPlan(sponsorPlan.id);
+                }
+              }
+            }
+          }
+        }
+        current = sponsor;
+      }
+    } catch (_err) {
+      // Non-fatal
+    }
+  }
+
+  async function runMusdtOverrideDistribution(): Promise<void> {
+    try {
+      const plans = await storage.getAllActiveMusdtStakingPlans();
+      const now = new Date();
+      const todayStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+      for (const plan of plans) {
+        const baseline = plan.lastOverrideDate ? new Date(plan.lastOverrideDate) : new Date(plan.startDate);
+        const daysDue = Math.floor((todayStart.getTime() - baseline.getTime()) / 86400000);
+        if (daysDue <= 0) continue;
+        const daysToProcess = Math.min(daysDue, 7);
+        for (let d = 0; d < daysToProcess; d++) {
+          await distributeMusdtOverride(plan);
+        }
+        await storage.updateMusdtOverrideDate(plan.id, todayStart);
+      }
+    } catch (_err) {
+      // Non-fatal background job
+    }
+  }
+
+  // GET /api/musdt-staking/:walletAddress
+  app.get("/api/musdt-staking/:walletAddress", async (req, res) => {
+    try {
+      const addr = req.params.walletAddress.toLowerCase();
+      const [activePlan, allPlans, overrideIncome, overrideTotal, usdtBal] = await Promise.all([
+        storage.getActiveMusdtStakingPlan(addr),
+        storage.getAllMusdtStakingPlans(addr),
+        storage.getMusdtOverrideIncome(addr),
+        storage.getMusdtOverrideTotals(addr),
+        storage.getVirtualUsdtBalance(addr),
+      ]);
+      res.json({
+        activePlan: activePlan || null,
+        allPlans,
+        overrideIncome,
+        overrideTotalUsdt: overrideTotal,
+        usdtBalance: parseFloat(usdtBal?.balance ?? "0").toFixed(4),
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/musdt-staking/stake
+  app.post("/api/musdt-staking/stake", async (req, res) => {
+    try {
+      const { walletAddress, usdtAmount } = req.body;
+      if (!walletAddress || !usdtAmount || parseFloat(usdtAmount) <= 0) {
+        return res.status(400).json({ message: "walletAddress and positive usdtAmount required" });
+      }
+      const addr = walletAddress.toLowerCase();
+      const usdtAmt = parseFloat(usdtAmount);
+
+      const usdtBal = await storage.getVirtualUsdtBalance(addr);
+      if (!usdtBal || parseFloat(usdtBal.balance) < usdtAmt) {
+        return res.status(400).json({ message: "Insufficient virtual USDT balance" });
+      }
+
+      const existing = await storage.getActiveMusdtStakingPlan(addr);
+      if (existing) {
+        return res.status(400).json({ message: "You already have an active MUSDT staking plan" });
+      }
+
+      await storage.deductVirtualUsdt(addr, usdtAmt.toString());
+
+      const dailyRewardUsdt = usdtAmt * MUSDT_DAILY_RATE;
+      const personalCap = usdtAmt * MUSDT_PERSONAL_CAP_MULT;
+      const totalCap = usdtAmt * MUSDT_TOTAL_CAP_MULT;
+
+      const startDate = new Date();
+      const minEndDate = new Date(startDate);
+      minEndDate.setDate(minEndDate.getDate() + MUSDT_MIN_DAYS);
+
+      const plan = await storage.createMusdtStakingPlan({
+        walletAddress: addr,
+        usdtInvested: usdtAmt.toFixed(4),
+        dailyRewardUsdt: dailyRewardUsdt.toFixed(6),
+        personalCap: personalCap.toFixed(4),
+        totalCap: totalCap.toFixed(4),
+        startDate,
+        minEndDate,
+      });
+
+      res.json({ plan, dailyRewardUsdt: dailyRewardUsdt.toFixed(6), personalCap: personalCap.toFixed(4), totalCap: totalCap.toFixed(4) });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/musdt-staking/withdraw
+  app.post("/api/musdt-staking/withdraw", async (req, res) => {
+    try {
+      const { walletAddress } = req.body;
+      if (!walletAddress) return res.status(400).json({ message: "walletAddress required" });
+      const addr = walletAddress.toLowerCase();
+
+      const plan = await storage.getActiveMusdtStakingPlan(addr);
+      if (!plan) return res.status(404).json({ message: "No active MUSDT staking plan found" });
+
+      const now = new Date();
+      const startMs = new Date(plan.startDate).getTime();
+      const daysElapsed = Math.floor((now.getTime() - startMs) / 86400000);
+
+      const invested = parseFloat(plan.usdtInvested);
+      const dailyReward = parseFloat(plan.dailyRewardUsdt);
+      const totalWithdrawn = parseFloat(plan.totalWithdrawn);
+      const personalCap = parseFloat(plan.personalCap);
+
+      const totalEarned = daysElapsed * dailyReward;
+      const personalCapRemaining = Math.max(0, personalCap - totalWithdrawn);
+      const pendingPersonal = Math.min(Math.max(0, totalEarned - totalWithdrawn), personalCapRemaining);
+
+      if (pendingPersonal < MUSDT_MIN_WITHDRAW) {
+        const daysUntilMin = Math.ceil((MUSDT_MIN_WITHDRAW - pendingPersonal) / dailyReward);
+        return res.status(400).json({ message: `Minimum withdrawal is $${MUSDT_MIN_WITHDRAW}. Available: $${pendingPersonal.toFixed(4)}. Come back in ~${daysUntilMin} days.` });
+      }
+
+      const withdrawAmt = parseFloat(pendingPersonal.toFixed(4));
+      const updatedPlan = await storage.withdrawMusdtRewards(plan.id, withdrawAmt.toString());
+      await storage.creditVirtualUsdt(addr, withdrawAmt.toFixed(4));
+
+      const newTotal = parseFloat(updatedPlan.totalWithdrawn) + parseFloat(updatedPlan.overrideReceived);
+      if (parseFloat(updatedPlan.totalWithdrawn) >= personalCap || newTotal >= invested * MUSDT_TOTAL_CAP_MULT) {
+        await storage.closeMusdtPlan(plan.id);
+      }
+
+      res.json({ withdrawn: withdrawAmt.toFixed(4), totalWithdrawn: updatedPlan.totalWithdrawn, personalCapRemaining: Math.max(0, personalCap - parseFloat(updatedPlan.totalWithdrawn)).toFixed(4) });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // Distribute staking override income daily for all active plans, independent of user claims
   runDailyOverrideDistribution(); // run once immediately on startup to catch any missed days
   setInterval(runDailyOverrideDistribution, 60 * 60 * 1000); // then every hour
+
+  runMusdtOverrideDistribution();
+  setInterval(runMusdtOverrideDistribution, 60 * 60 * 1000);
 
   return httpServer;
 }
