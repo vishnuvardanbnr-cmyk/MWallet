@@ -82,6 +82,8 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
   const [unstaking, setUnstaking] = useState(false);
   const [sellingRewards, setSellingRewards] = useState(false);
   const [sellRewardAmount, setSellRewardAmount] = useState("");
+  const [sellingMain, setSellingMain] = useState(false);
+  const [sellMainAmount, setSellMainAmount] = useState("");
 
   const loadData = useCallback(async () => {
     try {
@@ -171,6 +173,28 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
       await loadData();
     } catch { toast({ title: "Network Error", variant: "destructive" }); }
     finally { setSellingRewards(false); }
+  };
+
+  const handleSellMainTokens = async () => {
+    const amt = parseFloat(sellMainAmount);
+    if (isNaN(amt) || amt <= 0) {
+      toast({ title: "Invalid Amount", description: "Enter a valid token amount.", variant: "destructive" });
+      return;
+    }
+    setSellingMain(true);
+    try {
+      const res = await fetch("/api/paidstaking/sell-main-tokens", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ walletAddress: account, tokenAmount: amt.toString() }),
+      });
+      const result = await res.json();
+      if (!res.ok) { toast({ title: "Sell Failed", description: result.message, variant: "destructive" }); return; }
+      toast({ title: "Tokens Sold!", description: `${parseFloat(result.tokensBurned).toFixed(4)} M Tokens burned → $${parseFloat(result.usdtReceived).toFixed(4)} USDT credited to your balance.` });
+      setSellMainAmount("");
+      await loadData();
+    } catch { toast({ title: "Network Error", variant: "destructive" }); }
+    finally { setSellingMain(false); }
   };
 
   const handleUnstake = async () => {
@@ -306,6 +330,62 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
           </p>
         </div>
       </div>
+
+      {/* Override / Matching Income Card */}
+      {data && parseFloat(data.overrideTotalUsdt ?? "0") > 0 && (
+        <div className="glass-card rounded-2xl p-5 space-y-3" data-testid="card-override-income">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className="h-9 w-9 rounded-xl bg-amber-500/15 flex items-center justify-center">
+                <TrendingUp className="h-4 w-4 text-amber-400" />
+              </div>
+              <div>
+                <p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Override / Matching Income</p>
+                <p className="text-[10px] text-muted-foreground">Earned from downlines' paid staking profits</p>
+              </div>
+            </div>
+            <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Auto-Credited</Badge>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Total Override Earned</p>
+              <p className="text-lg font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>
+                ${parseFloat(data.overrideTotalUsdt).toFixed(4)} USDT
+              </p>
+            </div>
+            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Records</p>
+              <p className="text-lg font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }}>
+                {data.overrideIncome?.length ?? 0} entries
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
+            <div>
+              <p className="text-xs font-medium text-emerald-400">Already credited to your USDT balance</p>
+              <p className="text-[10px] text-muted-foreground">Override income is automatically added to your virtual USDT balance the moment it's earned — no manual claim needed.</p>
+            </div>
+          </div>
+
+          {data.overrideIncome && data.overrideIncome.length > 0 && (
+            <div className="space-y-1.5">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Recent Entries</p>
+              {data.overrideIncome.slice(0, 5).map((row) => (
+                <div key={row.id} className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.04]" data-testid={`row-override-income-${row.id}`}>
+                  <div>
+                    <p className="text-[10px] font-medium text-amber-300">Level {row.level} override</p>
+                    <p className="text-[9px] text-muted-foreground">{row.fromWallet.slice(0, 8)}…{row.fromWallet.slice(-4)} · {new Date(row.createdAt).toLocaleDateString()}</p>
+                  </div>
+                  <span className="text-xs font-bold text-emerald-400">+${parseFloat(row.amountUsdt).toFixed(4)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Active Plan */}
       {plan && plan.isActive && (
@@ -447,6 +527,61 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
           >
             {sellingRewards ? <Loader2 className="w-4 h-4 animate-spin" /> : <Flame className="w-4 h-4" />}
             Sell & Burn
+          </button>
+        </div>
+      )}
+
+      {/* Sell Main M-Tokens */}
+      {mainBalance > 0 && (
+        <div className="glass-card rounded-2xl p-5 space-y-4" data-testid="card-sell-main-tokens">
+          <div className="flex items-center gap-2">
+            <Coins className="w-4 h-4 text-yellow-300" />
+            <span className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>Sell M Tokens</span>
+            <Badge className="bg-yellow-600/10 text-yellow-300 border-yellow-600/20 text-[10px]">Main Balance</Badge>
+          </div>
+          <p className="text-[10px] text-muted-foreground">Convert your M Token main balance to USDT at the current sell price. Tokens are burned from supply.</p>
+
+          <div className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.05] text-xs">
+            <span className="text-muted-foreground">Available M Tokens</span>
+            <span className="font-bold text-yellow-300">{mainBalance.toLocaleString(undefined, { maximumFractionDigits: 4 })} M</span>
+          </div>
+
+          <div className="flex gap-2">
+            <div className="flex-1 rounded-xl bg-white/[0.03] border border-white/[0.06] px-3 py-2.5">
+              <p className="text-[10px] text-muted-foreground mb-1">Amount to Sell</p>
+              <input
+                type="number"
+                value={sellMainAmount}
+                onChange={(e) => setSellMainAmount(e.target.value)}
+                placeholder="0.00"
+                className="w-full bg-transparent text-sm font-bold text-foreground outline-none placeholder:text-muted-foreground/30"
+                data-testid="input-sell-main-amount"
+              />
+            </div>
+            <button
+              onClick={() => setSellMainAmount(mainBalance.toFixed(8))}
+              className="px-2 text-[10px] text-yellow-300 hover:text-yellow-200 font-medium uppercase tracking-wider shrink-0"
+              data-testid="button-max-main"
+            >
+              MAX
+            </button>
+          </div>
+
+          {sellMainAmount && parseFloat(sellMainAmount) > 0 && (
+            <div className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.05] text-xs">
+              <span className="text-muted-foreground">You receive</span>
+              <span className="font-bold text-emerald-400">${(parseFloat(sellMainAmount) * sellPrice).toFixed(4)} USDT</span>
+            </div>
+          )}
+
+          <button
+            onClick={handleSellMainTokens}
+            disabled={sellingMain || !sellMainAmount || parseFloat(sellMainAmount) <= 0 || parseFloat(sellMainAmount) > mainBalance}
+            className="w-full glow-button text-white font-bold py-3 px-6 rounded-xl text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
+            data-testid="button-sell-main-tokens"
+          >
+            {sellingMain ? <Loader2 className="w-4 h-4 animate-spin" /> : <Coins className="w-4 h-4" />}
+            {sellingMain ? "Processing..." : "Sell M Tokens → USDT"}
           </button>
         </div>
       )}

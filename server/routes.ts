@@ -842,6 +842,51 @@ export async function registerRoutes(
     }
   });
 
+  // POST /api/paidstaking/sell-main-tokens  (sell main M-Token balance → USDT, burned from circulating supply)
+  app.post("/api/paidstaking/sell-main-tokens", async (req, res) => {
+    try {
+      const { walletAddress, tokenAmount } = req.body;
+      if (!walletAddress || !tokenAmount || parseFloat(tokenAmount) <= 0) {
+        return res.status(400).json({ message: "walletAddress and positive tokenAmount required" });
+      }
+      const addr = walletAddress.toLowerCase();
+      const tokens = parseFloat(tokenAmount);
+
+      const mBal = await storage.getMTokenBalance(addr);
+      const mainBal = parseFloat(mBal?.mainBalance ?? "0");
+      if (mainBal < tokens) {
+        return res.status(400).json({ message: "Insufficient M-Token main balance" });
+      }
+
+      const { sellPrice } = await getTokenPrice();
+      const usdtOut = tokens * sellPrice;
+
+      await storage.deductMTokenMainBalance(addr, tokens.toFixed(8));
+      const econ = await storage.getTokenEconomics();
+      const newSupply = Math.max(0, parseFloat(econ.circulatingSupply) - tokens);
+      const newLiquidity = Math.max(0, parseFloat(econ.liquidity) - usdtOut);
+      await storage.updateTokenEconomics({
+        circulatingSupply: newSupply.toFixed(8),
+        liquidity: newLiquidity.toFixed(8),
+      });
+
+      await storage.creditVirtualUsdt(addr, usdtOut.toFixed(4));
+
+      await storage.logTokenTransaction({
+        walletAddress: addr,
+        txType: "sell_main_tokens",
+        tokenAmount: tokens.toFixed(8),
+        usdtAmount: usdtOut.toFixed(4),
+        priceAtTxn: sellPrice.toFixed(8),
+        note: `Sold ${tokens.toFixed(4)} M Tokens at sell price $${sellPrice.toFixed(8)}`,
+      });
+
+      res.json({ usdtReceived: usdtOut.toFixed(4), tokensBurned: tokens.toFixed(8), sellPriceUsed: sellPrice.toFixed(8) });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // POST /api/paidstaking/sell-rewards  (sell reward tokens → USDT, burned from circulating supply)
   app.post("/api/paidstaking/sell-rewards", async (req, res) => {
     try {
