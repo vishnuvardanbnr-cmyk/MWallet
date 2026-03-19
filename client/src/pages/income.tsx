@@ -52,11 +52,12 @@ const WITHDRAWAL_MATCH_DESC: Record<number, string> = {
 
 const BINARY_MATCH_DESC: Record<number, string> = {
   0: "Activate a package to unlock",
-  1: "30% matching, $200 daily cap",
-  2: "30% matching, $600 daily cap",
-  3: "30% matching, $1,200 daily cap",
-  4: "30% matching, $2,400 daily cap",
-  5: "30% matching, $4,800 daily cap",
+  1: "30% matching, $50 daily cap",
+  2: "30% matching, $200 daily cap",
+  3: "30% matching, $600 daily cap",
+  4: "30% matching, $1,200 daily cap",
+  5: "30% matching, $2,400 daily cap",
+  6: "30% matching, $4,800 daily cap",
 };
 
 const MATCHING_OVERRIDE_DESC: Record<number, string> = {
