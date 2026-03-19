@@ -134,24 +134,23 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid package level" });
       }
 
-      const econ = await storage.getTokenEconomics();
-      const TOKEN_PRICE = parseFloat(econ.listingPrice) || 0.0036;
       const multiplier = 0.1;
-      const totalUsd = activationFee * multiplier;
-      const totalTokens = totalUsd / TOKEN_PRICE;
+      const totalUsdtReward = activationFee * multiplier; // e.g. $60 for Pro package
       const totalDays = parsed.planMonths * 30;
-      const dailyTokens = totalTokens / totalDays;
+      const dailyUsdtReward = totalUsdtReward / totalDays; // e.g. $0.20/day
 
       const startDate = new Date();
       const endDate = new Date();
       endDate.setDate(endDate.getDate() + totalDays);
 
+      // dailyTokens and totalTokens columns are repurposed to store USDT values.
+      // At claim time the USDT value is converted to M-Tokens at the current buy price.
       const plan = await storage.createStakingPlan({
         walletAddress: addr,
         planMonths: parsed.planMonths,
         activationFee: activationFee.toString(),
-        totalTokens: totalTokens.toString(),
-        dailyTokens: dailyTokens.toFixed(6),
+        totalTokens: totalUsdtReward.toFixed(6),     // total USDT reward budget
+        dailyTokens: dailyUsdtReward.toFixed(6),     // daily USDT reward
         startDate,
         endDate,
       });
@@ -195,44 +194,57 @@ export async function registerRoutes(
 
       const now = new Date();
       const endDate = new Date(plan.endDate);
-
-      if (now > endDate) {
-        now.setTime(endDate.getTime());
-      }
+      if (now > endDate) now.setTime(endDate.getTime());
 
       const startMs = new Date(plan.startDate).getTime();
       const totalElapsedDays = Math.floor((now.getTime() - startMs) / (1000 * 60 * 60 * 24));
-      const dailyAmount = parseFloat(plan.dailyTokens);
-      const alreadyClaimed = parseFloat(plan.claimedTokens);
-      const totalAvailable = parseFloat(plan.totalTokens);
-      const totalEarnedToDate = Math.min(totalElapsedDays * dailyAmount, totalAvailable);
-      const claimable = totalEarnedToDate - alreadyClaimed;
+      const lastClaimMs = plan.lastClaimDate
+        ? new Date(plan.lastClaimDate).getTime()
+        : startMs;
+      const daysSinceClaim = Math.floor((now.getTime() - lastClaimMs) / (1000 * 60 * 60 * 24));
 
-      if (claimable < 0.001) {
-        if (alreadyClaimed >= totalAvailable - 0.001) {
-          return res.status(400).json({ message: "All tokens have been claimed for this plan" });
+      // dailyTokens/totalTokens columns store USDT values (repurposed at plan creation)
+      const dailyUsdtReward = parseFloat(plan.dailyTokens);
+      const totalUsdtBudget = parseFloat(plan.totalTokens);
+      const alreadyClaimedUsdt = parseFloat(plan.claimedTokens);
+
+      const totalUsdtEarned = Math.min(totalElapsedDays * dailyUsdtReward, totalUsdtBudget);
+      const pendingUsdt = Math.min(totalUsdtEarned - alreadyClaimedUsdt, totalUsdtBudget - alreadyClaimedUsdt);
+
+      if (pendingUsdt < 0.0001) {
+        if (alreadyClaimedUsdt >= totalUsdtBudget - 0.0001) {
+          return res.status(400).json({ message: "All rewards have been claimed for this plan" });
         }
-        return res.status(400).json({ message: "No tokens available to claim yet. Come back tomorrow!" });
+        return res.status(400).json({ message: "No rewards available yet. Come back tomorrow!" });
       }
 
-      const finalClaim = Math.min(claimable, totalAvailable - alreadyClaimed);
-      const daysSinceClaim = plan.lastClaimDate
-        ? Math.floor((now.getTime() - new Date(plan.lastClaimDate).getTime()) / (1000 * 60 * 60 * 24))
-        : totalElapsedDays;
-
-      const claimStr = finalClaim.toFixed(6);
+      // Convert pending USDT reward to M-Tokens at current buy price
+      const { buyPrice } = await getTokenPrice();
+      const tokensToGive = pendingUsdt / buyPrice;
+      const tokenStr = tokensToGive.toFixed(6);
       const claimDays = Math.max(daysSinceClaim, 1);
-      const updatedPlan = await storage.claimTokens(plan.id, claimStr);
-      await storage.addToMwalletBalance(addr, claimStr);
+
+      // claimedTokens column tracks cumulative USDT claimed (repurposed)
+      const updatedPlan = await storage.claimTokens(plan.id, pendingUsdt.toFixed(6));
+      await storage.addToMwalletBalance(addr, tokenStr);
       await storage.createStakingClaim({
         walletAddress: addr,
         planId: plan.id,
-        amount: claimStr,
+        amount: tokenStr,
         daysCount: claimDays,
       });
 
-      const newClaimed = parseFloat(updatedPlan.claimedTokens);
-      if (newClaimed >= totalAvailable - 0.001) {
+      await storage.logTokenTransaction({
+        walletAddress: addr,
+        txType: "free_stake_reward",
+        tokenAmount: tokenStr,
+        usdtAmount: pendingUsdt.toFixed(6),
+        priceAtTxn: buyPrice.toFixed(8),
+        note: `Free staking: ${claimDays} day(s) × $${dailyUsdtReward.toFixed(6)}/day @ buy price $${buyPrice.toFixed(8)}`,
+      });
+
+      const newClaimedUsdt = parseFloat(updatedPlan.claimedTokens);
+      if (newClaimedUsdt >= totalUsdtBudget - 0.0001) {
         const { db } = await import("./db");
         const { stakingPlans: stakingTable } = await import("@shared/schema");
         const { eq } = await import("drizzle-orm");
@@ -240,10 +252,12 @@ export async function registerRoutes(
       }
 
       res.json({
-        claimed: claimStr,
+        claimed: tokenStr,          // M-Tokens received
+        usdtValue: pendingUsdt.toFixed(6),
+        priceUsed: buyPrice.toFixed(8),
         days: claimDays,
-        totalClaimed: updatedPlan.claimedTokens,
-        remaining: (totalAvailable - newClaimed).toFixed(6),
+        totalClaimedUsdt: newClaimedUsdt.toFixed(6),
+        remainingUsdt: Math.max(0, totalUsdtBudget - newClaimedUsdt).toFixed(6),
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
