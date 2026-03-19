@@ -29,7 +29,7 @@ const MLM_READ_ABI = [
   "function getUserInfo(address _user) external view returns (uint256 userId, address sponsor, address binaryParent, address leftChild, address rightChild, uint8 placementSide, uint8 userPackage, uint8 status, uint256 walletBalance, uint256 tempWalletBalance, uint256 totalEarnings, uint256 directReferralCount, uint256 joinedAt)",
 ];
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
-const MLM_CONTRACT_ADDR = "0x284dcb5C8F2407c135713a093A4fB42Ef2b1bCBF";
+const MLM_CONTRACT_ADDR = process.env.VITE_CONTRACT_ADDRESS || "0x648Ad48639382136c877FfCe966c2b7bf68b0E88";
 
 async function distributeStakingOverride(fromWallet: string, usdtProfit: number): Promise<void> {
   try {
@@ -498,7 +498,7 @@ export async function registerRoutes(
       }
 
       // Verify the Deposited(address indexed user, uint256 amount) event from BoardMatrixHandler
-      const BOARD_HANDLER = "0x0C63B585586E263DC801554d40A72F84976FdCfc".toLowerCase();
+      const BOARD_HANDLER = (process.env.VITE_BOARD_HANDLER_ADDRESS || "0xD307FB39d7d42B59AC46e28D71ef72019E9D5e38").toLowerCase();
       const DEPOSITED_TOPIC = ethers.id("Deposited(address,uint256)").toLowerCase();
 
       let verifiedAmount: string | null = null;
@@ -1026,7 +1026,7 @@ export async function registerRoutes(
 
   // ── BTC Swap via backend liquidity wallet ──────────────────────────────────
 
-  const BOARD_HANDLER_TESTNET = "0x0C63B585586E263DC801554d40A72F84976FdCfc";
+  const BOARD_HANDLER_TESTNET = process.env.VITE_BOARD_HANDLER_ADDRESS || "0xD307FB39d7d42B59AC46e28D71ef72019E9D5e38";
   const BOARD_HANDLER_SYNC_ABI = ["function totalVirtualRewards(address) view returns (uint256)"];
 
   // POST /api/btcswap/sync/:walletAddress — sync on-chain board rewards to backend virtual balance
