@@ -78,7 +78,6 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
   const [stakeAmount, setStakeAmount] = useState("");
   const [staking, setStaking] = useState(false);
   const [claiming, setClaiming] = useState(false);
-  const [claimingUsdt, setClaimingUsdt] = useState(false);
   const [unstaking, setUnstaking] = useState(false);
   const [sellingRewards, setSellingRewards] = useState(false);
   const [sellRewardAmount, setSellRewardAmount] = useState("");
@@ -135,22 +134,6 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
       await loadData();
     } catch { toast({ title: "Network Error", variant: "destructive" }); }
     finally { setClaiming(false); }
-  };
-
-  const handleClaimUsdt = async () => {
-    setClaimingUsdt(true);
-    try {
-      const res = await fetch("/api/paidstaking/claim-usdt-rewards", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress: account }),
-      });
-      const result = await res.json();
-      if (!res.ok) { toast({ title: "Claim Failed", description: result.message, variant: "destructive" }); return; }
-      toast({ title: "USDT Claimed!", description: `$${parseFloat(result.usdtClaimed).toFixed(4)} USDT added to your balance (${result.daysRewarded} day${result.daysRewarded > 1 ? "s" : ""}).` });
-      await loadData();
-    } catch { toast({ title: "Network Error", variant: "destructive" }); }
-    finally { setClaimingUsdt(false); }
   };
 
   const handleSellRewards = async () => {
@@ -439,29 +422,20 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs font-medium text-amber-400">Pending Rewards</p>
-                  <p className="text-[10px] text-muted-foreground">~{pendingRewardTokens} M tokens · ${(parseFloat(plan?.dailyRewardUsdt ?? "0") * lastClaimDaysAgo).toFixed(4)} USDT ({lastClaimDaysAgo} day{lastClaimDaysAgo > 1 ? "s" : ""})</p>
+                  <p className="text-[10px] text-muted-foreground">
+                    ${(parseFloat(plan?.dailyRewardUsdt ?? "0") * lastClaimDaysAgo).toFixed(4)} USDT ({lastClaimDaysAgo} day{lastClaimDaysAgo > 1 ? "s" : ""}) → converts to ~{pendingRewardTokens} M-Tokens at current buy price
+                  </p>
                 </div>
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleClaimRewards}
-                  disabled={claiming || claimingUsdt}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg glow-button text-white text-xs font-bold transition-all disabled:opacity-50"
-                  data-testid="button-claim-rewards"
-                >
-                  {claiming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
-                  Claim M Tokens
-                </button>
-                <button
-                  onClick={handleClaimUsdt}
-                  disabled={claiming || claimingUsdt}
-                  className="flex-1 flex items-center justify-center gap-1.5 py-1.5 rounded-lg bg-emerald-500/20 border border-emerald-500/30 text-emerald-300 text-xs font-bold transition-all hover:bg-emerald-500/30 disabled:opacity-50"
-                  data-testid="button-claim-usdt"
-                >
-                  {claimingUsdt ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <DollarSign className="w-3.5 h-3.5" />}
-                  Withdraw USDT
-                </button>
-              </div>
+              <button
+                onClick={handleClaimRewards}
+                disabled={claiming}
+                className="w-full flex items-center justify-center gap-1.5 py-2 rounded-lg glow-button text-white text-xs font-bold transition-all disabled:opacity-50"
+                data-testid="button-claim-rewards"
+              >
+                {claiming ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <CheckCircle2 className="w-3.5 h-3.5" />}
+                {claiming ? "Processing..." : `Claim ${pendingRewardTokens} M-Tokens`}
+              </button>
             </div>
           )}
 
@@ -634,8 +608,8 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
                 <div className="flex justify-between"><span className="text-muted-foreground">Entry price</span><span className="font-medium">${buyPrice.toFixed(6)}</span></div>
                 <div className="flex justify-between"><span className="text-muted-foreground">Tokens minted</span><span className="font-bold text-yellow-300">{previewTokens.minted} M</span></div>
                 <div className="flex justify-between col-span-2 pt-1 border-t border-white/[0.05]">
-                  <span className="text-muted-foreground">Daily reward</span>
-                  <span className="font-bold text-amber-400">${previewTokens.dailyReward} USDT value/day</span>
+                  <span className="text-muted-foreground">Daily reward (→ M-Tokens on claim)</span>
+                  <span className="font-bold text-amber-400">${previewTokens.dailyReward} USDT/day</span>
                 </div>
               </div>
             </div>
@@ -709,7 +683,7 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
           {[
             { icon: DollarSign, color: "text-emerald-400", title: "Deposit USDT", desc: "Admin credits USDT to your account. Use it to stake." },
             { icon: Coins, color: "text-yellow-300", title: "90% Tokens Minted", desc: "At current buy price — 70% staked for you, 20% to admin wallet." },
-            { icon: TrendingUp, color: "text-amber-400", title: "0.3% Daily Rewards", desc: "Based on your original USDT investment. Claim any time, once per day." },
+            { icon: TrendingUp, color: "text-amber-400", title: "0.3% Daily Rewards → M-Tokens", desc: "Rewards accrue at 0.3%/day of your USDT stake. When you claim, the USDT value is converted to M-Tokens at the current buy price." },
             { icon: Flame, color: "text-orange-400", title: "Sell Rewards → Price Rises", desc: "Reward tokens burn from supply when sold, raising M token price." },
             { icon: CheckCircle2, color: "text-amber-300", title: "Unstake After 10 Months", desc: "70% tokens sold at sell price + 20% of original USDT returned." },
           ].map((item) => (
