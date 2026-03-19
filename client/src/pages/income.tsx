@@ -43,8 +43,6 @@ const WITHDRAWAL_MATCH_DESC: Record<number, string> = {
   6: "1% (L1–5) · 0.5% (L6–15)",
 };
 
-// 5× package price = maxIncomeLimit from contract
-const PACKAGE_MAX_INCOME = [0, 250, 1000, 3000, 6000, 12000, 24000];
 
 const BINARY_MATCH_DESC: Record<number, string> = {
   0: "Activate a package to unlock",
@@ -133,78 +131,6 @@ export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, 
           <span className="gradient-text">Income</span>
         </h1>
         <p className="text-muted-foreground text-sm mt-0.5">All your income streams in one place</p>
-      </div>
-
-      <div className="glass-card rounded-2xl slide-in" style={{ animationDelay: '0.05s' }} data-testid="card-flushout-history">
-        <div className="p-5 border-b border-white/[0.06]">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-red-500/15 flex items-center justify-center">
-              <AlertTriangle className="h-4 w-4 text-red-400" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-                <span className="gradient-text">Flushout History</span>
-              </h2>
-              <p className="text-[10px] text-muted-foreground">Records of when max income was reached and incomes were flushed</p>
-            </div>
-          </div>
-        </div>
-        {loadingTxs ? (
-          <div className="flex items-center justify-center py-10">
-            <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-          </div>
-        ) : (() => {
-          const reactivationTxs = allTransactions.filter(tx => tx.type === "Reactivation");
-          if (reactivationTxs.length === 0) {
-            return (
-              <div className="text-center py-10">
-                <div className="h-12 w-12 mx-auto rounded-xl bg-white/[0.03] flex items-center justify-center mb-3">
-                  <AlertTriangle className="h-6 w-6 text-muted-foreground/30" />
-                </div>
-                <p className="text-sm text-muted-foreground" data-testid="text-no-flushouts">No flushouts yet</p>
-                <p className="text-xs text-muted-foreground/60 mt-1">Your incomes have not been flushed out</p>
-              </div>
-            );
-          }
-          return (
-            <div className="divide-y divide-white/[0.04]">
-              {reactivationTxs.map((tx, idx) => {
-                const pkgIdx = PACKAGE_NAMES.indexOf(tx.detail);
-                const flushedIncome = pkgIdx > 0 ? PACKAGE_MAX_INCOME[pkgIdx] : 0;
-                const reactivationFee = parseFloat(formatAmount(tx.amount));
-                return (
-                  <div key={`flush-${tx.timestamp}-${idx}`} className="flex items-start justify-between px-5 py-3.5" data-testid={`row-flushout-${idx}`}>
-                    <div className="flex items-start gap-3">
-                      <div className="h-9 w-9 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0 mt-0.5">
-                        <AlertTriangle className="h-4 w-4 text-red-400" />
-                      </div>
-                      <div>
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium">Flushed & Reactivated</span>
-                          <Badge variant="outline" className="text-[10px] border-red-500/20 text-red-400">
-                            {tx.detail}
-                          </Badge>
-                        </div>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">
-                          {formatTimestamp(tx.timestamp)}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground/70 mt-0.5">
-                          Paid to reactivate: ${reactivationFee.toFixed(2)}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="font-bold text-sm text-red-400" style={{ fontFamily: 'var(--font-display)' }}>
-                        {flushedIncome > 0 ? `-$${flushedIncome.toLocaleString()}` : `-$${reactivationFee.toFixed(2)}`}
-                      </p>
-                      <p className="text-[10px] text-muted-foreground">Income flushed</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          );
-        })()}
       </div>
 
       {binaryInfo.claimableBinaryIncome > BigInt(0) && (
@@ -482,6 +408,58 @@ export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, 
           </div>
         )}
       </div>
+
+      {/* Flushout History — at bottom, only shown when records exist */}
+      {!loadingTxs && allTransactions.filter(tx => tx.type === "Reactivation").length > 0 && (
+        <div className="glass-card rounded-2xl slide-in" data-testid="card-flushout-history">
+          <div className="p-5 border-b border-white/[0.06]">
+            <div className="flex items-center gap-3">
+              <div className="h-9 w-9 rounded-xl bg-red-500/15 flex items-center justify-center">
+                <AlertTriangle className="h-4 w-4 text-red-400" />
+              </div>
+              <div>
+                <h2 className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
+                  <span className="text-red-400">Flushout History</span>
+                </h2>
+                <p className="text-[10px] text-muted-foreground">Max income was reached — income was reset and package reactivated</p>
+              </div>
+            </div>
+          </div>
+          <div className="divide-y divide-white/[0.04]">
+            {allTransactions.filter(tx => tx.type === "Reactivation").map((tx, idx) => {
+              const reactivationFee = parseFloat(formatAmount(tx.amount));
+              const pkgName = tx.detail && tx.detail !== "None" ? tx.detail : "Package";
+              const pkgIdx = PACKAGE_NAMES.indexOf(tx.detail);
+              const maxIncome = pkgIdx > 0 ? PACKAGE_PRICES_USD[pkgIdx] * 5 : reactivationFee * 5;
+              return (
+                <div key={`flush-${tx.timestamp}-${idx}`} className="flex items-center gap-3 px-5 py-4" data-testid={`row-flushout-${idx}`}>
+                  <div className="h-9 w-9 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
+                    <AlertTriangle className="h-4 w-4 text-red-400" />
+                  </div>
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="text-sm font-medium">Max Income Reached</span>
+                      <Badge variant="outline" className="text-[10px] border-red-500/20 text-red-400">
+                        {pkgName}
+                      </Badge>
+                    </div>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      Reactivation fee paid: <span className="text-foreground font-medium">${reactivationFee.toFixed(2)}</span>
+                      {tx.timestamp > 0 && <span className="ml-2">· {formatTimestamp(tx.timestamp)}</span>}
+                    </p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className="font-bold text-sm text-red-400" style={{ fontFamily: 'var(--font-display)' }}>
+                      ${maxIncome.toLocaleString()}
+                    </p>
+                    <p className="text-[10px] text-muted-foreground">income cap</p>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

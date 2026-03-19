@@ -1421,9 +1421,9 @@ export async function registerRoutes(
     }
   });
 
-  // Distribute staking override income daily for all active plans, independent of user claims
-  runDailyOverrideDistribution(); // run once immediately on startup to catch any missed days
-  setInterval(runDailyOverrideDistribution, 60 * 60 * 1000); // then every hour
+  // Override income for paid M-Token staking has been disabled per business decision
+  // runDailyOverrideDistribution(); // disabled
+  // setInterval(runDailyOverrideDistribution, 60 * 60 * 1000); // disabled
 
   runMusdtOverrideDistribution();
   setInterval(runMusdtOverrideDistribution, 60 * 60 * 1000);

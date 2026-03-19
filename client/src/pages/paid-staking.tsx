@@ -314,62 +314,6 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
         </div>
       </div>
 
-      {/* Override / Matching Income Card */}
-      {data && parseFloat(data.overrideTotalUsdt ?? "0") > 0 && (
-        <div className="glass-card rounded-2xl p-5 space-y-3" data-testid="card-override-income">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="h-9 w-9 rounded-xl bg-amber-500/15 flex items-center justify-center">
-                <TrendingUp className="h-4 w-4 text-amber-400" />
-              </div>
-              <div>
-                <p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Override / Matching Income</p>
-                <p className="text-[10px] text-muted-foreground">Earned from downlines' paid staking profits</p>
-              </div>
-            </div>
-            <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Auto-Credited</Badge>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Total Override Earned</p>
-              <p className="text-lg font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>
-                ${parseFloat(data.overrideTotalUsdt).toFixed(4)} USDT
-              </p>
-            </div>
-            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Records</p>
-              <p className="text-lg font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }}>
-                {data.overrideIncome?.length ?? 0} entries
-              </p>
-            </div>
-          </div>
-
-          <div className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-            <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-            <div>
-              <p className="text-xs font-medium text-emerald-400">Already credited to your USDT balance</p>
-              <p className="text-[10px] text-muted-foreground">Override income is automatically added to your virtual USDT balance the moment it's earned — no manual claim needed.</p>
-            </div>
-          </div>
-
-          {data.overrideIncome && data.overrideIncome.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Recent Entries</p>
-              {data.overrideIncome.slice(0, 5).map((row) => (
-                <div key={row.id} className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.04]" data-testid={`row-override-income-${row.id}`}>
-                  <div>
-                    <p className="text-[10px] font-medium text-amber-300">Level {row.level} override</p>
-                    <p className="text-[9px] text-muted-foreground">{row.fromWallet.slice(0, 8)}…{row.fromWallet.slice(-4)} · {new Date(row.createdAt).toLocaleDateString()}</p>
-                  </div>
-                  <span className="text-xs font-bold text-emerald-400">+${parseFloat(row.amountUsdt).toFixed(4)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
-      )}
-
       {/* Active Plan */}
       {plan && plan.isActive && (
         <div className="glass-card rounded-2xl p-5 space-y-4" data-testid="card-active-plan">
@@ -634,32 +578,17 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
           )}
       </div>
 
-      {/* Override Income + Transaction History */}
-      {data && (data.overrideIncome?.length > 0 || data.tokenTransactions?.length > 0) && (
+      {/* Transaction History */}
+      {data && data.tokenTransactions?.length > 0 && (
         <div className="glass-card rounded-2xl p-5 space-y-3" data-testid="card-transactions">
           <div className="flex items-center gap-2">
             <BarChart3 className="w-4 h-4 text-amber-300" />
             <p className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>Transaction History</p>
           </div>
 
-          {data.overrideIncome?.length > 0 && (
+          {data.tokenTransactions && (
             <div className="space-y-1.5">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Override / Matching Income · Total: ${parseFloat(data.overrideTotalUsdt ?? "0").toFixed(4)} USDT</p>
-              {data.overrideIncome.slice(0, 10).map((row) => (
-                <div key={row.id} className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.04]" data-testid={`row-override-${row.id}`}>
-                  <div>
-                    <p className="text-[10px] font-medium text-emerald-400">Level {row.level} matching</p>
-                    <p className="text-[9px] text-muted-foreground">{row.fromWallet.slice(0, 8)}…{row.fromWallet.slice(-4)} · {new Date(row.createdAt).toLocaleDateString()}</p>
-                  </div>
-                  <span className="text-xs font-bold text-emerald-400">+${parseFloat(row.amountUsdt).toFixed(4)}</span>
-                </div>
-              ))}
-            </div>
-          )}
-
-          {data.tokenTransactions?.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mt-2">Token Transactions</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Token Transactions</p>
               {data.tokenTransactions.slice(0, 15).map((tx) => (
                 <div key={tx.id} className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.04]" data-testid={`row-token-tx-${tx.id}`}>
                   <div>
