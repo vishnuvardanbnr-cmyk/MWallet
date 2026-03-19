@@ -32,8 +32,8 @@ interface OverrideEntry {
 }
 
 interface PageData {
-  activePlan: MusdtPlan | null;
-  allPlans: MusdtPlan[];
+  activePlans: MusdtPlan[];
+  closedPlans: MusdtPlan[];
   overrideIncome: OverrideEntry[];
   overrideTotalUsdt: string;
   usdtBalance: string;
@@ -58,7 +58,7 @@ export default function MusdtStakingPage({ account }: MusdtStakingPageProps) {
   const [data, setData] = useState<PageData | null>(null);
   const [stakeAmount, setStakeAmount] = useState("");
   const [staking, setStaking] = useState(false);
-  const [withdrawing, setWithdrawing] = useState(false);
+  const [withdrawingPlanId, setWithdrawingPlanId] = useState<number | null>(null);
   const [showOverrideTable, setShowOverrideTable] = useState(false);
 
   const loadData = useCallback(async () => {
@@ -93,42 +93,26 @@ export default function MusdtStakingPage({ account }: MusdtStakingPageProps) {
     finally { setStaking(false); }
   };
 
-  const handleWithdraw = async () => {
-    setWithdrawing(true);
+  const handleWithdraw = async (planId: number) => {
+    setWithdrawingPlanId(planId);
     try {
       const res = await fetch("/api/musdt-staking/withdraw", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ walletAddress: account }),
+        body: JSON.stringify({ walletAddress: account, planId }),
       });
       const result = await res.json();
       if (!res.ok) { toast({ title: "Withdrawal Failed", description: result.message, variant: "destructive" }); return; }
       toast({ title: "Withdrawal Successful!", description: `$${parseFloat(result.withdrawn).toFixed(4)} USDT credited to your balance.` });
       await loadData();
     } catch { toast({ title: "Network Error", variant: "destructive" }); }
-    finally { setWithdrawing(false); }
+    finally { setWithdrawingPlanId(null); }
   };
 
-  const plan = data?.activePlan ?? null;
+  const activePlans = data?.activePlans ?? [];
+  const closedPlans = data?.closedPlans ?? [];
   const usdtBalance = parseFloat(data?.usdtBalance ?? "0");
   const overrideTotal = parseFloat(data?.overrideTotalUsdt ?? "0");
-
-  const daysElapsed = plan ? Math.floor((Date.now() - new Date(plan.startDate).getTime()) / 86400000) : 0;
-  const daysToMinEnd = plan ? Math.max(0, Math.ceil((new Date(plan.minEndDate).getTime() - Date.now()) / 86400000)) : 0;
-  const progressPct = plan ? Math.min(100, (daysElapsed / 666) * 100) : 0;
-
-  const invested = parseFloat(plan?.usdtInvested ?? "0");
-  const dailyReward = parseFloat(plan?.dailyRewardUsdt ?? "0");
-  const totalWithdrawn = parseFloat(plan?.totalWithdrawn ?? "0");
-  const overrideReceived = parseFloat(plan?.overrideReceived ?? "0");
-  const personalCap = parseFloat(plan?.personalCap ?? "0");
-  const totalCap = parseFloat(plan?.totalCap ?? "0");
-
-  const totalEarned = daysElapsed * dailyReward;
-  const pendingPersonal = Math.max(0, Math.min(totalEarned - totalWithdrawn, personalCap - totalWithdrawn));
-  const personalProgress = personalCap > 0 ? Math.min(100, (totalWithdrawn / personalCap) * 100) : 0;
-  const totalProgress = totalCap > 0 ? Math.min(100, ((totalWithdrawn + overrideReceived) / totalCap) * 100) : 0;
-  const canWithdraw = pendingPersonal >= 10 && plan?.isActive;
 
   const previewPersonalCap = stakeAmount ? parseFloat(stakeAmount) * 2 : null;
   const previewTotalCap = stakeAmount ? parseFloat(stakeAmount) * 3.5 : null;
@@ -179,136 +163,150 @@ export default function MusdtStakingPage({ account }: MusdtStakingPageProps) {
         </div>
       </div>
 
-      {/* Active Plan */}
-      {plan && plan.isActive && (
-        <div className="glass-card rounded-2xl p-5 space-y-4" data-testid="card-active-plan">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="h-9 w-9 rounded-xl bg-emerald-500/15 flex items-center justify-center">
-                <DollarSign className="h-4 w-4 text-emerald-400" />
-              </div>
-              <div>
-                <p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Active MUSDT Stake</p>
-                <p className="text-[10px] text-muted-foreground">${invested.toLocaleString()} USDT · 666+ days</p>
-              </div>
-            </div>
-            <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Active</Badge>
-          </div>
+      {/* Active Plans */}
+      {activePlans.length > 0 && (
+        <div className="space-y-4">
+          {activePlans.map((plan) => {
+            const invested = parseFloat(plan.usdtInvested);
+            const dailyReward = parseFloat(plan.dailyRewardUsdt);
+            const totalWithdrawn = parseFloat(plan.totalWithdrawn);
+            const overrideReceived = parseFloat(plan.overrideReceived);
+            const personalCap = parseFloat(plan.personalCap);
+            const totalCap = parseFloat(plan.totalCap);
+            const daysElapsed = Math.floor((Date.now() - new Date(plan.startDate).getTime()) / 86400000);
+            const daysToMinEnd = Math.max(0, Math.ceil((new Date(plan.minEndDate).getTime() - Date.now()) / 86400000));
+            const progressPct = Math.min(100, (daysElapsed / 666) * 100);
+            const totalEarned = daysElapsed * dailyReward;
+            const pendingPersonal = Math.max(0, Math.min(totalEarned - totalWithdrawn, personalCap - totalWithdrawn));
+            const personalProgress = personalCap > 0 ? Math.min(100, (totalWithdrawn / personalCap) * 100) : 0;
+            const totalProgress = totalCap > 0 ? Math.min(100, ((totalWithdrawn + overrideReceived) / totalCap) * 100) : 0;
+            const canWithdraw = pendingPersonal >= 10;
+            const isWithdrawing = withdrawingPlanId === plan.id;
 
-          {/* Plan Details Grid */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Daily Reward</p>
-              <p className="text-sm font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>${dailyReward.toFixed(4)} USDT</p>
-            </div>
-            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Days Elapsed</p>
-              <p className="text-sm font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }}>{daysElapsed} / 666 min</p>
-            </div>
-            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Personal Cap</p>
-              <p className="text-sm font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }}>${personalCap.toFixed(2)} (2x)</p>
-            </div>
-            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Total Cap</p>
-              <p className="text-sm font-bold text-amber-300" style={{ fontFamily: "var(--font-display)" }}>${totalCap.toFixed(2)} (3.5x)</p>
-            </div>
-          </div>
-
-          {/* 666 Day Progress */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-              <span>Minimum duration: {daysElapsed} / 666 days</span>
-              <span>{progressPct.toFixed(1)}%</span>
-            </div>
-            <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
-              <div className="h-full rounded-full bg-gradient-to-r from-yellow-600 to-amber-400 transition-all duration-500" style={{ width: `${progressPct}%` }} />
-            </div>
-            {daysToMinEnd > 0 && (
-              <p className="text-[10px] text-muted-foreground text-center">Minimum duration ends in {daysToMinEnd} days</p>
-            )}
-          </div>
-
-          {/* Personal Earnings Progress */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-              <span>Personal earnings: ${totalWithdrawn.toFixed(2)} / ${personalCap.toFixed(2)}</span>
-              <span>{personalProgress.toFixed(1)}%</span>
-            </div>
-            <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
-              <div className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-500" style={{ width: `${personalProgress}%` }} />
-            </div>
-          </div>
-
-          {/* Total Progress (Personal + Override) */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-              <span>Total (personal + override): ${(totalWithdrawn + overrideReceived).toFixed(2)} / ${totalCap.toFixed(2)}</span>
-              <span>{totalProgress.toFixed(1)}%</span>
-            </div>
-            <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
-              <div className="h-full rounded-full bg-gradient-to-r from-amber-600 to-yellow-400 transition-all duration-500" style={{ width: `${totalProgress}%` }} />
-            </div>
-          </div>
-
-          {/* Pending Rewards & Withdraw */}
-          <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-3">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-amber-400">Pending Personal Rewards</p>
-                <p className="text-[10px] text-muted-foreground">${pendingPersonal.toFixed(4)} USDT available · Min $10 to withdraw</p>
-              </div>
-              <span className="text-lg font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>
-                ${pendingPersonal.toFixed(2)}
-              </span>
-            </div>
-            <button
-              onClick={handleWithdraw}
-              disabled={!canWithdraw || withdrawing}
-              className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg glow-button text-white text-sm font-bold transition-all disabled:opacity-50"
-              data-testid="button-withdraw"
-            >
-              {withdrawing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDownUp className="w-4 h-4" />}
-              {withdrawing ? "Processing..." : `Withdraw $${pendingPersonal.toFixed(2)} USDT`}
-            </button>
-            {!canWithdraw && pendingPersonal < 10 && (
-              <p className="text-[10px] text-center text-muted-foreground">
-                Need ${(10 - pendingPersonal).toFixed(2)} more · ~{Math.ceil((10 - pendingPersonal) / dailyReward)} days away
-              </p>
-            )}
-          </div>
-
-          {/* Override income received summary */}
-          {overrideReceived > 0 && (
-            <div className="flex items-center justify-between p-2.5 rounded-lg bg-purple-500/10 border border-purple-500/20">
-              <div className="flex items-center gap-2">
-                <Users className="w-4 h-4 text-purple-400" />
-                <div>
-                  <p className="text-xs font-medium text-purple-300">Team Override Received</p>
-                  <p className="text-[9px] text-muted-foreground">Auto-credited to USDT balance · cap ${(totalCap - personalCap).toFixed(2)}</p>
+            return (
+              <div key={plan.id} className="glass-card rounded-2xl p-5 space-y-4" data-testid={`card-active-plan-${plan.id}`}>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="h-9 w-9 rounded-xl bg-emerald-500/15 flex items-center justify-center">
+                      <DollarSign className="h-4 w-4 text-emerald-400" />
+                    </div>
+                    <div>
+                      <p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Active MUSDT Stake</p>
+                      <p className="text-[10px] text-muted-foreground">${invested.toLocaleString()} USDT · started {new Date(plan.startDate).toLocaleDateString()}</p>
+                    </div>
+                  </div>
+                  <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Active</Badge>
                 </div>
+
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Daily Reward</p>
+                    <p className="text-sm font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>${dailyReward.toFixed(4)} USDT</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Days Elapsed</p>
+                    <p className="text-sm font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }}>{daysElapsed} / 666 min</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Personal Cap</p>
+                    <p className="text-sm font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }}>${personalCap.toFixed(2)} (2x)</p>
+                  </div>
+                  <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Total Cap</p>
+                    <p className="text-sm font-bold text-amber-300" style={{ fontFamily: "var(--font-display)" }}>${totalCap.toFixed(2)} (3.5x)</p>
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>Minimum duration: {daysElapsed} / 666 days</span>
+                    <span>{progressPct.toFixed(1)}%</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-yellow-600 to-amber-400 transition-all duration-500" style={{ width: `${progressPct}%` }} />
+                  </div>
+                  {daysToMinEnd > 0 && (
+                    <p className="text-[10px] text-muted-foreground text-center">Minimum duration ends in {daysToMinEnd} days</p>
+                  )}
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>Personal earnings: ${totalWithdrawn.toFixed(2)} / ${personalCap.toFixed(2)}</span>
+                    <span>{personalProgress.toFixed(1)}%</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-500" style={{ width: `${personalProgress}%` }} />
+                  </div>
+                </div>
+
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between text-[10px] text-muted-foreground">
+                    <span>Total (personal + override): ${(totalWithdrawn + overrideReceived).toFixed(2)} / ${totalCap.toFixed(2)}</span>
+                    <span>{totalProgress.toFixed(1)}%</span>
+                  </div>
+                  <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
+                    <div className="h-full rounded-full bg-gradient-to-r from-amber-600 to-yellow-400 transition-all duration-500" style={{ width: `${totalProgress}%` }} />
+                  </div>
+                </div>
+
+                <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-xs font-medium text-amber-400">Pending Personal Rewards</p>
+                      <p className="text-[10px] text-muted-foreground">${pendingPersonal.toFixed(4)} USDT available · Min $10 to withdraw</p>
+                    </div>
+                    <span className="text-lg font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>
+                      ${pendingPersonal.toFixed(2)}
+                    </span>
+                  </div>
+                  <button
+                    onClick={() => handleWithdraw(plan.id)}
+                    disabled={!canWithdraw || isWithdrawing}
+                    className="w-full flex items-center justify-center gap-1.5 py-2.5 rounded-lg glow-button text-white text-sm font-bold transition-all disabled:opacity-50"
+                    data-testid={`button-withdraw-${plan.id}`}
+                  >
+                    {isWithdrawing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDownUp className="w-4 h-4" />}
+                    {isWithdrawing ? "Processing..." : `Withdraw $${pendingPersonal.toFixed(2)} USDT`}
+                  </button>
+                  {!canWithdraw && pendingPersonal < 10 && dailyReward > 0 && (
+                    <p className="text-[10px] text-center text-muted-foreground">
+                      Need ${(10 - pendingPersonal).toFixed(2)} more · ~{Math.ceil((10 - pendingPersonal) / dailyReward)} days away
+                    </p>
+                  )}
+                </div>
+
+                {overrideReceived > 0 && (
+                  <div className="flex items-center justify-between p-2.5 rounded-lg bg-purple-500/10 border border-purple-500/20">
+                    <div className="flex items-center gap-2">
+                      <Users className="w-4 h-4 text-purple-400" />
+                      <div>
+                        <p className="text-xs font-medium text-purple-300">Team Override Received</p>
+                        <p className="text-[9px] text-muted-foreground">Auto-credited to USDT balance · cap ${(totalCap - personalCap).toFixed(2)}</p>
+                      </div>
+                    </div>
+                    <span className="text-sm font-bold text-purple-300">${overrideReceived.toFixed(4)}</span>
+                  </div>
+                )}
               </div>
-              <span className="text-sm font-bold text-purple-300">${overrideReceived.toFixed(4)}</span>
-            </div>
-          )}
+            );
+          })}
         </div>
       )}
 
       {/* Closed Plan History */}
-      {!plan && data?.allPlans && data.allPlans.length > 0 && (
+      {closedPlans.length > 0 && (
         <div className="glass-card rounded-2xl p-5 space-y-3">
           <p className="text-sm font-semibold text-muted-foreground" style={{ fontFamily: "var(--font-display)" }}>Previous Plans</p>
-          {data.allPlans.map((p) => (
+          {closedPlans.map((p) => (
             <div key={p.id} className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
               <div>
                 <p className="text-xs font-medium">${parseFloat(p.usdtInvested).toFixed(2)} invested</p>
-                <p className="text-[10px] text-muted-foreground">{new Date(p.startDate).toLocaleDateString()} — {p.closedAt ? new Date(p.closedAt).toLocaleDateString() : "ongoing"}</p>
+                <p className="text-[10px] text-muted-foreground">{new Date(p.startDate).toLocaleDateString()} — {p.closedAt ? new Date(p.closedAt).toLocaleDateString() : "closed"}</p>
               </div>
               <div className="text-right">
                 <p className="text-xs font-bold text-emerald-400">${parseFloat(p.totalWithdrawn).toFixed(2)} withdrawn</p>
-                <Badge className={`text-[10px] ${p.isActive ? "bg-emerald-500/10 text-emerald-400 border-emerald-500/20" : "bg-white/5 text-muted-foreground border-white/10"}`}>
-                  {p.isActive ? "Active" : "Closed"}
-                </Badge>
+                <Badge className="text-[10px] bg-white/5 text-muted-foreground border-white/10">Closed</Badge>
               </div>
             </div>
           ))}
@@ -421,8 +419,7 @@ export default function MusdtStakingPage({ account }: MusdtStakingPageProps) {
       </div>
 
       {/* Stake Form */}
-      {!plan && (
-        <div className="glass-card rounded-2xl p-5 space-y-4" data-testid="card-stake-form">
+      <div className="glass-card rounded-2xl p-5 space-y-4" data-testid="card-stake-form">
           <div className="flex items-center gap-2">
             <div className="h-9 w-9 rounded-xl bg-yellow-600/15 flex items-center justify-center">
               <DollarSign className="h-4 w-4 text-yellow-300" />
@@ -495,8 +492,7 @@ export default function MusdtStakingPage({ account }: MusdtStakingPageProps) {
               <p className="text-xs text-amber-400">You need a USDT balance to stake. Deposit USDT first.</p>
             </div>
           )}
-        </div>
-      )}
+      </div>
 
       {/* Override Level Table */}
       <div className="glass-card rounded-2xl p-5 space-y-3">
