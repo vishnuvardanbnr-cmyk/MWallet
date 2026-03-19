@@ -40,16 +40,16 @@ interface PageData {
 }
 
 const OVERRIDE_LEVELS = [
-  { level: 1, rate: "20%" },
-  { level: 2, rate: "10%" },
-  { level: 3, rate: "5%" },
-  { level: 4, rate: "3%" },
-  { level: 5, rate: "2%" },
-  { level: 6, rate: "1%" },
-  { level: 7, rate: "1%" },
-  { level: 8, rate: "1%" },
-  { level: 9, rate: "0.5%" },
-  { level: 10, rate: "0.5%" },
+  { level: 1,  rate: "20%",  requiredPkg: "Starter",         pkgId: 1 },
+  { level: 2,  rate: "10%",  requiredPkg: "Basic",           pkgId: 2 },
+  { level: 3,  rate: "5%",   requiredPkg: "Pro",             pkgId: 3 },
+  { level: 4,  rate: "3%",   requiredPkg: "Elite",           pkgId: 4 },
+  { level: 5,  rate: "2%",   requiredPkg: "Stockiest",       pkgId: 5 },
+  { level: 6,  rate: "1%",   requiredPkg: "Stockiest",       pkgId: 5 },
+  { level: 7,  rate: "1%",   requiredPkg: "Super Stockiest", pkgId: 6 },
+  { level: 8,  rate: "1%",   requiredPkg: "Super Stockiest", pkgId: 6 },
+  { level: 9,  rate: "0.5%", requiredPkg: "Super Stockiest", pkgId: 6 },
+  { level: 10, rate: "0.5%", requiredPkg: "Super Stockiest", pkgId: 6 },
 ];
 
 export default function MusdtStakingPage({ account }: MusdtStakingPageProps) {
@@ -355,25 +355,36 @@ export default function MusdtStakingPage({ account }: MusdtStakingPageProps) {
           <div className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
             <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Override income is <span className="text-foreground font-medium">automatically credited</span> to your USDT balance daily as your downline stakes. No manual claim needed — it's already in your balance.
+              Override income is <span className="text-foreground font-medium">automatically credited</span> to your USDT balance daily as your downline stakes. Levels you can earn from depend on your <span className="text-foreground font-medium">package rank</span> — higher packages unlock deeper levels.
             </p>
           </div>
 
           {/* Level Rate Table */}
           <div>
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Level Commission Rates</p>
-            <div className="grid grid-cols-2 gap-1.5">
+            <div className="space-y-1">
               {OVERRIDE_LEVELS.map((lvl) => {
                 const earned = data?.overrideIncome
                   ?.filter((r) => r.level === lvl.level)
                   .reduce((s, r) => s + parseFloat(r.amountUsdt), 0) ?? 0;
+                const pkgColors: Record<number, string> = {
+                  1: "text-slate-400 bg-slate-500/10 border-slate-500/20",
+                  2: "text-blue-400 bg-blue-500/10 border-blue-500/20",
+                  3: "text-emerald-400 bg-emerald-500/10 border-emerald-500/20",
+                  4: "text-amber-400 bg-amber-500/10 border-amber-500/20",
+                  5: "text-orange-400 bg-orange-500/10 border-orange-500/20",
+                  6: "text-purple-300 bg-purple-500/10 border-purple-500/20",
+                };
                 return (
                   <div key={lvl.level} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.02] border border-white/[0.04]" data-testid={`row-override-level-${lvl.level}`}>
-                    <div className="flex items-center gap-2">
-                      <span className="w-5 h-5 rounded-md bg-purple-500/15 flex items-center justify-center text-[9px] font-bold text-purple-300">L{lvl.level}</span>
-                      <span className="text-[10px] text-muted-foreground">{lvl.rate}</span>
+                    <div className="flex items-center gap-2 flex-1 min-w-0">
+                      <span className="w-6 h-6 rounded-md bg-purple-500/15 flex items-center justify-center text-[9px] font-bold text-purple-300 shrink-0">L{lvl.level}</span>
+                      <span className="text-sm font-bold text-foreground">{lvl.rate}</span>
+                      <span className={`text-[9px] font-medium px-1.5 py-0.5 rounded border ${pkgColors[lvl.pkgId]} shrink-0`}>
+                        {lvl.requiredPkg}+
+                      </span>
                     </div>
-                    <span className={`text-[10px] font-bold ${earned > 0 ? "text-emerald-400" : "text-muted-foreground/40"}`}>
+                    <span className={`text-[10px] font-bold ml-2 ${earned > 0 ? "text-emerald-400" : "text-muted-foreground/40"}`}>
                       {earned > 0 ? `+$${earned.toFixed(4)}` : "—"}
                     </span>
                   </div>

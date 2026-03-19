@@ -1230,6 +1230,10 @@ export async function registerRoutes(
   const MUSDT_TOTAL_CAP_MULT = 3.5;
   const MUSDT_MIN_WITHDRAW = 10;
 
+  // Max override levels each package rank can earn from (index = packageId 1-6)
+  // Starter=1→L1, Basic=2→L2, Pro=3→L3, Elite=4→L4, Stockiest=5→L6, Super Stockiest=6→L10
+  const MUSDT_PACKAGE_MAX_LEVELS: Record<number, number> = { 1: 1, 2: 2, 3: 3, 4: 4, 5: 6, 6: 10 };
+
   async function distributeMusdtOverride(fromPlan: any): Promise<void> {
     try {
       const { ethers } = await import("ethers");
@@ -1240,34 +1244,44 @@ export async function registerRoutes(
       let current = fromPlan.walletAddress;
 
       for (let level = 1; level <= 10; level++) {
+        // Get the upline (sponsor) of current user
         const info = await mlm.getUserInfo(current);
         const sponsor: string = info[1];
         if (!sponsor || sponsor === ZERO_ADDR) break;
 
-        const sponsorPlan = await storage.getActiveMusdtStakingPlan(sponsor);
-        if (sponsorPlan) {
-          const sponsorInvested = parseFloat(sponsorPlan.usdtInvested);
-          const qualifies = sponsorInvested >= fromInvested * 0.5;
-          if (qualifies) {
-            const rate = MUSDT_OVERRIDE_RATES[level] ?? 0;
-            const overrideAmt = dailyFromPlan * rate;
-            if (overrideAmt > 0) {
-              const overrideReceived = parseFloat(sponsorPlan.overrideReceived);
-              const overrideCap = sponsorInvested * (MUSDT_TOTAL_CAP_MULT - MUSDT_PERSONAL_CAP_MULT);
-              const canReceive = Math.max(0, overrideCap - overrideReceived);
-              const credited = Math.min(overrideAmt, canReceive);
-              if (credited > 0) {
-                await storage.logMusdtOverrideIncome(sponsor, fromPlan.walletAddress, credited.toFixed(6), level);
-                const updatedPlan = await storage.creditMusdtOverride(sponsorPlan.id, credited.toFixed(6));
-                await storage.creditVirtualUsdt(sponsor, credited.toFixed(6));
-                const totalOut = parseFloat(updatedPlan.totalWithdrawn) + parseFloat(updatedPlan.overrideReceived);
-                if (totalOut >= sponsorInvested * MUSDT_TOTAL_CAP_MULT) {
-                  await storage.closeMusdtPlan(sponsorPlan.id);
+        // Fetch sponsor's own on-chain info to get their package level
+        const sponsorInfo = await mlm.getUserInfo(sponsor);
+        const sponsorPackage = Number(sponsorInfo[6]); // userPackage field
+        const maxLevels = MUSDT_PACKAGE_MAX_LEVELS[sponsorPackage] ?? 0;
+
+        // Only credit if the sponsor's package qualifies for this level
+        if (level <= maxLevels) {
+          const sponsorPlan = await storage.getActiveMusdtStakingPlan(sponsor);
+          if (sponsorPlan) {
+            const sponsorInvested = parseFloat(sponsorPlan.usdtInvested);
+            const qualifies = sponsorInvested >= fromInvested * 0.5;
+            if (qualifies) {
+              const rate = MUSDT_OVERRIDE_RATES[level] ?? 0;
+              const overrideAmt = dailyFromPlan * rate;
+              if (overrideAmt > 0) {
+                const overrideReceived = parseFloat(sponsorPlan.overrideReceived);
+                const overrideCap = sponsorInvested * (MUSDT_TOTAL_CAP_MULT - MUSDT_PERSONAL_CAP_MULT);
+                const canReceive = Math.max(0, overrideCap - overrideReceived);
+                const credited = Math.min(overrideAmt, canReceive);
+                if (credited > 0) {
+                  await storage.logMusdtOverrideIncome(sponsor, fromPlan.walletAddress, credited.toFixed(6), level);
+                  const updatedPlan = await storage.creditMusdtOverride(sponsorPlan.id, credited.toFixed(6));
+                  await storage.creditVirtualUsdt(sponsor, credited.toFixed(6));
+                  const totalOut = parseFloat(updatedPlan.totalWithdrawn) + parseFloat(updatedPlan.overrideReceived);
+                  if (totalOut >= sponsorInvested * MUSDT_TOTAL_CAP_MULT) {
+                    await storage.closeMusdtPlan(sponsorPlan.id);
+                  }
                 }
               }
             }
           }
         }
+
         current = sponsor;
       }
     } catch (_err) {
