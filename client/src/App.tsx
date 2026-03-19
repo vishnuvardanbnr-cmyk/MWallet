@@ -33,6 +33,7 @@ import StorePage from "@/pages/store";
 import SwapPage from "@/pages/swap";
 import PaidStakingPage from "@/pages/paid-staking";
 import MusdtStakingPage from "@/pages/musdt-staking";
+import SellTokensPage from "@/pages/sell-tokens";
 
 function ScrollToTop() {
   const [location] = useLocation();
@@ -357,6 +358,9 @@ function App() {
                     </Route>
                     <Route path="/musdt-staking">
                       <MusdtStakingPage account={web3.account!} />
+                    </Route>
+                    <Route path="/sell-tokens">
+                      <SellTokensPage account={web3.account!} />
                     </Route>
                     <Route path="/store">
                       <StorePage />

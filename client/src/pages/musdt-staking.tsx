@@ -315,51 +315,99 @@ export default function MusdtStakingPage({ account }: MusdtStakingPageProps) {
         </div>
       )}
 
-      {/* Override Income Card */}
-      {overrideTotal > 0 && (
-        <div className="glass-card rounded-2xl p-5 space-y-3" data-testid="card-override-income">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
+      {/* Override Income Card — always visible */}
+      <div className="glass-card rounded-2xl overflow-hidden" data-testid="card-override-income">
+        <div className="p-5 border-b border-white/[0.06]">
+          <div className="flex items-center justify-between flex-wrap gap-2">
+            <div className="flex items-center gap-3">
               <div className="h-9 w-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
                 <Users className="h-4 w-4 text-purple-400" />
               </div>
               <div>
                 <p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Team Override Income</p>
-                <p className="text-[10px] text-muted-foreground">0.3% daily from downline MUSDT staking</p>
+                <p className="text-[10px] text-muted-foreground">10-level deep commission on downline MUSDT staking</p>
               </div>
             </div>
             <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Auto-Credited</Badge>
           </div>
+        </div>
+
+        <div className="p-5 space-y-4">
+          {/* Total + Balance Highlight */}
           <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-xl bg-purple-500/5 border border-purple-500/15">
+            <div className="p-4 rounded-xl bg-purple-500/8 border border-purple-500/20 text-center">
               <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Total Override Earned</p>
-              <p className="text-lg font-bold text-purple-300" style={{ fontFamily: "var(--font-display)" }}>${overrideTotal.toFixed(4)}</p>
+              <p className="text-2xl font-bold text-purple-300" style={{ fontFamily: "var(--font-display)" }} data-testid="text-override-total">
+                ${overrideTotal.toFixed(4)}
+              </p>
+              <p className="text-[10px] text-purple-400 mt-0.5">{data?.overrideIncome?.length ?? 0} transactions</p>
             </div>
-            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Records</p>
-              <p className="text-lg font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }}>{data?.overrideIncome?.length ?? 0}</p>
+            <div className="p-4 rounded-xl bg-emerald-500/8 border border-emerald-500/20 text-center">
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">In Your USDT Balance</p>
+              <p className="text-2xl font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-override-in-balance">
+                ${usdtBalance.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+              </p>
+              <p className="text-[10px] text-emerald-500 mt-0.5">Available to use</p>
             </div>
           </div>
+
+          {/* Status banner */}
           <div className="flex items-start gap-2.5 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
             <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0 mt-0.5" />
-            <p className="text-[10px] text-muted-foreground">Override income is automatically credited to your USDT balance as it accrues. No manual claim needed.</p>
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Override income is <span className="text-foreground font-medium">automatically credited</span> to your USDT balance daily as your downline stakes. No manual claim needed — it's already in your balance.
+            </p>
           </div>
-          {data?.overrideIncome && data.overrideIncome.length > 0 && (
+
+          {/* Level Rate Table */}
+          <div>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Level Commission Rates</p>
+            <div className="grid grid-cols-2 gap-1.5">
+              {OVERRIDE_LEVELS.map((lvl) => {
+                const earned = data?.overrideIncome
+                  ?.filter((r) => r.level === lvl.level)
+                  .reduce((s, r) => s + parseFloat(r.amountUsdt), 0) ?? 0;
+                return (
+                  <div key={lvl.level} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.02] border border-white/[0.04]" data-testid={`row-override-level-${lvl.level}`}>
+                    <div className="flex items-center gap-2">
+                      <span className="w-5 h-5 rounded-md bg-purple-500/15 flex items-center justify-center text-[9px] font-bold text-purple-300">L{lvl.level}</span>
+                      <span className="text-[10px] text-muted-foreground">{lvl.rate}</span>
+                    </div>
+                    <span className={`text-[10px] font-bold ${earned > 0 ? "text-emerald-400" : "text-muted-foreground/40"}`}>
+                      {earned > 0 ? `+$${earned.toFixed(4)}` : "—"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Recent override entries */}
+          {data?.overrideIncome && data.overrideIncome.length > 0 ? (
             <div className="space-y-1.5">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Recent Entries</p>
-              {data.overrideIncome.slice(0, 5).map((row) => (
-                <div key={row.id} className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.04]">
-                  <div>
-                    <p className="text-[10px] font-medium text-purple-300">Level {row.level} override</p>
-                    <p className="text-[9px] text-muted-foreground">{row.fromWallet.slice(0, 8)}…{row.fromWallet.slice(-4)} · {new Date(row.createdAt).toLocaleDateString()}</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Recent Credits</p>
+              {data.overrideIncome.slice(0, 6).map((row) => (
+                <div key={row.id} className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.04]" data-testid={`row-override-entry-${row.id}`}>
+                  <div className="flex items-center gap-2">
+                    <span className="w-5 h-5 rounded-md bg-purple-500/15 flex items-center justify-center text-[9px] font-bold text-purple-300">L{row.level}</span>
+                    <div>
+                      <p className="text-[10px] font-medium text-purple-300">Level {row.level} override</p>
+                      <p className="text-[9px] text-muted-foreground">{row.fromWallet.slice(0, 8)}…{row.fromWallet.slice(-4)} · {new Date(row.createdAt).toLocaleDateString()}</p>
+                    </div>
                   </div>
                   <span className="text-xs font-bold text-emerald-400">+${parseFloat(row.amountUsdt).toFixed(6)}</span>
                 </div>
               ))}
             </div>
+          ) : (
+            <div className="text-center py-4">
+              <Users className="w-8 h-8 text-muted-foreground/20 mx-auto mb-2" />
+              <p className="text-xs text-muted-foreground">No override income yet</p>
+              <p className="text-[10px] text-muted-foreground/60 mt-0.5">Earn when your downline starts MUSDT staking</p>
+            </div>
           )}
         </div>
-      )}
+      </div>
 
       {/* Stake Form */}
       {!plan && (
