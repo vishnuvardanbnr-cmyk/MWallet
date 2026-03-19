@@ -14,6 +14,11 @@ interface ContractTx {
   isIncome: boolean;
 }
 
+interface BinaryFlushEvent {
+  amount: bigint;
+  timestamp: number;
+}
+
 interface IncomeProps {
   incomeInfo: IncomeInfo;
   binaryInfo: BinaryInfo;
@@ -21,6 +26,7 @@ interface IncomeProps {
   userPackage: number;
   formatAmount: (val: bigint) => string;
   getTransactionsFromContract: (offset: number, limit: number) => Promise<{ transactions: ContractTx[]; total: number }>;
+  getBinaryFlushedEvents: () => Promise<BinaryFlushEvent[]>;
   claimBinaryIncome: () => Promise<void>;
 }
 
@@ -71,11 +77,13 @@ const DIRECT_SPONSOR_DESC: Record<number, string> = {
   5: "30% from direct referrals",
 };
 
-export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, formatAmount, getTransactionsFromContract, claimBinaryIncome }: IncomeProps) {
+export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, formatAmount, getTransactionsFromContract, getBinaryFlushedEvents, claimBinaryIncome }: IncomeProps) {
   const [, navigate] = useLocation();
   const [allTransactions, setAllTransactions] = useState<ContractTx[]>([]);
   const [transactions, setTransactions] = useState<ContractTx[]>([]);
   const [loadingTxs, setLoadingTxs] = useState(true);
+  const [binaryFlushEvents, setBinaryFlushEvents] = useState<BinaryFlushEvent[]>([]);
+  const [loadingFlush, setLoadingFlush] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [claiming, setClaiming] = useState(false);
 
@@ -120,6 +128,14 @@ export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, 
       setLoadingTxs(false);
     }).catch(() => setLoadingTxs(false));
   }, [getTransactionsFromContract]);
+
+  useEffect(() => {
+    setLoadingFlush(true);
+    getBinaryFlushedEvents().then(events => {
+      setBinaryFlushEvents(events);
+      setLoadingFlush(false);
+    }).catch(() => setLoadingFlush(false));
+  }, [getBinaryFlushedEvents]);
 
   const totalPages = Math.max(1, Math.ceil(transactions.length / ITEMS_PER_PAGE));
   const paginatedTxs = transactions.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
@@ -409,57 +425,96 @@ export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, 
         )}
       </div>
 
-      {/* Flushout History — at bottom, only shown when records exist */}
-      {!loadingTxs && allTransactions.filter(tx => tx.type === "Reactivation").length > 0 && (
-        <div className="glass-card rounded-2xl slide-in" data-testid="card-flushout-history">
-          <div className="p-5 border-b border-white/[0.06]">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-xl bg-red-500/15 flex items-center justify-center">
-                <AlertTriangle className="h-4 w-4 text-red-400" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-                  <span className="text-red-400">Flushout History</span>
-                </h2>
-                <p className="text-[10px] text-muted-foreground">Max income was reached — income was reset and package reactivated</p>
+      {/* Flushout History — merged reactivations + binary daily cap flushes */}
+      {(() => {
+        const reactivationItems = allTransactions
+          .filter(tx => tx.type === "Reactivation")
+          .map(tx => ({ kind: "reactivation" as const, tx, timestamp: tx.timestamp }));
+        const binaryFlushItems = binaryFlushEvents.map(ev => ({
+          kind: "binaryFlush" as const,
+          ev,
+          timestamp: ev.timestamp,
+        }));
+        const merged = [...reactivationItems, ...binaryFlushItems].sort((a, b) => b.timestamp - a.timestamp);
+        const isLoading = loadingTxs || loadingFlush;
+        if (isLoading || merged.length === 0) return null;
+        return (
+          <div className="glass-card rounded-2xl slide-in" data-testid="card-flushout-history">
+            <div className="p-5 border-b border-white/[0.06]">
+              <div className="flex items-center gap-3">
+                <div className="h-9 w-9 rounded-xl bg-red-500/15 flex items-center justify-center">
+                  <AlertTriangle className="h-4 w-4 text-red-400" />
+                </div>
+                <div>
+                  <h2 className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
+                    <span className="text-red-400">Flushout History</span>
+                  </h2>
+                  <p className="text-[10px] text-muted-foreground">{merged.length} event{merged.length !== 1 ? "s" : ""} — income lost due to max cap or daily binary limit</p>
+                </div>
               </div>
             </div>
-          </div>
-          <div className="divide-y divide-white/[0.04]">
-            {allTransactions.filter(tx => tx.type === "Reactivation").map((tx, idx) => {
-              const reactivationFee = parseFloat(formatAmount(tx.amount));
-              const pkgName = tx.detail && tx.detail !== "None" ? tx.detail : "Package";
-              const pkgIdx = PACKAGE_NAMES.indexOf(tx.detail);
-              const maxIncome = pkgIdx > 0 ? PACKAGE_PRICES_USD[pkgIdx] * 5 : reactivationFee * 5;
-              return (
-                <div key={`flush-${tx.timestamp}-${idx}`} className="flex items-center gap-3 px-5 py-4" data-testid={`row-flushout-${idx}`}>
-                  <div className="h-9 w-9 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
-                    <AlertTriangle className="h-4 w-4 text-red-400" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <span className="text-sm font-medium">Max Income Reached</span>
-                      <Badge variant="outline" className="text-[10px] border-red-500/20 text-red-400">
-                        {pkgName}
-                      </Badge>
+            <div className="divide-y divide-white/[0.04]">
+              {merged.map((item, idx) => {
+                if (item.kind === "reactivation") {
+                  const { tx } = item;
+                  const reactivationFee = parseFloat(formatAmount(tx.amount));
+                  const pkgName = tx.detail && tx.detail !== "None" ? tx.detail : "Package";
+                  const pkgIdx = PACKAGE_NAMES.indexOf(tx.detail);
+                  const maxIncome = pkgIdx > 0 ? PACKAGE_PRICES_USD[pkgIdx] * 5 : reactivationFee * 5;
+                  return (
+                    <div key={`reactivation-${tx.timestamp}-${idx}`} className="flex items-center gap-3 px-5 py-4" data-testid={`row-flushout-${idx}`}>
+                      <div className="h-9 w-9 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
+                        <AlertTriangle className="h-4 w-4 text-red-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium">Max Income Cap Reached</span>
+                          <Badge variant="outline" className="text-[10px] border-red-500/20 text-red-400">{pkgName}</Badge>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Reactivation fee: <span className="text-foreground font-medium">${reactivationFee.toFixed(2)}</span>
+                          {tx.timestamp > 0 && <span className="ml-2">· {formatTimestamp(tx.timestamp)}</span>}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="font-bold text-sm text-red-400" style={{ fontFamily: 'var(--font-display)' }}>
+                          ${maxIncome.toLocaleString()}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">income cap</p>
+                      </div>
                     </div>
-                    <p className="text-[11px] text-muted-foreground mt-0.5">
-                      Reactivation fee paid: <span className="text-foreground font-medium">${reactivationFee.toFixed(2)}</span>
-                      {tx.timestamp > 0 && <span className="ml-2">· {formatTimestamp(tx.timestamp)}</span>}
-                    </p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className="font-bold text-sm text-red-400" style={{ fontFamily: 'var(--font-display)' }}>
-                      ${maxIncome.toLocaleString()}
-                    </p>
-                    <p className="text-[10px] text-muted-foreground">income cap</p>
-                  </div>
-                </div>
-              );
-            })}
+                  );
+                } else {
+                  const { ev } = item;
+                  return (
+                    <div key={`binaryflush-${ev.timestamp}-${idx}`} className="flex items-center gap-3 px-5 py-4" data-testid={`row-flushout-binary-${idx}`}>
+                      <div className="h-9 w-9 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
+                        <AlertTriangle className="h-4 w-4 text-orange-400" />
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium">Daily Binary Limit Exceeded</span>
+                          <Badge variant="outline" className="text-[10px] border-orange-500/20 text-orange-400">Binary Cap</Badge>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">
+                          Excess income lost
+                          {ev.timestamp > 0 && <span className="ml-2">· {formatTimestamp(ev.timestamp)}</span>}
+                        </p>
+                      </div>
+                      <div className="text-right shrink-0">
+                        <p className="font-bold text-sm text-orange-400" style={{ fontFamily: 'var(--font-display)' }}>
+                          ${formatAmount(ev.amount)}
+                        </p>
+                        <p className="text-[10px] text-muted-foreground">flushed</p>
+                      </div>
+                    </div>
+                  );
+                }
+              })}
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   );
 }

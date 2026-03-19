@@ -325,6 +325,30 @@ export function useWeb3() {
     }
   }, [account, getProvider]);
 
+  const getBinaryFlushedEvents = useCallback(async (): Promise<{ amount: bigint; timestamp: number }[]> => {
+    if (!account) return [];
+    try {
+      const provider = getProvider();
+      const contract = getContract(provider);
+      const filter = contract.filters.BinaryFlushed(account);
+      let events: any[];
+      try {
+        events = await contract.queryFilter(filter, 0);
+      } catch {
+        const currentBlock = await provider.getBlockNumber();
+        events = await contract.queryFilter(filter, Math.max(0, currentBlock - 100000));
+      }
+      const blocks = await Promise.all(events.map((e: any) => provider.getBlock(e.blockNumber)));
+      return events.map((e: any, i: number) => ({
+        amount: e.args?.[1] as bigint ?? 0n,
+        timestamp: (blocks[i] as any)?.timestamp ?? 0,
+      }));
+    } catch (err) {
+      console.error("getBinaryFlushedEvents error:", err);
+      return [];
+    }
+  }, [account, getProvider]);
+
   useEffect(() => {
     const ethereum = (window as any).ethereum;
     if (!ethereum) return;
@@ -353,7 +377,7 @@ export function useWeb3() {
     btcPoolBalance, tokenDecimals, totalUsers, profileOnChain,
     connect, register, approveToken, activatePackage,
     withdrawFunds, enterBoardPool, claimBinaryIncome, saveProfileOnChain, reactivatePackage, repurchase,
-    getDirectReferrals, getTokenBalance, getTransactionsFromContract, fetchUserData,
+    getDirectReferrals, getTokenBalance, getTransactionsFromContract, getBinaryFlushedEvents, fetchUserData,
     formatAmount: (val: bigint) => formatTokenAmount(val, tokenDecimals),
   };
 }

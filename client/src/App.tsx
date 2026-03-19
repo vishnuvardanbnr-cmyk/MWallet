@@ -281,6 +281,7 @@ function App() {
                         userPackage={web3.userInfo!.userPackage}
                         formatAmount={web3.formatAmount}
                         getTransactionsFromContract={web3.getTransactionsFromContract}
+                        getBinaryFlushedEvents={web3.getBinaryFlushedEvents}
                         claimBinaryIncome={web3.claimBinaryIncome}
                       />
                     </Route>
