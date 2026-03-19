@@ -498,7 +498,7 @@ export async function registerRoutes(
       }
 
       // Verify the Deposited(address indexed user, uint256 amount) event from BoardMatrixHandler
-      const BOARD_HANDLER = (process.env.VITE_BOARD_HANDLER_ADDRESS || "0xD307FB39d7d42B59AC46e28D71ef72019E9D5e38").toLowerCase();
+      const BOARD_HANDLER = (process.env.VITE_BOARD_HANDLER_ADDRESS || "0xAFDf34f6e2FBa1D1E9b1E4e180821b463c3cB72D").toLowerCase();
       const DEPOSITED_TOPIC = ethers.id("Deposited(address,uint256)").toLowerCase();
 
       let verifiedAmount: string | null = null;
@@ -1001,7 +1001,7 @@ export async function registerRoutes(
 
   // ── BTC Swap via backend liquidity wallet ──────────────────────────────────
 
-  const BOARD_HANDLER_TESTNET = process.env.VITE_BOARD_HANDLER_ADDRESS || "0xD307FB39d7d42B59AC46e28D71ef72019E9D5e38";
+  const BOARD_HANDLER_TESTNET = process.env.VITE_BOARD_HANDLER_ADDRESS || "0xAFDf34f6e2FBa1D1E9b1E4e180821b463c3cB72D";
   const BOARD_HANDLER_SYNC_ABI = ["function totalVirtualRewards(address) view returns (uint256)"];
 
   // POST /api/btcswap/sync/:walletAddress — sync on-chain board rewards to backend virtual balance
