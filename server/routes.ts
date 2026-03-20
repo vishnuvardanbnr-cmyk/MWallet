@@ -197,11 +197,11 @@ export async function registerRoutes(
       if (now > endDate) now.setTime(endDate.getTime());
 
       const startMs = new Date(plan.startDate).getTime();
-      const totalElapsedDays = Math.floor((now.getTime() - startMs) / (1000 * 60 * 60 * 24));
+      const totalElapsedDays = Math.floor((now.getTime() - startMs) / (1000 * 60 * 5)); // [TEST MODE] 5 min periods (prod: 1000*60*60*24)
       const lastClaimMs = plan.lastClaimDate
         ? new Date(plan.lastClaimDate).getTime()
         : startMs;
-      const daysSinceClaim = Math.floor((now.getTime() - lastClaimMs) / (1000 * 60 * 60 * 24));
+      const daysSinceClaim = Math.floor((now.getTime() - lastClaimMs) / (1000 * 60 * 5)); // [TEST MODE] 5 min periods (prod: 1000*60*60*24)
 
       // dailyTokens/totalTokens columns store USDT values (repurposed at plan creation)
       const dailyUsdtReward = parseFloat(plan.dailyTokens);
@@ -720,7 +720,7 @@ export async function registerRoutes(
       // Tokens are NOT added to mainBalance — they are locked in the staking plan
       const startDate = new Date();
       const endDate = new Date(startDate);
-      endDate.setMonth(endDate.getMonth() + 10);
+      endDate.setMinutes(endDate.getMinutes() + 5); // [TEST MODE] 5 min lock (prod: setMonth +10)
 
       const plan = await storage.createPaidStakingPlan({
         walletAddress: addr,
@@ -826,9 +826,9 @@ export async function registerRoutes(
 
       const now = new Date();
       const lastClaim = plan.lastRewardClaimDate ? new Date(plan.lastRewardClaimDate) : new Date(plan.startDate);
-      const daysSince = Math.floor((now.getTime() - lastClaim.getTime()) / (1000 * 60 * 60 * 24));
+      const daysSince = Math.floor((now.getTime() - lastClaim.getTime()) / (1000 * 60 * 5)); // [TEST MODE] 5 min periods (prod: 1000*60*60*24)
 
-      if (daysSince < 1) return res.status(400).json({ message: "Rewards can only be claimed once per day" });
+      if (daysSince < 1) return res.status(400).json({ message: "Rewards can only be claimed once per 5 minutes" }); // [TEST MODE]
 
       const { buyPrice } = await getTokenPrice();
       const dailyUsdtValue = parseFloat(plan.dailyRewardUsdt);
@@ -873,9 +873,9 @@ export async function registerRoutes(
 
       const now = new Date();
       const lastClaim = plan.lastRewardClaimDate ? new Date(plan.lastRewardClaimDate) : new Date(plan.startDate);
-      const daysSince = Math.floor((now.getTime() - lastClaim.getTime()) / (1000 * 60 * 60 * 24));
+      const daysSince = Math.floor((now.getTime() - lastClaim.getTime()) / (1000 * 60 * 5)); // [TEST MODE] 5 min periods (prod: 1000*60*60*24)
 
-      if (daysSince < 1) return res.status(400).json({ message: "Rewards can only be claimed once per day" });
+      if (daysSince < 1) return res.status(400).json({ message: "Rewards can only be claimed once per 5 minutes" }); // [TEST MODE]
 
       const dailyUsdtValue = parseFloat(plan.dailyRewardUsdt);
       const totalUsdtReward = dailyUsdtValue * daysSince;
@@ -1386,11 +1386,11 @@ export async function registerRoutes(
   // ── MUSDT Staking ────────────────────────────────────────────────────────────
 
   const MUSDT_OVERRIDE_RATES = [0, 0.20, 0.10, 0.05, 0.03, 0.02, 0.01, 0.01, 0.01, 0.005, 0.005];
-  const MUSDT_MIN_DAYS = 666;
+  const MUSDT_MIN_DAYS = 1; // [TEST MODE] 1 period = 5 min (prod: 666)
   const MUSDT_DAILY_RATE = 0.003;
   const MUSDT_PERSONAL_CAP_MULT = 2.0;
   const MUSDT_TOTAL_CAP_MULT = 3.5;
-  const MUSDT_MIN_WITHDRAW = 10;
+  const MUSDT_MIN_WITHDRAW = 0.01; // [TEST MODE] $0.01 min (prod: 10)
 
   // Max override levels each package rank can earn from (index = packageId 1-6)
   // Starter=1→L1, Basic=2→L2, Pro=3→L3, Elite=4→L4, Stockiest=5→L6, Super Stockiest=6→L10
@@ -1518,7 +1518,7 @@ export async function registerRoutes(
 
       const startDate = new Date();
       const minEndDate = new Date(startDate);
-      minEndDate.setDate(minEndDate.getDate() + MUSDT_MIN_DAYS);
+      minEndDate.setMinutes(minEndDate.getMinutes() + MUSDT_MIN_DAYS * 5); // [TEST MODE] 5 min per period (prod: setDate + MUSDT_MIN_DAYS)
 
       const plan = await storage.createMusdtStakingPlan({
         walletAddress: addr,
@@ -1549,7 +1549,7 @@ export async function registerRoutes(
 
       const now = new Date();
       const startMs = new Date(plan.startDate).getTime();
-      const daysElapsed = Math.floor((now.getTime() - startMs) / 86400000);
+      const daysElapsed = Math.floor((now.getTime() - startMs) / 300000); // [TEST MODE] 5 min periods (prod: 86400000)
 
       const invested = parseFloat(plan.usdtInvested);
       const dailyReward = parseFloat(plan.dailyRewardUsdt);
