@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { getTokenContract, getBoardHandlerContract, BOARD_HANDLER_ADDRESS, NETWORK } from "@/lib/contract";
+import { getTokenContract, getDepositVaultContract, DEPOSIT_VAULT_ADDRESS, NETWORK } from "@/lib/contract";
 import { ethers } from "ethers";
 import type { UserInfo } from "@/hooks/use-web3";
 
@@ -129,21 +129,21 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
       const usdtContract = getTokenContract(signer);
       const parsedAmt = ethers.parseUnits(amt.toFixed(4), 18);
 
-      // Step 1: approve USDT to BoardMatrixHandler
+      // Step 1: approve USDT to DepositVault
       setDepositStep("approving");
-      const allowance: bigint = await (usdtContract as any).allowance(account, BOARD_HANDLER_ADDRESS);
+      const allowance: bigint = await (usdtContract as any).allowance(account, DEPOSIT_VAULT_ADDRESS);
       if (allowance < parsedAmt) {
         toast({ title: "Approving USDT...", description: "Please confirm the approval in MetaMask" });
-        const approveTx = await (usdtContract as any).approve(BOARD_HANDLER_ADDRESS, parsedAmt);
+        const approveTx = await (usdtContract as any).approve(DEPOSIT_VAULT_ADDRESS, parsedAmt);
         await approveTx.wait();
         toast({ title: "Approval confirmed", description: "Now depositing..." });
       }
 
-      // Step 2: call deposit on BoardMatrixHandler
+      // Step 2: call deposit on DepositVault
       setDepositStep("depositing");
-      const boardHandler = getBoardHandlerContract(signer);
+      const depositVault = getDepositVaultContract(signer);
       toast({ title: "Depositing...", description: "Please confirm the deposit transaction in MetaMask" });
-      const depositTx = await (boardHandler as any).deposit(parsedAmt);
+      const depositTx = await (depositVault as any).deposit(parsedAmt);
       const receipt = await depositTx.wait();
       txHash = receipt.hash;
       setDepositTxHash(txHash);
@@ -532,7 +532,7 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
                 <Info className="h-3.5 w-3.5 mt-0.5 shrink-0 text-emerald-400" />
                 <div className="text-xs text-muted-foreground">
                   <p>USDT is deposited into the M-Vault on-chain vault contract on BSC Testnet. Your virtual balance is credited after on-chain confirmation.</p>
-                  <p className="mt-1 font-mono text-[10px] break-all text-emerald-400/70">Vault: {BOARD_HANDLER_ADDRESS}</p>
+                  <p className="mt-1 font-mono text-[10px] break-all text-emerald-400/70">Vault: {DEPOSIT_VAULT_ADDRESS}</p>
                 </div>
               </div>
 

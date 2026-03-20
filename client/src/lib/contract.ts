@@ -76,6 +76,8 @@ export const MLM_ABI = [
 
 export const BOARD_HANDLER_ADDRESS = import.meta.env.VITE_BOARD_HANDLER_ADDRESS || "0xAFDf34f6e2FBa1D1E9b1E4e180821b463c3cB72D";
 
+export const DEPOSIT_VAULT_ADDRESS = import.meta.env.VITE_DEPOSIT_VAULT_ADDRESS || "0xD307FB39d7d42B59AC46e28D71ef72019E9D5e38";
+
 export const PANCAKE_ROUTER_ADDRESS = import.meta.env.VITE_PANCAKE_ROUTER_ADDRESS || "0xD99D1c33F9fC3444f8101754aBC46c52416550D1";
 
 export const BTCB_TOKEN_ADDRESS = import.meta.env.VITE_BTCB_TOKEN_ADDRESS || "";
@@ -143,6 +145,10 @@ export function getTokenContract(signerOrProvider: ethers.Signer | ethers.Provid
 
 export function getBoardHandlerContract(signerOrProvider: ethers.Signer | ethers.Provider) {
   return new ethers.Contract(BOARD_HANDLER_ADDRESS, BOARD_HANDLER_ABI, signerOrProvider);
+}
+
+export function getDepositVaultContract(signerOrProvider: ethers.Signer | ethers.Provider) {
+  return new ethers.Contract(DEPOSIT_VAULT_ADDRESS, BOARD_HANDLER_ABI, signerOrProvider);
 }
 
 export function getPancakeRouterContract(signerOrProvider: ethers.Signer | ethers.Provider) {

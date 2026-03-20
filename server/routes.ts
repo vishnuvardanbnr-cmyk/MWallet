@@ -497,8 +497,8 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Transaction failed on-chain" });
       }
 
-      // Verify the Deposited(address indexed user, uint256 amount) event from BoardMatrixHandler
-      const BOARD_HANDLER = (process.env.VITE_BOARD_HANDLER_ADDRESS || "0xAFDf34f6e2FBa1D1E9b1E4e180821b463c3cB72D").toLowerCase();
+      // Verify the Deposited(address indexed user, uint256 amount) event from DepositVault
+      const BOARD_HANDLER = (process.env.VITE_DEPOSIT_VAULT_ADDRESS || "0xD307FB39d7d42B59AC46e28D71ef72019E9D5e38").toLowerCase();
       const DEPOSITED_TOPIC = ethers.id("Deposited(address,uint256)").toLowerCase();
 
       let verifiedAmount: string | null = null;
