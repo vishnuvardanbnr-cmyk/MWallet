@@ -431,17 +431,8 @@ export default function MusdtStakingPage({ account }: MusdtStakingPageProps) {
           </div>
 
           <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-muted-foreground">USDT Amount</span>
-              <button
-                onClick={() => setStakeAmount(usdtBalance.toFixed(2))}
-                className="text-[10px] text-yellow-300 hover:text-yellow-200 font-medium uppercase tracking-wider"
-                data-testid="button-max-stake"
-              >
-                MAX
-              </button>
-            </div>
-            <div className="flex items-center gap-3">
+            <p className="text-xs text-muted-foreground mb-2">USDT Amount</p>
+            <div className="flex items-center gap-2">
               <input
                 type="number"
                 value={stakeAmount}
@@ -451,12 +442,19 @@ export default function MusdtStakingPage({ account }: MusdtStakingPageProps) {
                 style={{ fontFamily: "var(--font-display)" }}
                 data-testid="input-stake-amount"
               />
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              <button
+                onClick={() => setStakeAmount(usdtBalance.toFixed(2))}
+                className="text-[10px] text-yellow-300 hover:text-yellow-200 font-semibold uppercase tracking-wider px-2 py-1 rounded-md bg-yellow-600/10 hover:bg-yellow-600/15 transition-colors shrink-0"
+                data-testid="button-max-stake"
+              >
+                MAX
+              </button>
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shrink-0">
                 <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
                 <span className="text-xs font-bold text-emerald-400">USDT</span>
               </div>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1">Balance: ${usdtBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+            <p className="text-[10px] text-muted-foreground mt-2">Balance: ${usdtBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
           </div>
 
           {stakeAmount && previewDailyReward !== null && parseFloat(stakeAmount) > 0 && (

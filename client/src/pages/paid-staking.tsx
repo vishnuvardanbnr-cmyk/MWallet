@@ -411,25 +411,25 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
             <Badge className="bg-orange-500/10 text-orange-400 border-orange-500/20 text-[10px]">Burns → Price Rises</Badge>
           </div>
           <p className="text-[10px] text-muted-foreground">Reward tokens are tracked as generated volume. Selling them burns from supply, increasing the M token price.</p>
-          <div className="flex gap-2">
-            <div className="flex-1 rounded-xl bg-white/[0.03] border border-white/[0.06] px-3 py-2.5">
-              <p className="text-[10px] text-muted-foreground mb-1">Amount to Sell</p>
+          <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] px-3 py-2.5">
+            <p className="text-[10px] text-muted-foreground mb-1">Amount to Sell</p>
+            <div className="flex items-center gap-2">
               <input
                 type="number"
                 value={sellRewardAmount}
                 onChange={(e) => setSellRewardAmount(e.target.value)}
                 placeholder="0.00"
-                className="w-full bg-transparent text-sm font-bold text-foreground outline-none placeholder:text-muted-foreground/30"
+                className="flex-1 bg-transparent text-sm font-bold text-foreground outline-none placeholder:text-muted-foreground/30"
                 data-testid="input-sell-reward-amount"
               />
+              <button
+                onClick={() => setSellRewardAmount(rewardBalance.toFixed(8))}
+                className="text-[10px] text-yellow-300 hover:text-yellow-200 font-semibold uppercase tracking-wider px-2 py-1 rounded-md bg-yellow-600/10 hover:bg-yellow-600/15 transition-colors shrink-0"
+                data-testid="button-max-rewards"
+              >
+                MAX
+              </button>
             </div>
-            <button
-              onClick={() => setSellRewardAmount(rewardBalance.toFixed(8))}
-              className="px-2 text-[10px] text-yellow-300 hover:text-yellow-200 font-medium uppercase tracking-wider shrink-0"
-              data-testid="button-max-rewards"
-            >
-              MAX
-            </button>
           </div>
           {sellRewardAmount && parseFloat(sellRewardAmount) > 0 && (
             <div className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.05] text-xs">
@@ -464,25 +464,25 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
             <span className="font-bold text-yellow-300">{mainBalance.toLocaleString(undefined, { maximumFractionDigits: 4 })} M</span>
           </div>
 
-          <div className="flex gap-2">
-            <div className="flex-1 rounded-xl bg-white/[0.03] border border-white/[0.06] px-3 py-2.5">
-              <p className="text-[10px] text-muted-foreground mb-1">Amount to Sell</p>
+          <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] px-3 py-2.5">
+            <p className="text-[10px] text-muted-foreground mb-1">Amount to Sell</p>
+            <div className="flex items-center gap-2">
               <input
                 type="number"
                 value={sellMainAmount}
                 onChange={(e) => setSellMainAmount(e.target.value)}
                 placeholder="0.00"
-                className="w-full bg-transparent text-sm font-bold text-foreground outline-none placeholder:text-muted-foreground/30"
+                className="flex-1 bg-transparent text-sm font-bold text-foreground outline-none placeholder:text-muted-foreground/30"
                 data-testid="input-sell-main-amount"
               />
+              <button
+                onClick={() => setSellMainAmount(mainBalance.toFixed(8))}
+                className="text-[10px] text-yellow-300 hover:text-yellow-200 font-semibold uppercase tracking-wider px-2 py-1 rounded-md bg-yellow-600/10 hover:bg-yellow-600/15 transition-colors shrink-0"
+                data-testid="button-max-main"
+              >
+                MAX
+              </button>
             </div>
-            <button
-              onClick={() => setSellMainAmount(mainBalance.toFixed(8))}
-              className="px-2 text-[10px] text-yellow-300 hover:text-yellow-200 font-medium uppercase tracking-wider shrink-0"
-              data-testid="button-max-main"
-            >
-              MAX
-            </button>
           </div>
 
           {sellMainAmount && parseFloat(sellMainAmount) > 0 && (
@@ -517,17 +517,8 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
           </div>
 
           <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-muted-foreground">USDT Amount to Stake</span>
-              <button
-                onClick={() => setStakeAmount(usdtBalance.toFixed(2))}
-                className="text-[10px] text-yellow-300 hover:text-yellow-200 font-medium uppercase tracking-wider"
-                data-testid="button-max-stake"
-              >
-                MAX
-              </button>
-            </div>
-            <div className="flex items-center gap-3">
+            <p className="text-xs text-muted-foreground mb-2">USDT Amount to Stake</p>
+            <div className="flex items-center gap-2">
               <input
                 type="number"
                 value={stakeAmount}
@@ -537,12 +528,19 @@ export default function PaidStakingPage({ account }: PaidStakingPageProps) {
                 style={{ fontFamily: "var(--font-display)" }}
                 data-testid="input-stake-amount"
               />
-              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20">
+              <button
+                onClick={() => setStakeAmount(usdtBalance.toFixed(2))}
+                className="text-[10px] text-yellow-300 hover:text-yellow-200 font-semibold uppercase tracking-wider px-2 py-1 rounded-md bg-yellow-600/10 hover:bg-yellow-600/15 transition-colors shrink-0"
+                data-testid="button-max-stake"
+              >
+                MAX
+              </button>
+              <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shrink-0">
                 <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
                 <span className="text-xs font-bold text-emerald-400">USDT</span>
               </div>
             </div>
-            <p className="text-[10px] text-muted-foreground mt-1">Balance: ${usdtBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+            <p className="text-[10px] text-muted-foreground mt-2">Balance: ${usdtBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
           </div>
 
           {previewTokens && (
