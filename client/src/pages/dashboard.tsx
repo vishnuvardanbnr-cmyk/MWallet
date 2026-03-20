@@ -381,17 +381,9 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
               />
             </div>
             <div className="flex items-center justify-between text-[11px]">
-              <span className="text-muted-foreground">Today: <span className="text-amber-400 font-medium">${formatAmount(binaryInfo?.todayBinaryIncome ?? BigInt(0))}</span></span>
+              <span className="text-muted-foreground">Previous Day claim: <span className="text-amber-400 font-medium">${formatAmount(binaryInfo?.todayBinaryIncome ?? BigInt(0))}</span></span>
               <span className="text-muted-foreground">Cap: <span className="text-foreground font-medium">${formatAmount(binaryInfo?.dailyCap ?? BigInt(0))}</span></span>
             </div>
-            {(() => {
-              const cap = binaryInfo?.dailyCap ?? BigInt(0);
-              const today = binaryInfo?.todayBinaryIncome ?? BigInt(0);
-              const remainingCap = cap > today ? cap - today : BigInt(0);
-              return (
-                <p className="text-[10px] text-muted-foreground mt-1">Remaining: <span className="text-emerald-400 font-medium">${formatAmount(remainingCap)}</span></p>
-              );
-            })()}
           </div>
         </div>
       )}
