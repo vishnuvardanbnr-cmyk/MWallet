@@ -104,11 +104,13 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
   const urlParams = new URLSearchParams(window.location.search);
   const refParam = urlParams.get("ref") || "";
   const sideParam = urlParams.get("side") || "left";
+  const parentParam = urlParams.get("parent") || "";
 
   const isFirstUser = totalUsers === 0;
 
   const [sponsorId, setSponsorId] = useState(refParam);
   const placeLeft = sideParam === "left" || sideParam === "1";
+  const isDeepPlacement = !!parentParam;
   const [sponsorInfo, setSponsorInfo] = useState<SponsorInfo | null>(null);
   const [validating, setValidating] = useState(false);
 
@@ -178,7 +180,8 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
 
     setLoading(true);
     try {
-      await register(isFirstUser ? "0" : sponsorId, isFirstUser ? "0" : sponsorId, placeLeft);
+      const binaryParentId = (!isFirstUser && isDeepPlacement && parentParam) ? parentParam : (isFirstUser ? "0" : sponsorId);
+      await register(isFirstUser ? "0" : sponsorId, binaryParentId, placeLeft);
       toast({ title: "Registration Successful", description: "Welcome to M-Vault!" });
     } catch (err: any) {
       toast({ title: "Registration Failed", description: err?.reason || err?.message || "Transaction failed.", variant: "destructive" });
@@ -255,6 +258,18 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
                   <p className="text-xs text-red-400 px-1">Invalid Sponsor ID</p>
                 )}
               </div>
+
+              {isDeepPlacement && (
+                <div className="rounded-xl bg-purple-500/10 border border-purple-500/20 p-3 flex items-start gap-2" data-testid="banner-deep-placement">
+                  <svg className="h-4 w-4 mt-0.5 shrink-0 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                  <div>
+                    <p className="text-xs font-medium text-purple-400">Deep Placement Active</p>
+                    <p className="text-[11px] text-muted-foreground mt-0.5">
+                      You will be placed under node <span className="font-bold text-purple-300">ID #{parentParam}</span> on the <span className="font-bold text-purple-300">{placeLeft ? "Left" : "Right"}</span> side.
+                    </p>
+                  </div>
+                </div>
+              )}
             </div>
           )}
 

@@ -33,7 +33,7 @@ export default function DeepPlacementPage({ userInfo, account }: DeepPlacementPa
   const [placement, setPlacement] = useState<"left" | "right">("left");
   const [link, setLink] = useState("");
   const [showLink, setShowLink] = useState(false);
-  const [linkTimer, setLinkTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [linkTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   const loadTree = useCallback(async (rootAddr: string, _side: string) => {
     if (!rootAddr || rootAddr === ZERO_ADDRESS) {
@@ -99,11 +99,6 @@ export default function DeepPlacementPage({ userInfo, account }: DeepPlacementPa
     setShowLink(true);
     navigator.clipboard.writeText(newLink);
     if (linkTimer) clearTimeout(linkTimer);
-    const timer = setTimeout(() => {
-      setShowLink(false);
-      setLink("");
-    }, 15000);
-    setLinkTimer(timer);
   };
 
   return (
@@ -239,7 +234,7 @@ export default function DeepPlacementPage({ userInfo, account }: DeepPlacementPa
                   <Copy className="h-3.5 w-3.5 text-emerald-400" />
                 </button>
               </div>
-              <p className="text-[10px] text-muted-foreground/60 mt-2">This link expires in 15 seconds</p>
+              <p className="text-[10px] text-muted-foreground/60 mt-2">Share this link to place the new member at the selected position.</p>
             </div>
           )}
         </div>
