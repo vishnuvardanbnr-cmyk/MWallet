@@ -18,8 +18,8 @@ const menuItems = [
   { title: "Deep Placement", url: "/deep-placement", icon: GitBranch },
   { title: "BTC Swap", url: "/swap", icon: ArrowDownUp },
   { title: "Paid Staking", url: "/paid-staking", icon: Coins },
-  { title: "MUSDT Staking", url: "/musdt-staking", icon: BadgeDollarSign },
   { title: "Sell Tokens", url: "/sell-tokens", icon: TrendingDown },
+  { title: "MUSDT Staking", url: "/musdt-staking", icon: BadgeDollarSign },
   { title: "Store", url: "/store", icon: ShoppingBag },
   { title: "Transactions", url: "/transactions", icon: ArrowLeftRight },
   { title: "Profile", url: "/profile", icon: UserCircle },
@@ -45,26 +45,24 @@ export function AppSidebar({ account, userId, disconnect }: AppSidebarProps) {
 
   return (
     <Sidebar>
-      <SidebarHeader className="p-4 border-b border-white/[0.06]">
-        <div className="flex items-center gap-2">
-          <Logo size="sm" />
-        </div>
-        <div className="mt-3 rounded-xl p-3 space-y-2.5 bg-gradient-to-br from-yellow-600/8 to-amber-400/5 border border-white/[0.06]">
+      <SidebarHeader className="px-3 py-2 border-b border-white/[0.06]">
+        <Logo size="sm" />
+        <div className="mt-2 rounded-lg px-2.5 py-2 space-y-1.5 bg-gradient-to-br from-yellow-600/8 to-amber-400/5 border border-white/[0.06]">
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">User ID</p>
-            <p className="text-xs font-bold gradient-text" data-testid="text-user-id" style={{ fontFamily: 'var(--font-display)' }}>{userId}</p>
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider">ID</p>
+            <p className="text-[11px] font-bold gradient-text" data-testid="text-user-id" style={{ fontFamily: 'var(--font-display)' }}>{userId}</p>
           </div>
           <div className="flex items-center justify-between gap-2">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Wallet</p>
-            <p className="text-xs font-mono text-amber-300/80" data-testid="text-wallet-address">{shortenAddress(account)}</p>
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Wallet</p>
+            <p className="text-[10px] font-mono text-amber-300/80" data-testid="text-wallet-address">{shortenAddress(account)}</p>
           </div>
         </div>
-        <div className="mt-3 flex gap-1.5">
-          <Button variant="outline" size="sm" className="flex-1 text-[11px] border-white/[0.08] bg-white/[0.02] hover:bg-yellow-600/10 hover:border-yellow-600/20 transition-all" onClick={() => copyReferralLink("left")} data-testid="button-copy-left-link">
-            <Copy className="w-3 h-3" /> Left Link
+        <div className="mt-1.5 flex gap-1.5">
+          <Button variant="outline" size="sm" className="flex-1 h-7 text-[10px] border-white/[0.08] bg-white/[0.02] hover:bg-yellow-600/10 hover:border-yellow-600/20 transition-all" onClick={() => copyReferralLink("left")} data-testid="button-copy-left-link">
+            <Copy className="w-3 h-3" /> Left
           </Button>
-          <Button variant="outline" size="sm" className="flex-1 text-[11px] border-white/[0.08] bg-white/[0.02] hover:bg-yellow-600/10 hover:border-yellow-600/20 transition-all" onClick={() => copyReferralLink("right")} data-testid="button-copy-right-link">
-            <Copy className="w-3 h-3" /> Right Link
+          <Button variant="outline" size="sm" className="flex-1 h-7 text-[10px] border-white/[0.08] bg-white/[0.02] hover:bg-yellow-600/10 hover:border-yellow-600/20 transition-all" onClick={() => copyReferralLink("right")} data-testid="button-copy-right-link">
+            <Copy className="w-3 h-3" /> Right
           </Button>
         </div>
       </SidebarHeader>
