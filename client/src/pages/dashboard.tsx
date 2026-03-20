@@ -440,8 +440,8 @@ export default function Dashboard({ userInfo, incomeInfo, binaryInfo, btcPoolBal
             <div className="space-y-3">
               <div>
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-2">Select Package</p>
-                <div className="grid grid-cols-5 gap-2">
-                  {[1, 2, 3, 4, 5].filter(p => p >= userInfo.userPackage).map((pkg) => (
+                <div className="grid grid-cols-3 sm:grid-cols-6 gap-2">
+                  {[1, 2, 3, 4, 5, 6].filter(p => p >= userInfo.userPackage).map((pkg) => (
                     <button
                       key={pkg}
                       onClick={() => setSelectedReactivatePkg(pkg)}
