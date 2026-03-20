@@ -242,7 +242,7 @@ export default function SwapPage({ account, fetchUserData }: SwapPageProps) {
                 onChange={(e) => setSwapAmount(e.target.value)}
                 placeholder="0.00"
                 min={MIN_SWAP}
-                className="flex-1 bg-transparent text-xl font-bold text-foreground outline-none placeholder:text-muted-foreground/30"
+                className="min-w-0 flex-1 bg-transparent text-xl font-bold text-foreground outline-none placeholder:text-muted-foreground/30"
                 style={{ fontFamily: "var(--font-display)" }}
                 data-testid="input-swap-amount"
                 disabled={swapping}
@@ -254,9 +254,9 @@ export default function SwapPage({ account, fetchUserData }: SwapPageProps) {
               >
                 MAX
               </button>
-              <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shrink-0">
-                <DollarSign className="w-4 h-4 text-emerald-400" />
-                <span className="text-sm font-bold text-emerald-400">USDT</span>
+              <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shrink-0">
+                <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
+                <span className="text-xs font-bold text-emerald-400 hidden sm:inline">USDT</span>
               </div>
             </div>
             <p className="text-[10px] text-muted-foreground mt-2">
