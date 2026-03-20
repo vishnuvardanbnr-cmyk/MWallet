@@ -648,16 +648,24 @@ export async function registerRoutes(
   app.get("/api/paidstaking/:walletAddress", async (req, res) => {
     try {
       const addr = req.params.walletAddress.toLowerCase();
-      const [activePlan, allPlans, mTokenBal, usdtBal, tokenTxns, overrideIncome] = await Promise.all([
+      const [activePlan, allPlans, mTokenBal, usdtBal, tokenTxns, overrideIncome, freeBatches] = await Promise.all([
         storage.getActivePaidStakingPlan(addr),
         storage.getAllPaidStakingPlans(addr),
         storage.getMTokenBalance(addr),
         storage.getVirtualUsdtBalance(addr),
         storage.getTokenTransactions(addr),
         storage.getStakingOverrideIncome(addr),
+        storage.getFreeBatches(addr),
       ]);
       const { buyPrice, sellPrice } = await getTokenPrice();
       const overrideTotal = overrideIncome.reduce((s, r) => s + parseFloat(r.amountUsdt), 0);
+
+      // Get staked batch for active plan if exists
+      let stakedBatch = null;
+      if (activePlan) {
+        stakedBatch = await storage.getStakedBatch(addr, activePlan.id);
+      }
+
       res.json({
         activePlan,
         allPlans,
@@ -668,6 +676,8 @@ export async function registerRoutes(
         tokenTransactions: tokenTxns,
         overrideIncome,
         overrideTotalUsdt: overrideTotal.toFixed(4),
+        freeBatches,
+        stakedBatch,
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -675,6 +685,8 @@ export async function registerRoutes(
   });
 
   // POST /api/paidstaking/stake
+  // Tokens are LOCKED in a purchase batch (NOT added to mainBalance).
+  // No daily rewards. Sell after 10 months at 4x entry price cap.
   app.post("/api/paidstaking/stake", async (req, res) => {
     try {
       const { walletAddress, usdtAmount } = req.body;
@@ -684,7 +696,6 @@ export async function registerRoutes(
       const usdtAmt = parseFloat(usdtAmount);
       const addr = walletAddress.toLowerCase();
 
-      // Check virtual USDT balance
       const usdtBal = await storage.getVirtualUsdtBalance(addr);
       if (!usdtBal || parseFloat(usdtBal.balance) < usdtAmt) {
         return res.status(400).json({ message: "Insufficient virtual USDT balance" });
@@ -692,32 +703,24 @@ export async function registerRoutes(
 
       const { buyPrice } = await getTokenPrice();
 
-      // Token calculations
+      // Token calculations — user gets 70% of theoretical tokens, locked in plan
       const theoreticalTokens = usdtAmt / buyPrice;
-      const mintedTokens = theoreticalTokens * 0.9;       // mint 90%
-      const userTokens = theoreticalTokens * 0.7;          // user gets 70%
-      const adminTokens = theoreticalTokens * 0.2;         // admin gets 20%
-      const dailyRewardUsdt = usdtAmt * 0.003;             // 0.3% daily of invested USDT
+      const mintedTokens = theoreticalTokens * 0.9;   // 90% minted total
+      const userTokens = theoreticalTokens * 0.7;      // 70% locked for user
+      const adminTokens = theoreticalTokens * 0.2;     // 20% for admin
 
-      // Deduct USDT from user, add to liquidity (USDT backs the token supply)
       await storage.deductVirtualUsdt(addr, usdtAmt.toString());
 
-      // Update circulating supply and liquidity
       const econ = await storage.getTokenEconomics();
-      const newSupply = parseFloat(econ.circulatingSupply) + mintedTokens;
-      const newLiquidity = parseFloat(econ.liquidity) + usdtAmt;
       await storage.updateTokenEconomics({
-        circulatingSupply: newSupply.toFixed(8),
-        liquidity: newLiquidity.toFixed(8),
+        circulatingSupply: (parseFloat(econ.circulatingSupply) + mintedTokens).toFixed(8),
+        liquidity: (parseFloat(econ.liquidity) + usdtAmt).toFixed(8),
       });
 
-      // Add user's tokens to their M token main balance
-      await storage.addMTokenMainBalance(addr, userTokens.toFixed(8));
-
-      // Create the staking plan
+      // Tokens are NOT added to mainBalance — they are locked in the staking plan
       const startDate = new Date();
       const endDate = new Date(startDate);
-      endDate.setMonth(endDate.getMonth() + 10); // 10 months
+      endDate.setMonth(endDate.getMonth() + 10);
 
       const plan = await storage.createPaidStakingPlan({
         walletAddress: addr,
@@ -726,22 +729,86 @@ export async function registerRoutes(
         totalTokensMinted: mintedTokens.toFixed(8),
         userTokens: userTokens.toFixed(8),
         adminTokens: adminTokens.toFixed(8),
-        dailyRewardUsdt: dailyRewardUsdt.toFixed(4),
+        dailyRewardUsdt: "0",   // No daily rewards — price appreciation only
         startDate,
         endDate,
       });
 
-      // Log transaction
+      // Create a staked purchase batch for sell-cap tracking (4x cap)
+      await storage.createTokenBatch({
+        walletAddress: addr,
+        tokenAmount: userTokens.toFixed(8),
+        tokensRemaining: userTokens.toFixed(8),
+        entryPrice: buyPrice.toFixed(8),
+        batchType: "staked",
+        stakingPlanId: plan.id,
+      });
+
       await storage.logTokenTransaction({
         walletAddress: addr,
         txType: "paid_stake",
-        tokenAmount: mintedTokens.toFixed(8),
+        tokenAmount: userTokens.toFixed(8),
         usdtAmount: usdtAmt.toFixed(4),
         priceAtTxn: buyPrice.toFixed(8),
-        note: `Staked $${usdtAmt} USDT. User: ${userTokens.toFixed(2)} tokens, Admin: ${adminTokens.toFixed(2)} tokens`,
+        note: `Staked $${usdtAmt} USDT @ $${buyPrice.toFixed(8)}/token. ${userTokens.toFixed(2)} tokens locked for 10 months. 4x sell cap = $${(buyPrice * 4).toFixed(8)}/token`,
       });
 
-      res.json({ plan, mintedTokens: mintedTokens.toFixed(8), userTokens: userTokens.toFixed(8), adminTokens: adminTokens.toFixed(8), buyPriceUsed: buyPrice.toFixed(8) });
+      res.json({ plan, userTokens: userTokens.toFixed(8), adminTokens: adminTokens.toFixed(8), buyPriceUsed: buyPrice.toFixed(8), capPrice: (buyPrice * 4).toFixed(8) });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/paidstaking/buy-hold
+  // Buy M-tokens without staking. Added to mainBalance. 2x entry price sell cap.
+  app.post("/api/paidstaking/buy-hold", async (req, res) => {
+    try {
+      const { walletAddress, usdtAmount } = req.body;
+      if (!walletAddress || !usdtAmount || parseFloat(usdtAmount) <= 0) {
+        return res.status(400).json({ message: "walletAddress and positive usdtAmount required" });
+      }
+      const usdtAmt = parseFloat(usdtAmount);
+      const addr = walletAddress.toLowerCase();
+
+      const usdtBal = await storage.getVirtualUsdtBalance(addr);
+      if (!usdtBal || parseFloat(usdtBal.balance) < usdtAmt) {
+        return res.status(400).json({ message: "Insufficient virtual USDT balance" });
+      }
+
+      const { buyPrice } = await getTokenPrice();
+      const tokens = usdtAmt / buyPrice;  // 100% go to user, no lock
+
+      await storage.deductVirtualUsdt(addr, usdtAmt.toString());
+
+      const econ = await storage.getTokenEconomics();
+      await storage.updateTokenEconomics({
+        circulatingSupply: (parseFloat(econ.circulatingSupply) + tokens).toFixed(8),
+        liquidity: (parseFloat(econ.liquidity) + usdtAmt).toFixed(8),
+      });
+
+      // Add directly to mainBalance (no lock)
+      await storage.addMTokenMainBalance(addr, tokens.toFixed(8));
+
+      // Create a free purchase batch for sell-cap tracking (2x cap)
+      const batch = await storage.createTokenBatch({
+        walletAddress: addr,
+        tokenAmount: tokens.toFixed(8),
+        tokensRemaining: tokens.toFixed(8),
+        entryPrice: buyPrice.toFixed(8),
+        batchType: "free",
+        stakingPlanId: null,
+      });
+
+      await storage.logTokenTransaction({
+        walletAddress: addr,
+        txType: "buy_hold",
+        tokenAmount: tokens.toFixed(8),
+        usdtAmount: usdtAmt.toFixed(4),
+        priceAtTxn: buyPrice.toFixed(8),
+        note: `Bought & held ${tokens.toFixed(2)} M-tokens @ $${buyPrice.toFixed(8)}. 2x cap = $${(buyPrice * 2).toFixed(8)}/token`,
+      });
+
+      res.json({ tokens: tokens.toFixed(8), buyPriceUsed: buyPrice.toFixed(8), capPrice: (buyPrice * 2).toFixed(8), batch });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -831,7 +898,87 @@ export async function registerRoutes(
     }
   });
 
-  // POST /api/paidstaking/sell-main-tokens  (sell main M-Token balance → USDT, burned from circulating supply)
+  // POST /api/paidstaking/sell-staked  (sell locked staked tokens after 10 months at 4x entry price cap)
+  app.post("/api/paidstaking/sell-staked", async (req, res) => {
+    try {
+      const { walletAddress, planId, tokenAmount } = req.body;
+      if (!walletAddress || !planId || !tokenAmount || parseFloat(tokenAmount) <= 0) {
+        return res.status(400).json({ message: "walletAddress, planId and positive tokenAmount required" });
+      }
+      const addr = walletAddress.toLowerCase();
+      const tokens = parseFloat(tokenAmount);
+      const pid = parseInt(planId);
+
+      const batch = await storage.getStakedBatch(addr, pid);
+      if (!batch) return res.status(404).json({ message: "No staked token batch found for this plan" });
+
+      // Check lock period
+      const plans = await storage.getAllPaidStakingPlans(addr);
+      const plan = plans.find(p => p.id === pid);
+      if (!plan) return res.status(404).json({ message: "Staking plan not found" });
+      const now = new Date();
+      if (now < new Date(plan.endDate)) {
+        const daysLeft = Math.ceil((new Date(plan.endDate).getTime() - now.getTime()) / 86400000);
+        return res.status(400).json({ message: `Tokens locked for ${daysLeft} more days (until ${new Date(plan.endDate).toLocaleDateString()})` });
+      }
+
+      const remaining = parseFloat(batch.tokensRemaining);
+      if (tokens > remaining + 0.000001) {
+        return res.status(400).json({ message: `Only ${remaining.toFixed(8)} tokens remaining in this staked batch` });
+      }
+
+      const { sellPrice } = await getTokenPrice();
+      const entryPrice = parseFloat(batch.entryPrice);
+      const capPrice = entryPrice * 4;                          // 4x sell cap
+      const effectivePrice = Math.min(sellPrice, capPrice);     // user gets the lower of current or cap
+      const usdtToUser = tokens * effectivePrice;
+      const excessPerToken = Math.max(0, sellPrice - capPrice); // excess stays in company liquidity
+      const companyRetains = tokens * excessPerToken;
+
+      // Deduct from staked batch
+      await storage.deductFromBatch(batch.id, tokens.toFixed(8));
+
+      // Burn tokens from circulating supply; only reduce liquidity by what user receives
+      const econ = await storage.getTokenEconomics();
+      await storage.updateTokenEconomics({
+        circulatingSupply: Math.max(0, parseFloat(econ.circulatingSupply) - tokens).toFixed(8),
+        liquidity: Math.max(0, parseFloat(econ.liquidity) - usdtToUser).toFixed(8),
+      });
+
+      await storage.creditVirtualUsdt(addr, usdtToUser.toFixed(4));
+
+      // If batch exhausted, close the staking plan
+      const updatedBatch = await storage.getStakedBatch(addr, pid);
+      if (!updatedBatch || parseFloat(updatedBatch.tokensRemaining) < 0.00001) {
+        await storage.markPaidStakingUnstaked(pid, usdtToUser.toFixed(4));
+      }
+
+      await storage.logTokenTransaction({
+        walletAddress: addr,
+        txType: "sell_staked",
+        tokenAmount: tokens.toFixed(8),
+        usdtAmount: usdtToUser.toFixed(4),
+        priceAtTxn: effectivePrice.toFixed(8),
+        note: `Sold ${tokens.toFixed(4)} staked M-tokens. Entry: $${entryPrice.toFixed(8)}, Cap: $${capPrice.toFixed(8)}, Market: $${sellPrice.toFixed(8)}, Received: $${usdtToUser.toFixed(4)}, Company retained: $${companyRetains.toFixed(4)}`,
+      });
+
+      res.json({
+        usdtReceived: usdtToUser.toFixed(4),
+        tokensSold: tokens.toFixed(8),
+        effectivePrice: effectivePrice.toFixed(8),
+        capPrice: capPrice.toFixed(8),
+        marketPrice: sellPrice.toFixed(8),
+        companyRetains: companyRetains.toFixed(4),
+        tokensRemainingInBatch: updatedBatch ? updatedBatch.tokensRemaining : "0",
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/paidstaking/sell-main-tokens
+  // Sell free/held M-tokens (from mainBalance) using FIFO purchase batches with 2x entry price cap.
+  // Excess above 2x cap stays in company liquidity pool.
   app.post("/api/paidstaking/sell-main-tokens", async (req, res) => {
     try {
       const { walletAddress, tokenAmount } = req.body;
@@ -839,38 +986,78 @@ export async function registerRoutes(
         return res.status(400).json({ message: "walletAddress and positive tokenAmount required" });
       }
       const addr = walletAddress.toLowerCase();
-      const tokens = parseFloat(tokenAmount);
+      let tokensToSell = parseFloat(tokenAmount);
 
       const mBal = await storage.getMTokenBalance(addr);
       const mainBal = parseFloat(mBal?.mainBalance ?? "0");
-      if (mainBal < tokens) {
+      if (mainBal < tokensToSell - 0.000001) {
         return res.status(400).json({ message: "Insufficient M-Token main balance" });
       }
 
       const { sellPrice } = await getTokenPrice();
-      const usdtOut = tokens * sellPrice;
 
-      await storage.deductMTokenMainBalance(addr, tokens.toFixed(8));
+      // Try FIFO free batches first (2x cap enforced)
+      const freeBatches = await storage.getFreeBatches(addr);
+      let totalUsdtToUser = 0;
+      let totalTokensBurned = 0;
+      let totalCompanyRetains = 0;
+      let remaining = tokensToSell;
+
+      if (freeBatches.length > 0) {
+        for (const batch of freeBatches) {
+          if (remaining <= 0) break;
+          const batchRemaining = parseFloat(batch.tokensRemaining);
+          const fromThisBatch = Math.min(remaining, batchRemaining);
+          const entryPrice = parseFloat(batch.entryPrice);
+          const capPrice = entryPrice * 2;
+          const effectivePrice = Math.min(sellPrice, capPrice);
+          const usdtFromBatch = fromThisBatch * effectivePrice;
+          const companyFromBatch = fromThisBatch * Math.max(0, sellPrice - capPrice);
+
+          totalUsdtToUser += usdtFromBatch;
+          totalCompanyRetains += companyFromBatch;
+          totalTokensBurned += fromThisBatch;
+          remaining -= fromThisBatch;
+
+          await storage.deductFromBatch(batch.id, fromThisBatch.toFixed(8));
+        }
+        // Any remaining tokens (beyond tracked batches) sell without cap (legacy)
+        if (remaining > 0.000001) {
+          totalUsdtToUser += remaining * sellPrice;
+          totalTokensBurned += remaining;
+          remaining = 0;
+        }
+      } else {
+        // No free batches — legacy sell at current price (no cap, backward compat)
+        totalUsdtToUser = tokensToSell * sellPrice;
+        totalTokensBurned = tokensToSell;
+      }
+
+      // Burn tokens from main balance and circulating supply
+      await storage.deductMTokenMainBalance(addr, totalTokensBurned.toFixed(8));
       const econ = await storage.getTokenEconomics();
-      const newSupply = Math.max(0, parseFloat(econ.circulatingSupply) - tokens);
-      const newLiquidity = Math.max(0, parseFloat(econ.liquidity) - usdtOut);
       await storage.updateTokenEconomics({
-        circulatingSupply: newSupply.toFixed(8),
-        liquidity: newLiquidity.toFixed(8),
+        circulatingSupply: Math.max(0, parseFloat(econ.circulatingSupply) - totalTokensBurned).toFixed(8),
+        liquidity: Math.max(0, parseFloat(econ.liquidity) - totalUsdtToUser).toFixed(8),
       });
 
-      await storage.creditVirtualUsdt(addr, usdtOut.toFixed(4));
+      await storage.creditVirtualUsdt(addr, totalUsdtToUser.toFixed(4));
 
       await storage.logTokenTransaction({
         walletAddress: addr,
         txType: "sell_main_tokens",
-        tokenAmount: tokens.toFixed(8),
-        usdtAmount: usdtOut.toFixed(4),
+        tokenAmount: totalTokensBurned.toFixed(8),
+        usdtAmount: totalUsdtToUser.toFixed(4),
         priceAtTxn: sellPrice.toFixed(8),
-        note: `Sold ${tokens.toFixed(4)} M Tokens at sell price $${sellPrice.toFixed(8)}`,
+        note: `Sold ${totalTokensBurned.toFixed(4)} held M-tokens. Received: $${totalUsdtToUser.toFixed(4)}. Company retained: $${totalCompanyRetains.toFixed(4)} (2x cap enforced)`,
       });
 
-      res.json({ usdtReceived: usdtOut.toFixed(4), tokensBurned: tokens.toFixed(8), sellPriceUsed: sellPrice.toFixed(8) });
+      res.json({
+        usdtReceived: totalUsdtToUser.toFixed(4),
+        tokensBurned: totalTokensBurned.toFixed(8),
+        sellPriceUsed: sellPrice.toFixed(8),
+        companyRetains: totalCompanyRetains.toFixed(4),
+      });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

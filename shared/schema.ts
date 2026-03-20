@@ -128,6 +128,23 @@ export const mTokenBalances = pgTable("m_token_balances", {
 });
 export type MTokenBalance = typeof mTokenBalances.$inferSelect;
 
+// ── M-Token Purchase Batches ──────────────────────────────────────────────────
+// Tracks every token purchase with entry price for sell-cap enforcement
+// batchType: 'staked' = locked in a plan (4x cap), 'free' = held freely (2x cap)
+export const mTokenPurchaseBatches = pgTable("m_token_purchase_batches", {
+  id: serial("id").primaryKey(),
+  walletAddress: varchar("wallet_address", { length: 42 }).notNull(),
+  tokenAmount: numeric("token_amount", { precision: 30, scale: 8 }).notNull(),
+  tokensRemaining: numeric("tokens_remaining", { precision: 30, scale: 8 }).notNull(),
+  entryPrice: numeric("entry_price", { precision: 20, scale: 8 }).notNull(),
+  batchType: varchar("batch_type", { length: 10 }).notNull().default("free"),
+  stakingPlanId: integer("staking_plan_id"),
+  purchasedAt: timestamp("purchased_at").notNull().defaultNow(),
+});
+export const insertTokenBatchSchema = createInsertSchema(mTokenPurchaseBatches).omit({ id: true, purchasedAt: true });
+export type InsertTokenBatch = z.infer<typeof insertTokenBatchSchema>;
+export type MTokenPurchaseBatch = typeof mTokenPurchaseBatches.$inferSelect;
+
 export const paidStakingPlans = pgTable("paid_staking_plans", {
   id: serial("id").primaryKey(),
   walletAddress: varchar("wallet_address", { length: 42 }).notNull(),

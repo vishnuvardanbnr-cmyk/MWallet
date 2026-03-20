@@ -1,4 +1,4 @@
-import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome, usdtDeposits, type UsdtDeposit, leadershipRewards, type LeadershipReward, musdtStakingPlans, type MusdtStakingPlan, type InsertMusdtStakingPlan, musdtOverrideIncome, type MusdtOverrideIncome } from "@shared/schema";
+import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome, usdtDeposits, type UsdtDeposit, leadershipRewards, type LeadershipReward, musdtStakingPlans, type MusdtStakingPlan, type InsertMusdtStakingPlan, musdtOverrideIncome, type MusdtOverrideIncome, mTokenPurchaseBatches, type MTokenPurchaseBatch, type InsertTokenBatch } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -81,6 +81,12 @@ export interface IStorage {
   logMusdtOverrideIncome(recipientWallet: string, fromWallet: string, amountUsdt: string, level: number): Promise<MusdtOverrideIncome>;
   getMusdtOverrideIncome(recipientWallet: string): Promise<MusdtOverrideIncome[]>;
   getMusdtOverrideTotals(recipientWallet: string): Promise<string>;
+  // M-Token Purchase Batches (sell cap enforcement)
+  createTokenBatch(data: InsertTokenBatch): Promise<MTokenPurchaseBatch>;
+  getFreeBatches(walletAddress: string): Promise<MTokenPurchaseBatch[]>;
+  getStakedBatch(walletAddress: string, planId: number): Promise<MTokenPurchaseBatch | undefined>;
+  deductFromBatch(batchId: number, amount: string): Promise<MTokenPurchaseBatch>;
+  getBatchesByPlan(planId: number): Promise<MTokenPurchaseBatch[]>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -618,6 +624,46 @@ export class DatabaseStorage implements IStorage {
       .from(musdtOverrideIncome)
       .where(eq(musdtOverrideIncome.recipientWallet, recipientWallet.toLowerCase()));
     return row?.total ?? "0";
+  }
+
+  async createTokenBatch(data: InsertTokenBatch): Promise<MTokenPurchaseBatch> {
+    const [batch] = await db.insert(mTokenPurchaseBatches).values({ ...data, walletAddress: data.walletAddress.toLowerCase() }).returning();
+    return batch;
+  }
+
+  async getFreeBatches(walletAddress: string): Promise<MTokenPurchaseBatch[]> {
+    return db.select().from(mTokenPurchaseBatches)
+      .where(and(
+        eq(mTokenPurchaseBatches.walletAddress, walletAddress.toLowerCase()),
+        eq(mTokenPurchaseBatches.batchType, "free"),
+        sql`${mTokenPurchaseBatches.tokensRemaining}::numeric > 0`
+      ))
+      .orderBy(mTokenPurchaseBatches.purchasedAt);
+  }
+
+  async getStakedBatch(walletAddress: string, planId: number): Promise<MTokenPurchaseBatch | undefined> {
+    const [batch] = await db.select().from(mTokenPurchaseBatches)
+      .where(and(
+        eq(mTokenPurchaseBatches.walletAddress, walletAddress.toLowerCase()),
+        eq(mTokenPurchaseBatches.batchType, "staked"),
+        eq(mTokenPurchaseBatches.stakingPlanId, planId),
+        sql`${mTokenPurchaseBatches.tokensRemaining}::numeric > 0`
+      ));
+    return batch;
+  }
+
+  async deductFromBatch(batchId: number, amount: string): Promise<MTokenPurchaseBatch> {
+    const [batch] = await db.update(mTokenPurchaseBatches)
+      .set({ tokensRemaining: sql`greatest(0, ${mTokenPurchaseBatches.tokensRemaining}::numeric - ${amount}::numeric)` })
+      .where(eq(mTokenPurchaseBatches.id, batchId))
+      .returning();
+    return batch;
+  }
+
+  async getBatchesByPlan(planId: number): Promise<MTokenPurchaseBatch[]> {
+    return db.select().from(mTokenPurchaseBatches)
+      .where(eq(mTokenPurchaseBatches.stakingPlanId, planId))
+      .orderBy(mTokenPurchaseBatches.purchasedAt);
   }
 }
 
