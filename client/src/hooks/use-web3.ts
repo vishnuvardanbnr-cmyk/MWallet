@@ -100,7 +100,14 @@ export function useWeb3() {
       setIsRegistered(registered);
 
       if (registered) {
-        const info = await contract.getUserInfo(address);
+        let info: any;
+        try {
+          info = await contract.getUserInfo(address);
+        } catch (e) {
+          console.error("getUserInfo failed:", e);
+          setIsRegistered(false);
+          return;
+        }
         setUserInfo({
           userId: info[0], sponsor: info[1], binaryParent: info[2],
           leftChild: info[3], rightChild: info[4], placementSide: Number(info[5]),

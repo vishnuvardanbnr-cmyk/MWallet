@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, LogOut, Wallet, Zap, Star, Crown, Shield, Award, Gem, Check, Info, ArrowLeft, Rocket, TrendingUp } from "lucide-react";
-import { PACKAGE_NAMES, PACKAGE_PRICES_USD, shortenAddress, getContract, formatTokenAmount } from "@/lib/contract";
+import { Loader2, LogOut, Wallet, Zap, Star, Crown, Shield, Award, Gem, Check, Info, ArrowLeft, Rocket, TrendingUp, AlertTriangle, RefreshCw } from "lucide-react";
+import { PACKAGE_NAMES, PACKAGE_PRICES_USD, shortenAddress, getContract, formatTokenAmount, getTokenContract, CONTRACT_ADDRESS } from "@/lib/contract";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
 import { ethers } from "ethers";
@@ -34,6 +34,21 @@ const CARD_BORDERS = [
   "border-rose-400/20 hover:border-rose-400/40",
 ];
 
+function parseContractError(err: any): string {
+  const reason = err?.reason;
+  if (reason === "UH") return "You already have this package or a higher one. Select a higher package.";
+  if (reason === "NR") return "Wallet not registered. Please register first.";
+  if (reason === "IP") return "Invalid package selected.";
+  if (reason === "CD") return "Cannot downgrade your package.";
+  const msg: string = err?.shortMessage || err?.message || "";
+  if (msg.includes("transfer amount exceeds balance") || msg.includes("exceeds balance")) return "Insufficient USDT balance in your wallet.";
+  if (msg.includes("transfer amount exceeds allowance") || msg.includes("exceeds allowance")) return "USDT approval missing or insufficient. Please try again.";
+  if (msg.includes("user rejected") || msg.includes("User rejected") || err?.code === 4001) return "Transaction rejected in MetaMask.";
+  if (msg.includes("missing revert data")) return "Transaction would fail on-chain. Check your USDT balance and try again.";
+  if (reason) return reason;
+  return msg.slice(0, 120) || "Transaction failed. Please try again.";
+}
+
 export default function ActivatePage({ account, approveToken, activatePackage, fetchUserData, disconnect }: ActivatePageProps) {
   const { toast } = useToast();
   const [selectedPkg, setSelectedPkg] = useState<number>(1);
@@ -42,34 +57,52 @@ export default function ActivatePage({ account, approveToken, activatePackage, f
   const [activating, setActivating] = useState(false);
   const activateRef = useRef<HTMLDivElement>(null);
   const [maxIncomeLimits, setMaxIncomeLimits] = useState<Record<number, string>>({});
+  const [usdtBalance, setUsdtBalance] = useState<bigint | null>(null);
+  const [usdtDecimals, setUsdtDecimals] = useState(18);
+  const [balanceLoading, setBalanceLoading] = useState(true);
 
   useEffect(() => {
-    const fetchMaxIncomeLimits = async () => {
+    const fetchData = async () => {
       try {
         const provider = new ethers.BrowserProvider((window as any).ethereum);
         const contract = getContract(provider);
+        const token = getTokenContract(provider);
         const decimals = Number(await contract.tokenDecimals());
+        setUsdtDecimals(decimals);
+        const bal = await token.balanceOf(account);
+        setUsdtBalance(bal);
         const limits: Record<number, string> = {};
         for (let pkg = 1; pkg <= 6; pkg++) {
-          const limit = await contract.getMaxIncomeLimit(pkg);
+          const limit = await contract.getMaxIncomeLimit(pkg).catch(() => 0n);
           const formatted = parseFloat(formatTokenAmount(limit, decimals));
           limits[pkg] = `$${formatted.toLocaleString()}`;
         }
         setMaxIncomeLimits(limits);
       } catch (err) {
-        console.error("Failed to fetch max income limits:", err);
+        console.error("Failed to fetch data:", err);
+      } finally {
+        setBalanceLoading(false);
       }
     };
-    fetchMaxIncomeLimits();
-  }, []);
+    fetchData();
+  }, [account]);
+
+  const packagePrice = PACKAGE_PRICES_USD[selectedPkg];
+  const priceInUnits = BigInt(packagePrice) * 10n ** BigInt(usdtDecimals);
+  const hasEnoughBalance = usdtBalance !== null && usdtBalance >= priceInUnits;
+  const usdtBalanceFormatted = usdtBalance !== null ? parseFloat(ethers.formatUnits(usdtBalance, usdtDecimals)).toFixed(2) : null;
 
   const handleApproveAndActivate = async () => {
+    if (!hasEnoughBalance) {
+      toast({ title: "Insufficient USDT Balance", description: `You need $${packagePrice} USDT but only have $${usdtBalanceFormatted} USDT in your wallet.`, variant: "destructive" });
+      return;
+    }
     setApproving(true);
     try {
       await approveToken(PACKAGE_PRICES_USD[selectedPkg].toString());
       setApproved(true);
     } catch (err: any) {
-      toast({ title: "Approval Failed", description: err?.reason || err?.message || "Failed to approve.", variant: "destructive" });
+      toast({ title: "Approval Failed", description: parseContractError(err), variant: "destructive" });
       setApproving(false);
       return;
     }
@@ -79,7 +112,7 @@ export default function ActivatePage({ account, approveToken, activatePackage, f
       await activatePackage(selectedPkg);
       await fetchUserData();
     } catch (err: any) {
-      toast({ title: "Activation Failed", description: err?.reason || err?.message || "Failed to activate.", variant: "destructive" });
+      toast({ title: "Activation Failed", description: parseContractError(err), variant: "destructive" });
     } finally {
       setActivating(false);
     }
@@ -121,10 +154,49 @@ export default function ActivatePage({ account, approveToken, activatePackage, f
           </p>
         </div>
 
+        {/* USDT Balance Display */}
+        <div className="w-full max-w-lg mb-5 slide-in" style={{ animationDelay: '0.1s' }}>
+          {balanceLoading ? (
+            <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+              <span className="text-xs text-muted-foreground">Checking your USDT balance...</span>
+            </div>
+          ) : usdtBalance !== null ? (
+            <div className={`flex items-center justify-between px-4 py-3 rounded-xl border ${hasEnoughBalance ? "bg-emerald-500/5 border-emerald-500/20" : "bg-red-500/5 border-red-500/20"}`} data-testid="banner-usdt-balance">
+              <div className="flex items-center gap-2">
+                {hasEnoughBalance ? (
+                  <Check className="h-4 w-4 text-emerald-400 shrink-0" />
+                ) : (
+                  <AlertTriangle className="h-4 w-4 text-red-400 shrink-0" />
+                )}
+                <div>
+                  <div className="text-xs text-muted-foreground">Your USDT Balance</div>
+                  <div className={`text-sm font-bold ${hasEnoughBalance ? "text-emerald-400" : "text-red-400"}`} data-testid="text-usdt-balance">
+                    ${usdtBalanceFormatted} USDT
+                  </div>
+                </div>
+              </div>
+              {!hasEnoughBalance && (
+                <div className="text-right">
+                  <div className="text-[10px] text-red-400/80">Need ${packagePrice} USDT</div>
+                  <div className="text-[10px] text-red-400/60">Top up your wallet first</div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+              <AlertTriangle className="h-4 w-4 text-amber-400" />
+              <span className="text-xs text-amber-400">Could not fetch USDT balance</span>
+            </div>
+          )}
+        </div>
+
         <div className="w-full max-w-lg space-y-3 mb-6">
           {[1, 2, 3, 4, 5, 6].map((pkg) => {
             const Icon = PACKAGE_ICONS[pkg];
             const isSelected = selectedPkg === pkg;
+            const pkgPriceUnits = BigInt(PACKAGE_PRICES_USD[pkg]) * 10n ** BigInt(usdtDecimals);
+            const affordable = usdtBalance !== null && usdtBalance >= pkgPriceUnits;
 
             return (
               <button
@@ -153,7 +225,7 @@ export default function ActivatePage({ account, approveToken, activatePackage, f
                 </div>
 
                 <div className="text-right shrink-0">
-                  <div className="text-lg font-bold gradient-text" data-testid={`text-package-price-${pkg}`} style={{ fontFamily: 'var(--font-display)' }}>
+                  <div className={`text-lg font-bold ${!affordable && usdtBalance !== null ? "text-muted-foreground/60" : "gradient-text"}`} data-testid={`text-package-price-${pkg}`} style={{ fontFamily: 'var(--font-display)' }}>
                     ${PACKAGE_PRICES_USD[pkg].toLocaleString()}
                   </div>
                   <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60">USDT</div>
@@ -208,6 +280,27 @@ export default function ActivatePage({ account, approveToken, activatePackage, f
           </div>
         </div>
 
+        {/* Two-step activation indicator */}
+        <div className="w-full max-w-lg mb-4 slide-in" style={{ animationDelay: '0.55s' }}>
+          <div className="flex items-center gap-2 px-4 py-3 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+            <div className="flex items-center gap-3 flex-1">
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${approved || activating ? "bg-emerald-500 text-white" : "bg-amber-500/20 text-amber-300 border border-amber-500/40"}`}>
+                {approved || activating ? <Check className="h-3 w-3" /> : "1"}
+              </div>
+              <span className={`text-xs ${approved || activating ? "text-emerald-400" : "text-muted-foreground"}`}>
+                {approving ? "Approving USDT..." : "Approve USDT"}
+              </span>
+            </div>
+            <div className="h-px w-8 bg-white/10" />
+            <div className="flex items-center gap-3 flex-1">
+              <div className={`w-6 h-6 rounded-full flex items-center justify-center text-[10px] font-bold ${activating ? "bg-amber-500/20 text-amber-300 border border-amber-500/40 animate-pulse" : "bg-white/[0.05] text-muted-foreground border border-white/[0.1]"}`}>
+                {activating ? <Loader2 className="h-3 w-3 animate-spin" /> : "2"}
+              </div>
+              <span className={`text-xs ${activating ? "text-amber-300" : "text-muted-foreground"}`}>Activate Package</span>
+            </div>
+          </div>
+        </div>
+
         <div className="w-full max-w-lg earnings-card rounded-xl p-5 mb-4 slide-in" style={{ animationDelay: '0.6s' }}>
           <div className="flex items-center justify-between gap-4">
             <div>
@@ -228,17 +321,19 @@ export default function ActivatePage({ account, approveToken, activatePackage, f
         <div ref={activateRef} className="w-full max-w-lg slide-in" style={{ animationDelay: '0.7s' }}>
           <button
             onClick={handleApproveAndActivate}
-            disabled={isLoading}
+            disabled={isLoading || (!hasEnoughBalance && usdtBalance !== null)}
             className="w-full glow-button text-white font-bold py-4 px-6 rounded-xl text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
             data-testid="button-activate"
             style={{ fontFamily: 'var(--font-display)' }}
           >
             {isLoading ? (
               <Loader2 className="h-5 w-5 animate-spin" />
+            ) : !hasEnoughBalance && usdtBalance !== null ? (
+              <AlertTriangle className="h-5 w-5" />
             ) : (
               <Rocket className="h-5 w-5" />
             )}
-            {buttonLabel}
+            {isLoading ? buttonLabel : (!hasEnoughBalance && usdtBalance !== null) ? `Insufficient Balance (Need $${packagePrice} USDT)` : buttonLabel}
           </button>
           <p className="text-[11px] text-muted-foreground/60 text-center mt-3">
             By activating, you agree to the platform terms and conditions

@@ -72,7 +72,7 @@ function ConnectScreen({ onConnect }: { onConnect: () => void }) {
 
           <div className="grid grid-cols-3 gap-3 py-2">
             <div className="text-center" data-testid="text-stat-packages">
-              <div className="text-lg font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }}>5</div>
+              <div className="text-lg font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }}>6</div>
               <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Packages</div>
             </div>
             <div className="text-center border-x border-white/[0.06]" data-testid="text-stat-max-earn">
