@@ -129,12 +129,12 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
       const usdtContract = getTokenContract(signer);
       const parsedAmt = ethers.parseUnits(amt.toFixed(4), 18);
 
-      // Step 1: approve USDT to DepositVault
+      // Step 1: approve USDT to DepositVault (use MaxUint256 to avoid decimal mismatch issues)
       setDepositStep("approving");
       const allowance: bigint = await (usdtContract as any).allowance(account, DEPOSIT_VAULT_ADDRESS);
       if (allowance < parsedAmt) {
         toast({ title: "Approving USDT...", description: "Please confirm the approval in MetaMask" });
-        const approveTx = await (usdtContract as any).approve(DEPOSIT_VAULT_ADDRESS, parsedAmt);
+        const approveTx = await (usdtContract as any).approve(DEPOSIT_VAULT_ADDRESS, ethers.MaxUint256);
         await approveTx.wait();
         toast({ title: "Approval confirmed", description: "Now depositing..." });
       }

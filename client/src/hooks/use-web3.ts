@@ -185,11 +185,16 @@ export function useWeb3() {
     await fetchUserData();
   }, [getSigner, fetchUserData]);
 
-  const approveToken = useCallback(async (amount: string) => {
+  const approveToken = useCallback(async (_amount?: string) => {
     const signer = await getSigner();
     const token = getTokenContract(signer);
-    const parsedAmount = ethers.parseUnits(amount, tokenDecimals);
-    const tx = await token.approve(CONTRACT_ADDRESS, parsedAmount);
+    // Check current allowance first — skip approval if already sufficient
+    const signerAddress = await signer.getAddress();
+    const currentAllowance = await token.allowance(signerAddress, CONTRACT_ADDRESS);
+    const needed = _amount ? ethers.parseUnits(_amount, tokenDecimals) : 0n;
+    if (currentAllowance >= needed && needed > 0n) return;
+    // Approve MaxUint256 so this never needs to be repeated
+    const tx = await token.approve(CONTRACT_ADDRESS, ethers.MaxUint256);
     await tx.wait();
   }, [getSigner, tokenDecimals]);
 
