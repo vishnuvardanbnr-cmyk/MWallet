@@ -358,7 +358,7 @@ function App() {
                       <PaidStakingPage account={web3.account!} />
                     </Route>
                     <Route path="/musdt-staking">
-                      <MusdtStakingPage account={web3.account!} />
+                      <MusdtStakingPage account={web3.account!} binaryInfo={web3.binaryInfo} userInfo={web3.userInfo} />
                     </Route>
                     <Route path="/sell-tokens">
                       <SellTokensPage account={web3.account!} />

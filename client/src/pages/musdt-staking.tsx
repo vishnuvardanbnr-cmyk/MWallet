@@ -1,10 +1,26 @@
 import { useState, useEffect, useCallback } from "react";
-import { DollarSign, TrendingUp, Clock, CheckCircle2, AlertCircle, Loader2, ArrowDownUp, Shield, Users, RefreshCw } from "lucide-react";
+import { DollarSign, TrendingUp, Clock, CheckCircle2, AlertCircle, Loader2, ArrowDownUp, Shield, Users, RefreshCw, Star, Trophy } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
+import type { BinaryInfo, UserInfo } from "@/hooks/use-web3";
+
+const STAR_RANKS = [
+  { rank: 1,  title: "Star 1",  totalQual: 5_000,       allocation: 250 },
+  { rank: 2,  title: "Star 2",  totalQual: 20_000,      allocation: 1_000 },
+  { rank: 3,  title: "Star 3",  totalQual: 60_000,      allocation: 3_000 },
+  { rank: 4,  title: "Star 4",  totalQual: 200_000,     allocation: 10_000 },
+  { rank: 5,  title: "Star 5",  totalQual: 600_000,     allocation: 30_000 },
+  { rank: 6,  title: "Star 6",  totalQual: 2_000_000,   allocation: 100_000 },
+  { rank: 7,  title: "Star 7",  totalQual: 6_000_000,   allocation: 300_000 },
+  { rank: 8,  title: "Star 8",  totalQual: 20_000_000,  allocation: 1_000_000 },
+  { rank: 9,  title: "Star 9",  totalQual: 60_000_000,  allocation: 3_000_000 },
+  { rank: 10, title: "Star 10", totalQual: 100_000_000, allocation: 5_000_000 },
+];
 
 interface MusdtStakingPageProps {
   account: string;
+  binaryInfo?: BinaryInfo | null;
+  userInfo?: UserInfo | null;
 }
 
 interface MusdtPlan {
@@ -52,7 +68,7 @@ const OVERRIDE_LEVELS = [
   { level: 10, rate: "0.5%", requiredPkg: "Super Stockiest", pkgId: 6 },
 ];
 
-export default function MusdtStakingPage({ account }: MusdtStakingPageProps) {
+export default function MusdtStakingPage({ account, binaryInfo, userInfo }: MusdtStakingPageProps) {
   const { toast } = useToast();
   const [loading, setLoading] = useState(true);
   const [data, setData] = useState<PageData | null>(null);
@@ -118,6 +134,15 @@ export default function MusdtStakingPage({ account }: MusdtStakingPageProps) {
   const previewTotalCap = stakeAmount ? parseFloat(stakeAmount) * 3.5 : null;
   const previewDailyReward = stakeAmount ? parseFloat(stakeAmount) * 0.003 : null;
 
+  // Star rank calculation (based on smaller binary leg in USD)
+  const DECIMALS = 1_000_000_000_000_000_000n;
+  const leftUSDT = binaryInfo ? Number(binaryInfo.leftBusiness / DECIMALS) : 0;
+  const rightUSDT = binaryInfo ? Number(binaryInfo.rightBusiness / DECIMALS) : 0;
+  const minLeg = Math.min(leftUSDT, rightUSDT);
+  const starRankIndex = STAR_RANKS.reduce((best, r, i) => (minLeg >= r.totalQual / 2 ? i : best), -1);
+  const starRank = starRankIndex >= 0 ? STAR_RANKS[starRankIndex] : null;
+  const nextRank = starRankIndex < STAR_RANKS.length - 1 ? STAR_RANKS[starRankIndex + 1] : null;
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
@@ -162,6 +187,97 @@ export default function MusdtStakingPage({ account }: MusdtStakingPageProps) {
           <p className="text-sm font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }}>3.5x</p>
         </div>
       </div>
+
+      {/* Star Rank Achiever Reward */}
+      {binaryInfo && (
+        <div className="glass-card rounded-2xl p-5 relative overflow-hidden" data-testid="card-star-rank-musdt">
+          <div className="absolute inset-0 bg-gradient-to-br from-amber-500/8 via-transparent to-yellow-600/5 pointer-events-none" />
+          <div className="relative flex items-center gap-3 mb-4">
+            <div className="h-10 w-10 rounded-xl bg-amber-500/15 border border-amber-500/25 flex items-center justify-center shrink-0">
+              <Trophy className="h-5 w-5 text-amber-400" />
+            </div>
+            <div>
+              <p className="text-[10px] font-medium text-muted-foreground uppercase tracking-wider mb-0.5">Rank Achiever Rewards</p>
+              <p className="text-sm font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>MUSDT Star Rewards</p>
+            </div>
+            {starRank && (
+              <Badge className="ml-auto bg-amber-500/10 text-amber-400 border-amber-500/25 text-[10px] flex items-center gap-1">
+                <Star className="w-2.5 h-2.5" /> {starRank.title}
+              </Badge>
+            )}
+          </div>
+
+          {starRank ? (
+            <div className="relative space-y-3">
+              <div className="flex items-center justify-between p-3 rounded-xl bg-amber-500/8 border border-amber-500/20">
+                <div>
+                  <p className="text-xs font-bold text-amber-400 flex items-center gap-1.5">
+                    <Star className="w-3.5 h-3.5" /> {starRank.title} Achiever
+                  </p>
+                  <p className="text-[10px] text-muted-foreground mt-0.5">USDT reward allocation unlocked</p>
+                </div>
+                <div className="text-right">
+                  <p className="text-lg font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }}>
+                    ${starRank.allocation.toLocaleString()}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">USDT</p>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2 text-[11px]">
+                <div className="p-2 rounded-lg bg-white/[0.02] border border-white/[0.05] text-center">
+                  <p className="text-muted-foreground mb-0.5">Left Leg</p>
+                  <p className="font-bold text-amber-300">${leftUSDT.toLocaleString()}</p>
+                </div>
+                <div className="p-2 rounded-lg bg-white/[0.02] border border-white/[0.05] text-center">
+                  <p className="text-muted-foreground mb-0.5">Smaller Leg</p>
+                  <p className="font-bold text-amber-400">${minLeg.toLocaleString()}</p>
+                </div>
+                <div className="p-2 rounded-lg bg-white/[0.02] border border-white/[0.05] text-center">
+                  <p className="text-muted-foreground mb-0.5">Right Leg</p>
+                  <p className="font-bold text-amber-300">${rightUSDT.toLocaleString()}</p>
+                </div>
+              </div>
+
+              {nextRank && (
+                <div className="p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.05]">
+                  <p className="text-[10px] text-muted-foreground">Next: <span className="text-amber-400 font-medium">{nextRank.title}</span> — smaller leg needs <span className="text-foreground font-medium">${(nextRank.totalQual / 2).toLocaleString()} USDT</span> · Reward: <span className="text-emerald-400 font-medium">${nextRank.allocation.toLocaleString()} USDT</span></p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="relative space-y-3">
+              <p className="text-xs text-muted-foreground">Build your binary team to unlock USDT allocation rewards. The smaller binary leg determines your rank.</p>
+              <div className="grid grid-cols-3 gap-2 text-[11px]">
+                <div className="p-2 rounded-lg bg-white/[0.02] border border-white/[0.05] text-center">
+                  <p className="text-muted-foreground mb-0.5">Left Leg</p>
+                  <p className="font-bold text-amber-300">${leftUSDT.toLocaleString()}</p>
+                </div>
+                <div className="p-2 rounded-lg bg-white/[0.02] border border-white/[0.05] text-center">
+                  <p className="text-muted-foreground mb-0.5">Smaller Leg</p>
+                  <p className="font-bold text-amber-400">${minLeg.toLocaleString()}</p>
+                </div>
+                <div className="p-2 rounded-lg bg-white/[0.02] border border-white/[0.05] text-center">
+                  <p className="text-muted-foreground mb-0.5">Right Leg</p>
+                  <p className="font-bold text-amber-300">${rightUSDT.toLocaleString()}</p>
+                </div>
+              </div>
+              <div className="p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.05]">
+                <p className="text-[10px] text-muted-foreground">Star 1 requires smaller leg ≥ <span className="text-amber-400 font-medium">$2,500 USDT</span> · Reward: <span className="text-emerald-400 font-medium">$250 USDT</span></p>
+              </div>
+              <div className="space-y-1.5 max-h-40 overflow-y-auto pr-1">
+                {STAR_RANKS.map((r) => (
+                  <div key={r.rank} className="flex items-center justify-between text-[10px] px-2 py-1.5 rounded-lg bg-white/[0.02] border border-white/[0.04]">
+                    <span className="flex items-center gap-1 text-muted-foreground"><Star className="w-2.5 h-2.5 text-amber-500/50" /> {r.title}</span>
+                    <span className="text-muted-foreground">Leg ≥ ${(r.totalQual / 2).toLocaleString()}</span>
+                    <span className="text-emerald-400 font-medium">${r.allocation.toLocaleString()}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Active Plans */}
       {activePlans.length > 0 && (
