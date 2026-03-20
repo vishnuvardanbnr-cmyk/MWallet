@@ -720,7 +720,7 @@ export async function registerRoutes(
       // Tokens are NOT added to mainBalance — they are locked in the staking plan
       const startDate = new Date();
       const endDate = new Date(startDate);
-      endDate.setMinutes(endDate.getMinutes() + 5); // [TEST MODE] 5 min lock (prod: setMonth +10)
+      endDate.setMinutes(endDate.getMinutes() + 10 * 5); // [TEST MODE] 10 months × 5 min/month = 50 min (prod: setMonth +10)
 
       const plan = await storage.createPaidStakingPlan({
         walletAddress: addr,
@@ -1386,7 +1386,7 @@ export async function registerRoutes(
   // ── MUSDT Staking ────────────────────────────────────────────────────────────
 
   const MUSDT_OVERRIDE_RATES = [0, 0.20, 0.10, 0.05, 0.03, 0.02, 0.01, 0.01, 0.01, 0.005, 0.005];
-  const MUSDT_MIN_DAYS = 1; // [TEST MODE] 1 period = 5 min (prod: 666)
+  const MUSDT_MIN_DAYS = 666; // [TEST MODE] 666 days × 5 min/day = 3330 min lock (prod: uses setDate)
   const MUSDT_DAILY_RATE = 0.003;
   const MUSDT_PERSONAL_CAP_MULT = 2.0;
   const MUSDT_TOTAL_CAP_MULT = 3.5;
