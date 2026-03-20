@@ -1,56 +1,96 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">
   <defs>
     <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#080604"/>
-      <stop offset="100%" stop-color="#0e0b06"/>
+      <stop offset="0%" stop-color="#060400"/>
+      <stop offset="50%" stop-color="#0c0800"/>
+      <stop offset="100%" stop-color="#0a0600"/>
     </linearGradient>
     <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#fde68a"/>
-      <stop offset="35%" stop-color="#f0c040"/>
+      <stop offset="30%" stop-color="#f0c040"/>
       <stop offset="65%" stop-color="#d4af37"/>
       <stop offset="100%" stop-color="#a07820"/>
     </linearGradient>
-    <linearGradient id="goldDark" x1="0%" y1="0%" x2="100%" y2="100%">
+    <linearGradient id="goldShield" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#c9a227"/>
       <stop offset="100%" stop-color="#7a5c10"/>
     </linearGradient>
     <linearGradient id="titleGrad" x1="0%" y1="0%" x2="100%" y2="0%">
       <stop offset="0%" stop-color="#fde68a"/>
-      <stop offset="50%" stop-color="#d4af37"/>
-      <stop offset="100%" stop-color="#a07820"/>
+      <stop offset="40%" stop-color="#f0c040"/>
+      <stop offset="75%" stop-color="#d4af37"/>
+      <stop offset="100%" stop-color="#b08820"/>
     </linearGradient>
-    <filter id="glow">
-      <feGaussianBlur stdDeviation="20" result="blur"/>
+    <linearGradient id="borderGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#d4af37" stop-opacity="0.5"/>
+      <stop offset="50%" stop-color="#f0c040" stop-opacity="0.2"/>
+      <stop offset="100%" stop-color="#d4af37" stop-opacity="0.5"/>
+    </linearGradient>
+    <radialGradient id="glow1" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#d4af37" stop-opacity="0.12"/>
+      <stop offset="100%" stop-color="#d4af37" stop-opacity="0"/>
+    </radialGradient>
+    <radialGradient id="glow2" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#f0c040" stop-opacity="0.08"/>
+      <stop offset="100%" stop-color="#f0c040" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="logoGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur in="SourceGraphic" stdDeviation="8" result="blur"/>
       <feComposite in="SourceGraphic" in2="blur" operator="over"/>
     </filter>
   </defs>
 
+  <!-- Background -->
   <rect width="1200" height="630" fill="url(#bg)"/>
 
-  <!-- Ambient gold glows -->
-  <circle cx="150" cy="150" r="220" fill="#d4af37" opacity="0.05"/>
-  <circle cx="1050" cy="480" r="270" fill="#c9a227" opacity="0.04"/>
-  <circle cx="600" cy="580" r="200" fill="#f0c040" opacity="0.03"/>
+  <!-- Subtle ambient glows -->
+  <ellipse cx="200" cy="160" rx="320" ry="280" fill="url(#glow1)"/>
+  <ellipse cx="1000" cy="470" rx="280" ry="240" fill="url(#glow2)"/>
+  <ellipse cx="600" cy="315" rx="350" ry="300" fill="url(#glow1)"/>
 
-  <!-- Gold crest logo -->
-  <g transform="translate(472, 155)">
-    <!-- Shield outer -->
-    <path d="M128 8 L218 52 L218 144 C218 200 172 240 128 248 C84 240 38 200 38 144 L38 52 Z" fill="url(#goldDark)" opacity="0.9"/>
-    <!-- Shield inner -->
-    <path d="M128 20 L206 60 L206 144 C206 196 164 232 128 240 C92 232 50 196 50 144 L50 60 Z" fill="#0d0a05" stroke="url(#goldGrad)" stroke-width="2"/>
-    <!-- Top bar -->
-    <rect x="88" y="62" width="80" height="5" rx="2.5" fill="url(#goldGrad)" opacity="0.8"/>
-    <!-- Ornate M -->
-    <path d="M72 186 L72 90 L90 90 L128 148 L166 90 L184 90 L184 186 L166 186 L166 124 L134 172 L122 172 L90 124 L90 186 Z" fill="url(#goldGrad)"/>
-    <!-- Bottom bar -->
-    <rect x="88" y="196" width="80" height="5" rx="2.5" fill="url(#goldGrad)" opacity="0.8"/>
+  <!-- Decorative border lines top and bottom -->
+  <rect x="0" y="0" width="1200" height="2" fill="url(#borderGrad)"/>
+  <rect x="0" y="628" width="1200" height="2" fill="url(#borderGrad)"/>
+
+  <!-- Left decorative corner lines -->
+  <line x1="40" y1="40" x2="120" y2="40" stroke="#d4af37" stroke-opacity="0.3" stroke-width="1"/>
+  <line x1="40" y1="40" x2="40" y2="120" stroke="#d4af37" stroke-opacity="0.3" stroke-width="1"/>
+  <!-- Right top corner -->
+  <line x1="1080" y1="40" x2="1160" y2="40" stroke="#d4af37" stroke-opacity="0.3" stroke-width="1"/>
+  <line x1="1160" y1="40" x2="1160" y2="120" stroke="#d4af37" stroke-opacity="0.3" stroke-width="1"/>
+  <!-- Left bottom corner -->
+  <line x1="40" y1="510" x2="40" y2="590" stroke="#d4af37" stroke-opacity="0.3" stroke-width="1"/>
+  <line x1="40" y1="590" x2="120" y2="590" stroke="#d4af37" stroke-opacity="0.3" stroke-width="1"/>
+  <!-- Right bottom corner -->
+  <line x1="1080" y1="590" x2="1160" y2="590" stroke="#d4af37" stroke-opacity="0.3" stroke-width="1"/>
+  <line x1="1160" y1="510" x2="1160" y2="590" stroke="#d4af37" stroke-opacity="0.3" stroke-width="1"/>
+
+  <!-- M-Vault Shield Logo (centered, larger) -->
+  <g transform="translate(474, 90)" filter="url(#logoGlow)">
+    <!-- Shield outer glow fill -->
+    <path d="M126 0 L234 46 L234 150 C234 220 182 268 126 280 C70 268 18 220 18 150 L18 46 Z" fill="url(#goldShield)" opacity="0.7"/>
+    <!-- Shield main body (dark interior) -->
+    <path d="M126 12 L222 54 L222 150 C222 216 174 260 126 272 C78 260 30 216 30 150 L30 54 Z" fill="#080500" stroke="url(#goldGrad)" stroke-width="2.5"/>
+    <!-- Top decorative bar -->
+    <rect x="86" y="68" width="80" height="5" rx="2.5" fill="url(#goldGrad)" opacity="0.85"/>
+    <!-- M letter mark -->
+    <path d="M64 196 L64 96 L84 96 L126 158 L168 96 L188 96 L188 196 L168 196 L168 130 L134 178 L118 178 L84 130 L84 196 Z" fill="url(#goldGrad)"/>
+    <!-- Bottom decorative bar -->
+    <rect x="86" y="206" width="80" height="5" rx="2.5" fill="url(#goldGrad)" opacity="0.85"/>
     <!-- Top gem -->
-    <circle cx="128" cy="42" r="7" fill="url(#goldGrad)" opacity="0.95"/>
+    <circle cx="126" cy="38" r="8" fill="url(#goldGrad)" opacity="0.95"/>
+    <circle cx="126" cy="38" r="4" fill="#fde68a" opacity="0.8"/>
   </g>
 
-  <text x="600" y="480" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="800" font-size="80" fill="url(#titleGrad)" letter-spacing="6">M-VAULT</text>
+  <!-- M-VAULT wordmark -->
+  <text x="600" y="480" text-anchor="middle" font-family="'Segoe UI', system-ui, -apple-system, sans-serif" font-weight="900" font-size="88" fill="url(#titleGrad)" letter-spacing="10">M-VAULT</text>
 
-  <text x="600" y="535" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="400" font-size="26" fill="#9a7c30" letter-spacing="4">SECURE · DEFI · EARN</text>
+  <!-- Thin gold divider line -->
+  <line x1="380" y1="502" x2="820" y2="502" stroke="#d4af37" stroke-opacity="0.25" stroke-width="1"/>
 
-  <text x="600" y="590" text-anchor="middle" font-family="system-ui,sans-serif" font-weight="300" font-size="20" fill="#5a4820" letter-spacing="1">Crypto Staking &amp; MLM Rewards on BNB Smart Chain</text>
+  <!-- Tagline -->
+  <text x="600" y="542" text-anchor="middle" font-family="'Segoe UI', system-ui, sans-serif" font-weight="400" font-size="24" fill="#c9a227" letter-spacing="5">SECURE · DEFI · EARN</text>
+
+  <!-- Sub tagline -->
+  <text x="600" y="590" text-anchor="middle" font-family="'Segoe UI', system-ui, sans-serif" font-weight="300" font-size="18" fill="#7a5c18" letter-spacing="1">Crypto Staking &amp; MLM Rewards on BNB Smart Chain</text>
 </svg>
