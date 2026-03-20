@@ -16,6 +16,7 @@ const PKG_COLORS: Record<number, { text: string; bg: string; border: string }> =
   3: { text: "text-yellow-300", bg: "bg-yellow-600/10", border: "border-yellow-600/20" },
   4: { text: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20" },
   5: { text: "text-red-400", bg: "bg-red-500/10", border: "border-red-500/20" },
+  6: { text: "text-purple-400", bg: "bg-purple-500/10", border: "border-purple-500/20" },
 };
 
 interface TeamProps {
