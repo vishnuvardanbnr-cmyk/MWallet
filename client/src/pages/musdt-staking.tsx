@@ -289,14 +289,16 @@ export default function MusdtStakingPage({ account, binaryInfo, userInfo }: Musd
             const overrideReceived = parseFloat(plan.overrideReceived);
             const personalCap = parseFloat(plan.personalCap);
             const totalCap = parseFloat(plan.totalCap);
-            const daysElapsed = Math.floor((Date.now() - new Date(plan.startDate).getTime()) / 86400000);
-            const daysToMinEnd = Math.max(0, Math.ceil((new Date(plan.minEndDate).getTime() - Date.now()) / 86400000));
+            const PERIOD_MS = 300000; // [TEST MODE] 5-min periods (prod: 86400000)
+            const MIN_WITHDRAW = 0.01; // [TEST MODE] $0.01 (prod: 10)
+            const daysElapsed = Math.floor((Date.now() - new Date(plan.startDate).getTime()) / PERIOD_MS);
+            const daysToMinEnd = Math.max(0, Math.ceil((new Date(plan.minEndDate).getTime() - Date.now()) / PERIOD_MS));
             const progressPct = Math.min(100, (daysElapsed / 666) * 100);
             const totalEarned = daysElapsed * dailyReward;
             const pendingPersonal = Math.max(0, Math.min(totalEarned - totalWithdrawn, personalCap - totalWithdrawn));
             const personalProgress = personalCap > 0 ? Math.min(100, (totalWithdrawn / personalCap) * 100) : 0;
             const totalProgress = totalCap > 0 ? Math.min(100, ((totalWithdrawn + overrideReceived) / totalCap) * 100) : 0;
-            const canWithdraw = pendingPersonal >= 10;
+            const canWithdraw = pendingPersonal >= MIN_WITHDRAW;
             const isWithdrawing = withdrawingPlanId === plan.id;
 
             return (
@@ -321,7 +323,7 @@ export default function MusdtStakingPage({ account, binaryInfo, userInfo }: Musd
                   </div>
                   <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Days Elapsed</p>
-                    <p className="text-sm font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }}>{daysElapsed} / 666 min</p>
+                    <p className="text-sm font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }}>{daysElapsed} / 666 periods</p>
                   </div>
                   <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
                     <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Personal Cap</p>
@@ -335,14 +337,14 @@ export default function MusdtStakingPage({ account, binaryInfo, userInfo }: Musd
 
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-                    <span>Minimum duration: {daysElapsed} / 666 days</span>
+                    <span>Minimum duration: {daysElapsed} / 666 periods (5 min each)</span>
                     <span>{progressPct.toFixed(1)}%</span>
                   </div>
                   <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
                     <div className="h-full rounded-full bg-gradient-to-r from-yellow-600 to-amber-400 transition-all duration-500" style={{ width: `${progressPct}%` }} />
                   </div>
                   {daysToMinEnd > 0 && (
-                    <p className="text-[10px] text-muted-foreground text-center">Minimum duration ends in {daysToMinEnd} days</p>
+                    <p className="text-[10px] text-muted-foreground text-center">Minimum duration ends in {daysToMinEnd} periods (~{(daysToMinEnd * 5).toLocaleString()} min)</p>
                   )}
                 </div>
 
@@ -370,7 +372,7 @@ export default function MusdtStakingPage({ account, binaryInfo, userInfo }: Musd
                   <div className="flex items-center justify-between">
                     <div>
                       <p className="text-xs font-medium text-amber-400">Pending Personal Rewards</p>
-                      <p className="text-[10px] text-muted-foreground">${pendingPersonal.toFixed(4)} USDT available · Min $10 to withdraw</p>
+                      <p className="text-[10px] text-muted-foreground">${pendingPersonal.toFixed(4)} USDT available · Min ${MIN_WITHDRAW} to withdraw</p>
                     </div>
                     <span className="text-lg font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>
                       ${pendingPersonal.toFixed(2)}
@@ -385,9 +387,9 @@ export default function MusdtStakingPage({ account, binaryInfo, userInfo }: Musd
                     {isWithdrawing ? <Loader2 className="w-4 h-4 animate-spin" /> : <ArrowDownUp className="w-4 h-4" />}
                     {isWithdrawing ? "Processing..." : `Withdraw $${pendingPersonal.toFixed(2)} USDT`}
                   </button>
-                  {!canWithdraw && pendingPersonal < 10 && dailyReward > 0 && (
+                  {!canWithdraw && pendingPersonal < MIN_WITHDRAW && dailyReward > 0 && (
                     <p className="text-[10px] text-center text-muted-foreground">
-                      Need ${(10 - pendingPersonal).toFixed(2)} more · ~{Math.ceil((10 - pendingPersonal) / dailyReward)} days away
+                      Need ${(MIN_WITHDRAW - pendingPersonal).toFixed(4)} more · ~{Math.ceil((MIN_WITHDRAW - pendingPersonal) / dailyReward)} periods away
                     </p>
                   )}
                 </div>
