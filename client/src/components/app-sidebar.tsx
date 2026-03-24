@@ -4,7 +4,7 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { LayoutDashboard, DollarSign, Wallet, Users, ArrowLeftRight, UserCircle, HelpCircle, LogOut, Copy, GitBranch, ShoppingBag, Layers, ArrowDownUp, Coins, BadgeDollarSign, TrendingDown } from "lucide-react";
+import { LayoutDashboard, DollarSign, Wallet, Users, ArrowLeftRight, UserCircle, HelpCircle, LogOut, Copy, GitBranch, ShoppingBag, ArrowDownUp, Coins, BadgeDollarSign, TrendingDown, RefreshCw } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { shortenAddress } from "@/lib/contract";
@@ -17,8 +17,8 @@ const menuItems = [
   { title: "Team", url: "/team", icon: Users },
   { title: "Deep Placement", url: "/deep-placement", icon: GitBranch },
   { title: "BTC Swap", url: "/swap", icon: ArrowDownUp },
+  { title: "Sell MVT", url: "/sell-tokens", icon: TrendingDown },
   { title: "Paid Staking", url: "/paid-staking", icon: Coins },
-  { title: "Sell Tokens", url: "/sell-tokens", icon: TrendingDown },
   { title: "MUSDT Staking", url: "/musdt-staking", icon: BadgeDollarSign },
   { title: "Store", url: "/store", icon: ShoppingBag },
   { title: "Transactions", url: "/transactions", icon: ArrowLeftRight },
@@ -28,17 +28,17 @@ const menuItems = [
 
 interface AppSidebarProps {
   account: string;
-  userId: string;
+  userAddress: string;
   disconnect: () => void;
 }
 
-export function AppSidebar({ account, userId, disconnect }: AppSidebarProps) {
+export function AppSidebar({ account, userAddress, disconnect }: AppSidebarProps) {
   const [location, setLocation] = useLocation();
   const { toast } = useToast();
   const { isMobile, setOpenMobile } = useSidebar();
 
   const copyReferralLink = (side: "left" | "right") => {
-    const link = `${window.location.origin}?ref=${userId}&side=${side}`;
+    const link = `${window.location.origin}?ref=${userAddress}&side=${side}`;
     navigator.clipboard.writeText(link);
     toast({ title: "Copied!", description: `${side.charAt(0).toUpperCase() + side.slice(1)} referral link copied to clipboard.` });
   };
@@ -48,10 +48,6 @@ export function AppSidebar({ account, userId, disconnect }: AppSidebarProps) {
       <SidebarHeader className="px-3 py-2 border-b border-white/[0.06]">
         <Logo size="sm" />
         <div className="mt-2 rounded-lg px-2.5 py-2 space-y-1.5 bg-gradient-to-br from-yellow-600/8 to-amber-400/5 border border-white/[0.06]">
-          <div className="flex items-center justify-between gap-2">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider">ID</p>
-            <p className="text-[11px] font-bold gradient-text" data-testid="text-user-id" style={{ fontFamily: 'var(--font-display)' }}>{userId}</p>
-          </div>
           <div className="flex items-center justify-between gap-2">
             <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Wallet</p>
             <p className="text-[10px] font-mono text-amber-300/80" data-testid="text-wallet-address">{shortenAddress(account)}</p>
@@ -74,7 +70,7 @@ export function AppSidebar({ account, userId, disconnect }: AppSidebarProps) {
                 <SidebarMenuItem key={item.title}>
                   <SidebarMenuButton
                     isActive={location === item.url}
-                    data-testid={`nav-${item.title.toLowerCase()}`}
+                    data-testid={`nav-${item.title.toLowerCase().replace(/\s/g, '-')}`}
                     onClick={() => {
                       setLocation(item.url);
                       if (isMobile) setOpenMobile(false);

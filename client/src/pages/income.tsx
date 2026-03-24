@@ -1,521 +1,232 @@
-import { useState, useEffect } from "react";
-import { useLocation } from "wouter";
-import { Users, GitBranch, Layers, RefreshCw, ArrowUpRight, Loader2, ChevronLeft, ChevronRight, ExternalLink, AlertTriangle, ArrowDownLeft, ArrowDownRight, BarChart3, Info } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { Users, GitBranch, Coins, TrendingUp, Layers, Info, ArrowDownLeft, ArrowDownRight } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import type { IncomeInfo, BinaryInfo, SlabInfo } from "@/hooks/use-web3";
-import { PACKAGE_NAMES, PACKAGE_PRICES_USD } from "@/lib/contract";
-
-interface ContractTx {
-  type: string;
-  amount: bigint;
-  detail: string;
-  timestamp: number;
-  isIncome: boolean;
-}
-
-interface BinaryFlushEvent {
-  amount: bigint;
-  timestamp: number;
-}
+import { formatTokenAmount } from "@/lib/contract";
+import type { UserInfo, MvtPrice, BinaryPairs } from "@/hooks/use-web3";
+import { useLocation } from "wouter";
 
 interface IncomeProps {
-  incomeInfo: IncomeInfo;
-  binaryInfo: BinaryInfo;
-  slabInfo: SlabInfo | null;
-  userPackage: number;
+  userInfo: UserInfo;
+  mvtPrice: MvtPrice;
+  binaryPairs: BinaryPairs;
   formatAmount: (val: bigint) => string;
-  getTransactionsFromContract: (offset: number, limit: number) => Promise<{ transactions: ContractTx[]; total: number }>;
-  getBinaryFlushedEvents: () => Promise<BinaryFlushEvent[]>;
-  claimBinaryIncome: () => Promise<void>;
 }
 
-const typeConfig: Record<string, { color: string; bg: string; border: string; icon: typeof Users }> = {
-  "Direct Sponsor": { color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/10", icon: Users },
-  "Binary Matching": { color: "text-yellow-300", bg: "bg-yellow-600/10", border: "border-yellow-600/10", icon: GitBranch },
-  "Matching on Binary": { color: "text-amber-300", bg: "bg-amber-600/10", border: "border-amber-600/10", icon: Layers },
-  "Withdrawal Match": { color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10", icon: RefreshCw },
-};
+const LEVEL_RATES: { level: number; pct: string; dirReq: number }[] = [
+  { level: 1, pct: "20%", dirReq: 0 },
+  { level: 2, pct: "5%", dirReq: 2 },
+  { level: 3, pct: "4%", dirReq: 2 },
+  { level: 4, pct: "3%", dirReq: 2 },
+  { level: 5, pct: "2%", dirReq: 5 },
+  { level: 6, pct: "1%", dirReq: 5 },
+  { level: 7, pct: "1%", dirReq: 5 },
+  { level: 8, pct: "0.5%", dirReq: 10 },
+  { level: 9, pct: "0.5%", dirReq: 10 },
+  { level: 10, pct: "0.5%", dirReq: 10 },
+  { level: 11, pct: "0.5%", dirReq: 10 },
+  { level: 12, pct: "0.5%", dirReq: 10 },
+  { level: 13, pct: "0.5%", dirReq: 10 },
+  { level: 14, pct: "0.5%", dirReq: 10 },
+  { level: 15, pct: "0.5%", dirReq: 10 },
+];
 
-const ITEMS_PER_PAGE = 10;
+function mvtFmt(val: bigint) {
+  return parseFloat(formatTokenAmount(val, 18)).toLocaleString(undefined, { maximumFractionDigits: 2 });
+}
 
-const WITHDRAWAL_MATCH_DESC: Record<number, string> = {
-  0: "Activate a package to unlock",
-  1: "1% · Level 1 only",
-  2: "1% · Levels 1–3",
-  3: "1% · Levels 1–5",
-  4: "1% (L1–5) · 0.5% (L6–9)",
-  5: "1% (L1–5) · 0.5% (L6–12)",
-  6: "1% (L1–5) · 0.5% (L6–15)",
-};
+function usdFmt(mvt: bigint, price: bigint) {
+  if (price === 0n) return "—";
+  const mvtNum = parseFloat(formatTokenAmount(mvt, 18));
+  const priceNum = parseFloat(formatTokenAmount(price, 18));
+  return `$${(mvtNum * priceNum).toFixed(2)}`;
+}
 
+export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmount }: IncomeProps) {
+  const [, setLocation] = useLocation();
 
-const BINARY_MATCH_DESC: Record<number, string> = {
-  0: "Activate a package to unlock",
-  1: "30% matching, $50 daily cap",
-  2: "30% matching, $200 daily cap",
-  3: "30% matching, $600 daily cap",
-  4: "30% matching, $1,200 daily cap",
-  5: "30% matching, $2,400 daily cap",
-  6: "30% matching, $4,800 daily cap",
-};
+  const directCount = Number(userInfo.directCount);
+  const leftCount = Number(userInfo.leftSubUsers);
+  const rightCount = Number(userInfo.rightSubUsers);
+  const currentPairs = Number(binaryPairs.currentPairs);
+  const newPairs = Number(binaryPairs.newPairs);
+  const matchedPairs = Number(userInfo.matchedPairs);
+  const sellPriceNum = parseFloat(formatTokenAmount(mvtPrice.sellPrice, 18));
 
-const MATCHING_OVERRIDE_DESC: Record<number, string> = {
-  0: "Activate a package to unlock",
-  1: "1% per level, up to 3 levels",
-  2: "1% per level, up to 6 levels",
-  3: "1% per level, up to 10 levels",
-  4: "1% per level, up to 15 levels",
-  5: "1% per level, up to 20 levels",
-};
-
-const DIRECT_SPONSOR_DESC: Record<number, string> = {
-  0: "Activate a package to unlock",
-  1: "10% from direct referrals",
-  2: "15% from direct referrals",
-  3: "20% from direct referrals",
-  4: "25% from direct referrals",
-  5: "30% from direct referrals",
-};
-
-export default function Income({ incomeInfo, binaryInfo, slabInfo, userPackage, formatAmount, getTransactionsFromContract, getBinaryFlushedEvents, claimBinaryIncome }: IncomeProps) {
-  const [, navigate] = useLocation();
-  const [allTransactions, setAllTransactions] = useState<ContractTx[]>([]);
-  const [transactions, setTransactions] = useState<ContractTx[]>([]);
-  const [loadingTxs, setLoadingTxs] = useState(true);
-  const [binaryFlushEvents, setBinaryFlushEvents] = useState<BinaryFlushEvent[]>([]);
-  const [loadingFlush, setLoadingFlush] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [claiming, setClaiming] = useState(false);
-
-  const handleClaim = async () => {
-    setClaiming(true);
-    try {
-      await claimBinaryIncome();
-    } catch (err) {
-      console.error("Claim error:", err);
-    } finally {
-      setClaiming(false);
-    }
-  };
-
-  const totalEarned = parseFloat(formatAmount(incomeInfo.totalEarnings).replace(/,/g, ''));
-
-  const pkg = userPackage;
-  const incomeTypes = [
-    { title: "Direct Sponsor", amount: incomeInfo.totalDirectIncome, icon: Users, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/10", gradient: "#f59e0b", description: DIRECT_SPONSOR_DESC[pkg] || "10-30% from direct referrals" },
-    { title: "Binary Matching", amount: incomeInfo.totalBinaryIncome + binaryInfo.claimableBinaryIncome, icon: GitBranch, color: "text-yellow-300", bg: "bg-yellow-600/10", border: "border-yellow-600/10", gradient: "#d4af37", description: BINARY_MATCH_DESC[pkg] || "30% of matching volume" },
-    { title: "Matching on Binary", amount: incomeInfo.totalMatchingOverrideIncome, icon: Layers, color: "text-amber-300", bg: "bg-amber-600/10", border: "border-amber-600/10", gradient: "#c9a227", description: MATCHING_OVERRIDE_DESC[pkg] || "1% per level from downline binary income" },
-    { title: "Withdrawal Match", amount: incomeInfo.totalWithdrawalMatchIncome, icon: RefreshCw, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10", gradient: "#10b981", description: WITHDRAWAL_MATCH_DESC[pkg] || "0.1% per level from downline withdrawals" },
-  ];
-
-  const getPercentage = (amount: bigint) => {
-    if (totalEarned === 0) return 0;
-    return Math.round((parseFloat(formatAmount(amount).replace(/,/g, '')) / totalEarned) * 100);
-  };
-
-  const formatTimestamp = (ts: number) => {
-    if (ts === 0) return "";
-    const date = new Date(ts * 1000);
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) + " " + date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  };
-
-  useEffect(() => {
-    setLoadingTxs(true);
-    getTransactionsFromContract(0, 100).then(result => {
-      setAllTransactions(result.transactions);
-      const incomeTxs = result.transactions.filter(tx => tx.isIncome);
-      setTransactions(incomeTxs);
-      setLoadingTxs(false);
-    }).catch(() => setLoadingTxs(false));
-  }, [getTransactionsFromContract]);
-
-  useEffect(() => {
-    setLoadingFlush(true);
-    getBinaryFlushedEvents().then(events => {
-      setBinaryFlushEvents(events);
-      setLoadingFlush(false);
-    }).catch(() => setLoadingFlush(false));
-  }, [getBinaryFlushedEvents]);
-
-  const totalPages = Math.max(1, Math.ceil(transactions.length / ITEMS_PER_PAGE));
-  const paginatedTxs = transactions.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const totalReceivedMvt = parseFloat(formatTokenAmount(userInfo.totalReceived, 18));
+  const mvtBalanceMvt = parseFloat(formatTokenAmount(userInfo.mvtBalance, 18));
+  const incomeUsed = 390 - parseFloat(formatTokenAmount(userInfo.incomeLimit, 18));
+  const incomeProgress = Math.min(100, (incomeUsed / 390) * 100);
 
   return (
     <div className="p-4 sm:p-6 space-y-6 relative z-10">
       <div className="slide-in">
-        <h1 className="text-2xl font-bold" data-testid="text-income-title" style={{ fontFamily: 'var(--font-display)' }}>
+        <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }}>
           <span className="gradient-text">Income</span>
         </h1>
-        <p className="text-muted-foreground text-sm mt-0.5">All your income streams in one place</p>
+        <p className="text-sm text-muted-foreground">Level income, binary pairs, and rebirth pool</p>
       </div>
 
-      {binaryInfo.claimableBinaryIncome > BigInt(0) && (
-        <div className="earnings-card rounded-2xl overflow-hidden slide-in" style={{ animationDelay: '0.12s' }} data-testid="card-claim-binary">
-          <div className="p-5">
-            <div className="flex flex-wrap items-center justify-between gap-4">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-xl bg-yellow-600/15 flex items-center justify-center">
-                  <GitBranch className="h-4 w-4 text-yellow-300" />
-                </div>
-                <div>
-                  <p className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-                    <span className="gradient-text">Claimable Binary Income</span>
-                  </p>
-                  <p className="text-2xl font-bold gradient-text mt-0.5" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-claimable-binary">
-                    ${formatAmount(binaryInfo.claimableBinaryIncome)}
-                  </p>
-                </div>
-              </div>
-              <Button
-                onClick={handleClaim}
-                disabled={claiming}
-                className="bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-400 text-white font-semibold px-6"
-                data-testid="button-claim-binary"
-              >
-                {claiming ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                {claiming ? "Claiming..." : "Claim Now"}
-              </Button>
-            </div>
-          </div>
+      {/* Overview Cards */}
+      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 slide-in" style={{ animationDelay: "0.05s" }}>
+        <div className="glass-card rounded-2xl p-4" data-testid="card-total-mvt-earned">
+          <Coins className="h-4 w-4 text-yellow-300 mb-2" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Total Earned</p>
+          <p className="text-lg font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-total-received">
+            {mvtFmt(userInfo.totalReceived)} MVT
+          </p>
+          {mvtPrice.sellPrice > 0n && (
+            <p className="text-[10px] text-muted-foreground">≈ {usdFmt(userInfo.totalReceived, mvtPrice.sellPrice)}</p>
+          )}
         </div>
-      )}
-
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        {incomeTypes.map((item, idx) => {
-          const pct = getPercentage(item.amount);
-          return (
-            <div key={item.title} className={`glass-card rounded-2xl p-5 slide-in border ${item.border}`} style={{ animationDelay: `${0.15 + idx * 0.05}s` }} data-testid={`card-${item.title.toLowerCase().replace(/\s/g, '-')}-income`}>
-              <div className="mb-3">
-                <div className={`h-10 w-10 rounded-xl ${item.bg} flex items-center justify-center`}>
-                  <item.icon className={`h-5 w-5 ${item.color}`} />
-                </div>
-              </div>
-              <p className="text-xs font-medium text-muted-foreground uppercase tracking-wider mb-0.5">{item.title}</p>
-              <p className="text-2xl font-bold gradient-text mb-1" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-${item.title.toLowerCase().replace(/\s/g, '-')}-amount`}>
-                ${formatAmount(item.amount)}
-              </p>
-              <p className="text-[11px] text-muted-foreground mb-3">{item.description}</p>
-              <div className="flex items-center gap-2">
-                <div className="flex-1 h-1.5 rounded-full bg-white/[0.05] overflow-hidden">
-                  <div
-                    className="h-full rounded-full transition-all duration-700"
-                    style={{
-                      width: `${Math.max(pct, 2)}%`,
-                      background: `linear-gradient(90deg, ${item.gradient}, ${item.gradient}80)`
-                    }}
-                  />
-                </div>
-                <span className="text-[10px] text-muted-foreground font-medium shrink-0">{pct}%</span>
-              </div>
-              {item.title === "Binary Matching" && (
-                <button
-                  onClick={() => navigate("/binary")}
-                  className="flex items-center gap-1 mt-3 text-[11px] font-medium text-yellow-300 transition-colors"
-                  data-testid="link-binary-details"
-                >
-                  View Details <ExternalLink className="h-3 w-3" />
-                </button>
-              )}
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 slide-in" style={{ animationDelay: '0.35s' }}>
-        <div className="glass-card rounded-2xl p-4 border border-amber-500/10" data-testid="card-left-volume">
-          <div className="flex items-center gap-2 mb-2">
-            <ArrowDownLeft className="h-4 w-4 text-amber-400" />
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Left Volume</p>
-          </div>
-          <p className="text-lg font-bold text-amber-400" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-left-volume">
-            ${formatAmount(binaryInfo.leftBusiness)}
+        <div className="glass-card rounded-2xl p-4" data-testid="card-mvt-balance">
+          <TrendingUp className="h-4 w-4 text-amber-400 mb-2" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">MVT Balance</p>
+          <p className="text-lg font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-mvt-balance">
+            {mvtFmt(userInfo.mvtBalance)} MVT
+          </p>
+          <button onClick={() => setLocation("/sell-tokens")} className="text-[10px] text-amber-400 hover:text-amber-300 mt-1">
+            Sell →
+          </button>
+        </div>
+        <div className="glass-card rounded-2xl p-4" data-testid="card-rebirth-pool">
+          <Layers className="h-4 w-4 text-purple-400 mb-2" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Rebirth Pool</p>
+          <p className="text-lg font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-rebirth-pool">
+            ${parseFloat(formatTokenAmount(userInfo.rebirthPool, 18)).toFixed(2)}
           </p>
         </div>
-        <div className="glass-card rounded-2xl p-4 border border-amber-600/10" data-testid="card-right-volume">
-          <div className="flex items-center gap-2 mb-2">
-            <ArrowDownRight className="h-4 w-4 text-amber-300" />
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Right Volume</p>
-          </div>
-          <p className="text-lg font-bold text-amber-300" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-right-volume">
-            ${formatAmount(binaryInfo.rightBusiness)}
-          </p>
-        </div>
-        <div className="glass-card rounded-2xl p-4 border border-amber-500/10" data-testid="card-left-carry">
-          <div className="flex items-center gap-2 mb-2">
-            <BarChart3 className="h-4 w-4 text-amber-400" />
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Left Carry</p>
-          </div>
-          <p className="text-lg font-bold text-amber-400" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-left-carry">
-            ${formatAmount(binaryInfo.carryLeft)}
-          </p>
-        </div>
-        <div className="glass-card rounded-2xl p-4 border border-amber-600/10" data-testid="card-right-carry">
-          <div className="flex items-center gap-2 mb-2">
-            <BarChart3 className="h-4 w-4 text-amber-300" />
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Right Carry</p>
-          </div>
-          <p className="text-lg font-bold text-amber-300" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-right-carry">
-            ${formatAmount(binaryInfo.carryRight)}
+        <div className="glass-card rounded-2xl p-4" data-testid="card-power-leg">
+          <GitBranch className="h-4 w-4 text-blue-400 mb-2" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Power Leg Pts</p>
+          <p className="text-lg font-bold text-blue-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-power-leg">
+            {Number(userInfo.powerLegPoints)}
           </p>
         </div>
       </div>
 
-      <div className="glass-card rounded-2xl slide-in" style={{ animationDelay: '0.38s' }} data-testid="card-slab-commission">
+      {/* Income Limit Progress */}
+      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.07s" }} data-testid="card-income-limit">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>
+            <span className="gradient-text">Income Limit ($390 Max)</span>
+          </h2>
+          <Badge variant="outline" className="text-[9px] border-amber-500/30 text-amber-400">
+            ${parseFloat(formatTokenAmount(userInfo.incomeLimit, 18)).toFixed(2)} remaining
+          </Badge>
+        </div>
+        <div className="space-y-2">
+          <div className="h-3 rounded-full bg-white/[0.06] overflow-hidden">
+            <div
+              className="h-full rounded-full bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-400 transition-all"
+              style={{ width: `${incomeProgress}%` }}
+            />
+          </div>
+          <div className="flex justify-between text-[10px] text-muted-foreground">
+            <span>${incomeUsed.toFixed(2)} USDT received</span>
+            <span>$390 cap (3× activation)</span>
+          </div>
+        </div>
+        <div className="mt-3 flex items-start gap-2 p-2.5 rounded-xl bg-amber-500/[0.06] border border-amber-500/10">
+          <Info className="h-3.5 w-3.5 text-amber-400/70 shrink-0 mt-0.5" />
+          <p className="text-[10px] text-muted-foreground">When your income limit reaches $0, all MVT sell proceeds go to your rebirth pool. Trigger rebirth to reset your limit to $390.</p>
+        </div>
+      </div>
+
+      {/* Binary Income */}
+      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.08s" }} data-testid="card-binary-income">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>
+            <span className="gradient-text">Binary Network</span>
+          </h2>
+          <button onClick={() => setLocation("/binary")} className="text-[10px] text-amber-400 hover:text-amber-300">
+            Details →
+          </button>
+        </div>
+
+        <div className="grid grid-cols-3 gap-3 mb-4">
+          <div className="text-center p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+            <ArrowDownLeft className="h-4 w-4 text-blue-400 mx-auto mb-1.5" />
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Left Team</p>
+            <p className="text-xl font-bold text-blue-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-left-team">{leftCount}</p>
+          </div>
+          <div className="text-center p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+            <GitBranch className="h-4 w-4 text-emerald-400 mx-auto mb-1.5" />
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Matched</p>
+            <p className="text-xl font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-matched-pairs">{matchedPairs}</p>
+          </div>
+          <div className="text-center p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+            <ArrowDownRight className="h-4 w-4 text-purple-400 mx-auto mb-1.5" />
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Right Team</p>
+            <p className="text-xl font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-right-team">{rightCount}</p>
+          </div>
+        </div>
+
+        {newPairs > 0 && (
+          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+            <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <p className="text-xs text-emerald-400 font-medium">{newPairs} new pair{newPairs !== 1 ? "s" : ""} pending — admin distributes binary income per cycle</p>
+          </div>
+        )}
+
+        <div className="mt-4 grid grid-cols-2 gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+          <div className="text-center">
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Binary Pool (30%)</p>
+            <p className="text-xs font-medium">Of every $130 activation</p>
+          </div>
+          <div className="text-center">
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Power Leg (30%)</p>
+            <p className="text-xs font-medium">{Number(userInfo.powerLegPoints)} pts = {Number(userInfo.powerLegPoints) / 10} new pairs</p>
+          </div>
+        </div>
+      </div>
+
+      {/* Level Income Structure */}
+      <div className="glass-card rounded-2xl overflow-hidden slide-in" style={{ animationDelay: "0.09s" }} data-testid="card-level-structure">
         <div className="p-5 border-b border-white/[0.06]">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-amber-600/15 flex items-center justify-center">
-              <Layers className="h-4 w-4 text-amber-300" />
+          <div className="flex items-center gap-2.5">
+            <div className="h-9 w-9 rounded-xl bg-amber-500/15 flex items-center justify-center">
+              <Users className="h-4.5 w-4.5 text-amber-400" />
             </div>
             <div>
-              <h2 className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-                <span className="gradient-text">Slab-Based Binary Commission</span>
+              <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>
+                <span className="gradient-text">Level Income Structure</span>
               </h2>
-              <p className="text-[10px] text-muted-foreground">Per-slab carry volumes, matchable amounts & potential income from contract</p>
+              <p className="text-[10px] text-muted-foreground">40% of each $130 activation distributed over 15 levels</p>
             </div>
           </div>
+          <div className="mt-3 flex items-center gap-2">
+            <Badge variant="outline" className="text-[9px] border-amber-500/30 text-amber-400">
+              You have {directCount} direct{directCount !== 1 ? "s" : ""}
+            </Badge>
+            <Badge variant="outline" className={`text-[9px] ${directCount >= 2 ? "border-emerald-500/30 text-emerald-400" : "border-muted-foreground/30 text-muted-foreground"}`}>
+              L2–L4: {directCount >= 2 ? "✓ Qualified" : `Need ${2 - directCount} more`}
+            </Badge>
+            <Badge variant="outline" className={`text-[9px] ${directCount >= 5 ? "border-emerald-500/30 text-emerald-400" : "border-muted-foreground/30 text-muted-foreground"}`}>
+              L5–L7: {directCount >= 5 ? "✓ Qualified" : `Need ${5 - directCount} more`}
+            </Badge>
+          </div>
         </div>
-        <div className="p-5 space-y-3">
-          {[
-            { levels: "Lv 1-3", slabIdx: 0, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", gradient: "#10b981" },
-            { levels: "Lv 4-6", slabIdx: 1, color: "text-yellow-300", bg: "bg-yellow-600/10", border: "border-yellow-600/20", gradient: "#d4af37" },
-            { levels: "Lv 7-9", slabIdx: 2, color: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/20", gradient: "#f59e0b" },
-            { levels: "Lv 10-20", slabIdx: 3, color: "text-amber-300", bg: "bg-amber-600/10", border: "border-amber-600/20", gradient: "#c9a227" },
-          ].map((slab) => {
-            const rate = slabInfo ? Number(slabInfo.rates[slab.slabIdx]) / 100 : [30, 20, 10, 5][slab.slabIdx];
-            const carryL = slabInfo ? slabInfo.carryLeftSlabs[slab.slabIdx] : 0n;
-            const carryR = slabInfo ? slabInfo.carryRightSlabs[slab.slabIdx] : 0n;
-            const matchable = slabInfo ? slabInfo.matchableSlabs[slab.slabIdx] : 0n;
-            const potentialIncome = slabInfo ? slabInfo.potentialIncomeSlabs[slab.slabIdx] : 0n;
-
+        <div className="divide-y divide-white/[0.04]">
+          {LEVEL_RATES.map(({ level, pct, dirReq }) => {
+            const qualified = directCount >= dirReq;
             return (
-              <div key={slab.slabIdx} className={`rounded-xl ${slab.bg} border ${slab.border} overflow-hidden`} data-testid={`row-slab-${slab.slabIdx}`}>
-                <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.04]">
-                  <div className="flex items-center gap-2">
-                    <p className={`text-xs font-bold ${slab.color}`}>{slab.levels}</p>
-                    <Badge variant="outline" className={`text-[10px] ${slab.border} ${slab.color} px-1.5 py-0`}>
-                      {rate}%
-                    </Badge>
+              <div key={level} className="flex items-center justify-between px-5 py-2.5" data-testid={`row-level-${level}`}>
+                <div className="flex items-center gap-3">
+                  <div className="w-7 h-7 rounded-lg bg-white/[0.04] flex items-center justify-center">
+                    <span className="text-[11px] font-bold text-muted-foreground">L{level}</span>
                   </div>
-                  <p className={`text-sm font-bold ${slab.color}`} style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-slab-income-${slab.slabIdx}`}>
-                    ${formatAmount(potentialIncome)}
-                  </p>
-                </div>
-                <div className="grid grid-cols-3 divide-x divide-white/[0.04]">
-                  <div className="px-3 py-2 text-center">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Left Carry</p>
-                    <p className="text-xs font-semibold text-amber-400" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-slab-left-${slab.slabIdx}`}>
-                      ${formatAmount(carryL)}
-                    </p>
-                  </div>
-                  <div className="px-3 py-2 text-center">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Right Carry</p>
-                    <p className="text-xs font-semibold text-amber-300" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-slab-right-${slab.slabIdx}`}>
-                      ${formatAmount(carryR)}
-                    </p>
-                  </div>
-                  <div className="px-3 py-2 text-center">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Matchable</p>
-                    <p className="text-xs font-semibold text-foreground" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-slab-matchable-${slab.slabIdx}`}>
-                      ${formatAmount(matchable)}
-                    </p>
+                  <div>
+                    <p className="text-xs font-semibold">{pct} of gross MVT</p>
+                    <p className="text-[10px] text-muted-foreground">{dirReq === 0 ? "No requirement" : `${dirReq} directs needed`}</p>
                   </div>
                 </div>
+                <Badge variant="outline" className={`text-[9px] ${qualified ? "border-emerald-500/30 text-emerald-400" : "border-muted-foreground/20 text-muted-foreground/50"}`}>
+                  {qualified ? "Qualified" : "Locked"}
+                </Badge>
               </div>
             );
           })}
-          <div className="flex items-start gap-2 mt-4 p-3 rounded-xl bg-white/[0.02] border border-white/[0.06]">
-            <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-            <div className="text-[11px] text-muted-foreground leading-relaxed">
-              <p>Binary income is matched per slab. Each slab matches the minimum of left and right carry volumes at its respective rate (<span className="text-foreground font-medium">30%, 20%, 10%, 5%</span>). Business volume from your downline is distributed across slabs based on depth. Data shown is live from the smart contract.</p>
-            </div>
-          </div>
         </div>
       </div>
-
-      <div className="glass-card rounded-2xl slide-in" style={{ animationDelay: '0.4s' }} data-testid="card-income-transactions">
-        <div className="p-5 border-b border-white/[0.06]">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-amber-600/15 flex items-center justify-center">
-              <ArrowUpRight className="h-4 w-4 text-amber-300" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-                <span className="gradient-text">Income Transactions</span>
-              </h2>
-              <p className="text-[10px] text-muted-foreground">Recent income events from contract</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="divide-y divide-white/[0.04]">
-          {loadingTxs ? (
-            <div className="flex items-center justify-center py-12" data-testid="loader-income-txs">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              <span className="ml-2 text-sm text-muted-foreground">Loading transactions...</span>
-            </div>
-          ) : transactions.length === 0 ? (
-            <div className="text-center py-12" data-testid="text-no-income-txs">
-              <ArrowUpRight className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">No income transactions yet</p>
-              <p className="text-[11px] text-muted-foreground/60 mt-1">Earnings will appear here as they are distributed</p>
-            </div>
-          ) : (
-            paginatedTxs.map((tx, index) => {
-              const cfg = typeConfig[tx.type] || { color: "text-muted-foreground", bg: "bg-muted/10", border: "border-muted/10", icon: ArrowUpRight };
-              const Icon = cfg.icon;
-              const globalIndex = (currentPage - 1) * ITEMS_PER_PAGE + index;
-              return (
-                <div key={`${tx.timestamp}-${globalIndex}`} className="flex items-center gap-3 px-5 py-3.5" data-testid={`row-income-tx-${globalIndex}`}>
-                  <div className={`h-8 w-8 rounded-lg ${cfg.bg} flex items-center justify-center shrink-0`}>
-                    <Icon className={`h-3.5 w-3.5 ${cfg.color}`} />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-medium">{tx.type}</p>
-                      <span className={`text-[10px] px-1.5 py-0.5 rounded-md ${cfg.bg} ${cfg.color} font-medium`}>
-                        +${formatAmount(tx.amount)}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground truncate mt-0.5">{tx.detail} {formatTimestamp(tx.timestamp)}</p>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {!loadingTxs && transactions.length > ITEMS_PER_PAGE && (
-          <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-white/[0.06]">
-            <p className="text-[11px] text-muted-foreground">
-              Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, transactions.length)} of {transactions.length}
-            </p>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                data-testid="button-income-tx-prev"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              {Array.from({ length: totalPages }, (_, i) => i + 1).map(page => (
-                <Button
-                  key={page}
-                  variant={page === currentPage ? "default" : "ghost"}
-                  size="icon"
-                  onClick={() => setCurrentPage(page)}
-                  className={page === currentPage ? "glow-button text-white" : ""}
-                  data-testid={`button-income-tx-page-${page}`}
-                >
-                  <span className="text-xs">{page}</span>
-                </Button>
-              ))}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                data-testid="button-income-tx-next"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
-          </div>
-        )}
-      </div>
-
-      {/* Flushout History — merged reactivations + binary daily cap flushes */}
-      {(() => {
-        const reactivationItems = allTransactions
-          .filter(tx => tx.type === "Reactivation")
-          .map(tx => ({ kind: "reactivation" as const, tx, timestamp: tx.timestamp }));
-        const binaryFlushItems = binaryFlushEvents.map(ev => ({
-          kind: "binaryFlush" as const,
-          ev,
-          timestamp: ev.timestamp,
-        }));
-        const merged = [...reactivationItems, ...binaryFlushItems].sort((a, b) => b.timestamp - a.timestamp);
-        const isLoading = loadingTxs || loadingFlush;
-        if (isLoading || merged.length === 0) return null;
-        return (
-          <div className="glass-card rounded-2xl slide-in" data-testid="card-flushout-history">
-            <div className="p-5 border-b border-white/[0.06]">
-              <div className="flex items-center gap-3">
-                <div className="h-9 w-9 rounded-xl bg-red-500/15 flex items-center justify-center">
-                  <AlertTriangle className="h-4 w-4 text-red-400" />
-                </div>
-                <div>
-                  <h2 className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-                    <span className="text-red-400">Flushout History</span>
-                  </h2>
-                  <p className="text-[10px] text-muted-foreground">{merged.length} event{merged.length !== 1 ? "s" : ""} — income lost due to max cap or daily binary limit</p>
-                </div>
-              </div>
-            </div>
-            <div className="divide-y divide-white/[0.04]">
-              {merged.map((item, idx) => {
-                if (item.kind === "reactivation") {
-                  const { tx } = item;
-                  const reactivationFee = parseFloat(formatAmount(tx.amount));
-                  const pkgName = tx.detail && tx.detail !== "None" ? tx.detail : "Package";
-                  const pkgIdx = PACKAGE_NAMES.indexOf(tx.detail);
-                  const maxIncome = pkgIdx > 0 ? PACKAGE_PRICES_USD[pkgIdx] * 5 : reactivationFee * 5;
-                  return (
-                    <div key={`reactivation-${tx.timestamp}-${idx}`} className="flex items-center gap-3 px-5 py-4" data-testid={`row-flushout-${idx}`}>
-                      <div className="h-9 w-9 rounded-lg bg-red-500/10 flex items-center justify-center shrink-0">
-                        <AlertTriangle className="h-4 w-4 text-red-400" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium">Max Income Cap Reached</span>
-                          <Badge variant="outline" className="text-[10px] border-red-500/20 text-red-400">{pkgName}</Badge>
-                        </div>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">
-                          Reactivation fee: <span className="text-foreground font-medium">${reactivationFee.toFixed(2)}</span>
-                          {tx.timestamp > 0 && <span className="ml-2">· {formatTimestamp(tx.timestamp)}</span>}
-                        </p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="font-bold text-sm text-red-400" style={{ fontFamily: 'var(--font-display)' }}>
-                          ${maxIncome.toLocaleString()}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground">income cap</p>
-                      </div>
-                    </div>
-                  );
-                } else {
-                  const { ev } = item;
-                  return (
-                    <div key={`binaryflush-${ev.timestamp}-${idx}`} className="flex items-center gap-3 px-5 py-4" data-testid={`row-flushout-binary-${idx}`}>
-                      <div className="h-9 w-9 rounded-lg bg-orange-500/10 flex items-center justify-center shrink-0">
-                        <AlertTriangle className="h-4 w-4 text-orange-400" />
-                      </div>
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2 flex-wrap">
-                          <span className="text-sm font-medium">Daily Binary Limit Exceeded</span>
-                          <Badge variant="outline" className="text-[10px] border-orange-500/20 text-orange-400">Binary Cap</Badge>
-                        </div>
-                        <p className="text-[11px] text-muted-foreground mt-0.5">
-                          Excess income lost
-                          {ev.timestamp > 0 && <span className="ml-2">· {formatTimestamp(ev.timestamp)}</span>}
-                        </p>
-                      </div>
-                      <div className="text-right shrink-0">
-                        <p className="font-bold text-sm text-orange-400" style={{ fontFamily: 'var(--font-display)' }}>
-                          ${formatAmount(ev.amount)}
-                        </p>
-                        <p className="text-[10px] text-muted-foreground">flushed</p>
-                      </div>
-                    </div>
-                  );
-                }
-              })}
-            </div>
-          </div>
-        );
-      })()}
     </div>
   );
 }

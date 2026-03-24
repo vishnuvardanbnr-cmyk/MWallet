@@ -94,7 +94,7 @@ export default function DeepPlacementPage({ userInfo, account }: DeepPlacementPa
 
   const genLink = () => {
     if (!selected) return;
-    const newLink = `${window.location.origin}?ref=${userInfo.userId}&parent=${selected.userId}&side=${placement}`;
+    const newLink = `${window.location.origin}?ref=${account}&parent=${selected.userId}&side=${placement}`;
     setLink(newLink);
     setShowLink(true);
     navigator.clipboard.writeText(newLink);

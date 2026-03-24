@@ -1,502 +1,168 @@
-import { useState, useEffect, useCallback } from "react";
-import { useLocation } from "wouter";
-import { GitBranch, ArrowLeft, Loader2, Clock, BarChart3, ArrowDownLeft, ArrowDownRight, ChevronLeft, ChevronRight, Zap, CalendarDays, TrendingUp, Layers, Info } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { GitBranch, ArrowLeft, ArrowDownLeft, ArrowDownRight, Users, Zap, TrendingUp, Info, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import type { IncomeInfo, BinaryInfo, SlabInfo } from "@/hooks/use-web3";
-
-interface ContractTx {
-  type: string;
-  amount: bigint;
-  detail: string;
-  timestamp: number;
-  isIncome: boolean;
-}
+import { Button } from "@/components/ui/button";
+import { useLocation } from "wouter";
+import { formatTokenAmount } from "@/lib/contract";
+import type { UserInfo, MvtPrice, BinaryPairs } from "@/hooks/use-web3";
 
 interface BinaryDetailsProps {
-  incomeInfo: IncomeInfo;
-  binaryInfo: BinaryInfo;
-  slabInfo: SlabInfo | null;
+  userInfo: UserInfo;
+  mvtPrice: MvtPrice;
+  binaryPairs: BinaryPairs;
   formatAmount: (val: bigint) => string;
-  tokenDecimals: number;
-  getTransactionsFromContract: (offset: number, limit: number) => Promise<{ transactions: ContractTx[]; total: number }>;
-  claimBinaryIncome: () => Promise<void>;
 }
 
-const ITEMS_PER_PAGE = 10;
-
-export default function BinaryDetails({ incomeInfo, binaryInfo, slabInfo, formatAmount, tokenDecimals, getTransactionsFromContract, claimBinaryIncome }: BinaryDetailsProps) {
+export default function BinaryDetails({ userInfo, mvtPrice, binaryPairs, formatAmount }: BinaryDetailsProps) {
   const [, navigate] = useLocation();
-  const [transactions, setTransactions] = useState<ContractTx[]>([]);
-  const [loadingTxs, setLoadingTxs] = useState(true);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [claiming, setClaiming] = useState(false);
 
-  const handleClaim = async () => {
-    setClaiming(true);
-    try {
-      await claimBinaryIncome();
-    } catch (err) {
-      console.error("Claim error:", err);
-    } finally {
-      setClaiming(false);
-    }
-  };
+  const leftCount = Number(userInfo.leftSubUsers);
+  const rightCount = Number(userInfo.rightSubUsers);
+  const matchedPairs = Number(userInfo.matchedPairs);
+  const powerLegPts = Number(userInfo.powerLegPoints);
+  const currentPairs = Number(binaryPairs.currentPairs);
+  const newPairs = Number(binaryPairs.newPairs);
+  const rebirthCount = Number(userInfo.rebirthCount);
 
-  const loadTransactions = useCallback(async () => {
-    setLoadingTxs(true);
-    try {
-      const result = await getTransactionsFromContract(0, 200);
-      const binaryTxs = result.transactions.filter(tx => tx.type === "Binary Matching");
-      setTransactions(binaryTxs);
-    } catch {
-      setTransactions([]);
-    } finally {
-      setLoadingTxs(false);
-    }
-  }, [getTransactionsFromContract]);
-
-  useEffect(() => {
-    loadTransactions();
-  }, [loadTransactions]);
-
-  const dailyPercent = binaryInfo.dailyCap > BigInt(0)
-    ? Math.min(Number((binaryInfo.todayBinaryIncome * BigInt(100)) / binaryInfo.dailyCap), 100)
-    : 0;
-
-  const totalVolume = binaryInfo.leftBusiness + binaryInfo.rightBusiness;
-  const matchedVolume = binaryInfo.carryLeft < binaryInfo.carryRight ? binaryInfo.carryLeft : binaryInfo.carryRight;
-
-  const formatTimestamp = (ts: number) => {
-    if (ts === 0) return "";
-    const date = new Date(ts * 1000);
-    return date.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }) + " " + date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
-  };
-
-  const formatDate = (ts: number) => {
-    if (ts === 0) return "";
-    const date = new Date(ts * 1000);
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
-  };
-
-  const claimsByDay = transactions.reduce<Record<string, { total: bigint; count: number; timestamps: number[] }>>((acc, tx) => {
-    const dayKey = new Date(tx.timestamp * 1000).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-    if (!acc[dayKey]) {
-      acc[dayKey] = { total: BigInt(0), count: 0, timestamps: [] };
-    }
-    acc[dayKey].total += tx.amount;
-    acc[dayKey].count += 1;
-    acc[dayKey].timestamps.push(tx.timestamp);
-    return acc;
-  }, {});
-
-  const dayEntries = Object.entries(claimsByDay).sort((a, b) => {
-    const tsA = Math.max(...a[1].timestamps);
-    const tsB = Math.max(...b[1].timestamps);
-    return tsB - tsA;
-  });
-
-  const totalPages = Math.max(1, Math.ceil(transactions.length / ITEMS_PER_PAGE));
-  const paginatedTxs = transactions.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const stronger = leftCount >= rightCount ? "left" : "right";
+  const weaker = leftCount >= rightCount ? "right" : "left";
+  const strongCount = stronger === "left" ? leftCount : rightCount;
+  const weakCount = weaker === "left" ? leftCount : rightCount;
 
   return (
     <div className="p-4 sm:p-6 space-y-6 relative z-10">
-      <div className="slide-in">
-        <button
-          onClick={() => navigate("/income")}
-          className="flex items-center gap-1.5 text-sm text-muted-foreground mb-3 transition-colors"
-          data-testid="button-back-to-income"
-        >
+      <div className="flex items-center gap-3 slide-in">
+        <button onClick={() => navigate("/")} className="p-2 rounded-lg hover:bg-white/[0.04] text-muted-foreground hover:text-foreground transition-all" data-testid="button-back">
           <ArrowLeft className="h-4 w-4" />
-          Back to Income
         </button>
-        <div className="flex items-center gap-3">
-          <div className="h-10 w-10 rounded-xl bg-yellow-600/15 flex items-center justify-center">
-            <GitBranch className="h-5 w-5 text-yellow-300" />
-          </div>
-          <div>
-            <h1 className="text-2xl font-bold" data-testid="text-binary-details-title" style={{ fontFamily: 'var(--font-display)' }}>
-              <span className="gradient-text">Binary Income</span>
-            </h1>
-            <p className="text-muted-foreground text-sm mt-0.5">Detailed view of your binary matching income</p>
-          </div>
+        <div>
+          <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }}>
+            <span className="gradient-text">Binary Details</span>
+          </h1>
+          <p className="text-sm text-muted-foreground">Your binary network performance</p>
         </div>
       </div>
 
-      <div className="earnings-card rounded-2xl overflow-hidden slide-in" style={{ animationDelay: '0.05s' }} data-testid="card-binary-claimable">
-        <div className="p-5">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="h-9 w-9 rounded-xl bg-yellow-600/15 flex items-center justify-center">
-              <Zap className="h-4 w-4 text-yellow-300" />
-            </div>
-            <div>
-              <p className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-                <span className="gradient-text">Claimable Balance</span>
-              </p>
-              <p className="text-[10px] text-muted-foreground">Accumulated from daily snapshots</p>
-            </div>
-          </div>
-          <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-              <p className="text-3xl font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-binary-claimable-amount">
-                ${formatAmount(binaryInfo.claimableBinaryIncome)}
-              </p>
-              <p className="text-[11px] text-muted-foreground mt-1">Total binary earned: ${formatAmount(incomeInfo.totalBinaryIncome)}</p>
-            </div>
-            {binaryInfo.claimableBinaryIncome > BigInt(0) && (
-              <Button
-                onClick={handleClaim}
-                disabled={claiming || dailyPercent >= 100}
-                className="bg-gradient-to-r from-amber-500 via-yellow-500 to-amber-400 text-white font-semibold px-6"
-                data-testid="button-claim-binary-detail"
-              >
-                {claiming ? <Loader2 className="h-4 w-4 animate-spin mr-2" /> : null}
-                {claiming ? "Claiming..." : dailyPercent >= 100 ? "Daily Cap Reached" : "Claim Now"}
-              </Button>
-            )}
-          </div>
+      {/* Main Stats Grid */}
+      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 slide-in" style={{ animationDelay: "0.04s" }}>
+        <div className="glass-card rounded-2xl p-4 text-center" data-testid="card-left-team">
+          <ArrowDownLeft className="h-5 w-5 mx-auto text-blue-400 mb-2" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Left Team</p>
+          <p className="text-2xl font-bold text-blue-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-left-count">{leftCount}</p>
+          <p className="text-[10px] text-muted-foreground">members</p>
+        </div>
+        <div className="glass-card rounded-2xl p-4 text-center" data-testid="card-matched-pairs">
+          <GitBranch className="h-5 w-5 mx-auto text-emerald-400 mb-2" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Matched Pairs</p>
+          <p className="text-2xl font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-matched-pairs">{matchedPairs}</p>
+          <p className="text-[10px] text-muted-foreground">total matched</p>
+        </div>
+        <div className="glass-card rounded-2xl p-4 text-center col-span-2 sm:col-span-1" data-testid="card-right-team">
+          <ArrowDownRight className="h-5 w-5 mx-auto text-purple-400 mb-2" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Right Team</p>
+          <p className="text-2xl font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-right-count">{rightCount}</p>
+          <p className="text-[10px] text-muted-foreground">members</p>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-        <div className="earnings-card rounded-2xl overflow-hidden slide-in" style={{ animationDelay: '0.1s' }} data-testid="card-binary-daily-cap">
-          <div className="p-5">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="h-9 w-9 rounded-xl bg-amber-500/15 flex items-center justify-center">
-                <Clock className="h-4 w-4 text-amber-400" />
-              </div>
-              <div>
-                <p className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-                  <span className="gradient-text">Today's Cap Usage</span>
-                </p>
-                <p className="text-[10px] text-muted-foreground">Resets every 24 hours</p>
-              </div>
-            </div>
-            <div className="flex flex-wrap items-end justify-between gap-2 mb-2">
-              <div>
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Claimed Today</p>
-                <p className="text-2xl font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-binary-today-claimed">
-                  ${formatAmount(binaryInfo.todayBinaryIncome)}
-                </p>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Daily Cap</p>
-                <p className="text-base font-bold text-muted-foreground" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-binary-daily-cap">
-                  ${formatAmount(binaryInfo.dailyCap)}
-                </p>
-              </div>
-            </div>
-            <div className="h-2 rounded-full bg-white/[0.05] overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-700"
-                style={{
-                  width: `${dailyPercent}%`,
-                  background: dailyPercent >= 100 ? 'linear-gradient(90deg, #ef4444, #dc2626)' : 'linear-gradient(90deg, #f59e0b, #d4af37)'
-                }}
-              />
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-1.5">
-              {dailyPercent >= 100 ? "Daily cap reached - try again tomorrow" : `${dailyPercent}% of daily cap used`}
-            </p>
+      {/* Current Cycle */}
+      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.05s" }} data-testid="card-current-cycle">
+        <h2 className="text-sm font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>
+          <span className="gradient-text">Current Distribution Cycle</span>
+        </h2>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] text-center" data-testid="card-current-pairs">
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Active Pairs</p>
+            <p className="text-xl font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-current-pairs">{currentPairs}</p>
+            <p className="text-[10px] text-muted-foreground">pairs in pool</p>
+          </div>
+          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] text-center" data-testid="card-new-pairs">
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">New Pairs</p>
+            <p className="text-xl font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-new-pairs">{newPairs}</p>
+            <p className="text-[10px] text-muted-foreground">since last distribution</p>
           </div>
         </div>
-
-        <div className="earnings-card rounded-2xl overflow-hidden slide-in" style={{ animationDelay: '0.15s' }} data-testid="card-binary-total">
-          <div className="p-5">
-            <div className="flex items-center gap-3 mb-4">
-              <div className="h-9 w-9 rounded-xl bg-amber-600/15 flex items-center justify-center">
-                <TrendingUp className="h-4 w-4 text-amber-300" />
-              </div>
-              <div>
-                <p className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-                  <span className="gradient-text">Lifetime Binary</span>
-                </p>
-                <p className="text-[10px] text-muted-foreground">All-time binary matching income</p>
-              </div>
-            </div>
-            <p className="text-2xl font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-binary-total-earned">
-              ${formatAmount(incomeInfo.totalBinaryIncome)}
-            </p>
-            <p className="text-[11px] text-muted-foreground mt-1">30% of matched binary volume</p>
-          </div>
-        </div>
-      </div>
-
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
-        <div className="glass-card rounded-2xl p-4 slide-in border border-amber-500/10" style={{ animationDelay: '0.2s' }} data-testid="card-binary-left-vol">
-          <div className="flex items-center gap-2 mb-2">
-            <ArrowDownLeft className="h-4 w-4 text-amber-400" />
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Left Volume</p>
-          </div>
-          <p className="text-lg font-bold text-amber-400" style={{ fontFamily: 'var(--font-display)' }}>
-            ${formatAmount(binaryInfo.leftBusiness)}
-          </p>
-        </div>
-        <div className="glass-card rounded-2xl p-4 slide-in border border-amber-600/10" style={{ animationDelay: '0.25s' }} data-testid="card-binary-right-vol">
-          <div className="flex items-center gap-2 mb-2">
-            <ArrowDownRight className="h-4 w-4 text-amber-300" />
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Right Volume</p>
-          </div>
-          <p className="text-lg font-bold text-amber-300" style={{ fontFamily: 'var(--font-display)' }}>
-            ${formatAmount(binaryInfo.rightBusiness)}
-          </p>
-        </div>
-        <div className="glass-card rounded-2xl p-4 slide-in border border-amber-500/10" style={{ animationDelay: '0.3s' }} data-testid="card-binary-carry-left">
-          <div className="flex items-center gap-2 mb-2">
-            <BarChart3 className="h-4 w-4 text-amber-400" />
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Left Carry</p>
-          </div>
-          <p className="text-lg font-bold text-amber-400" style={{ fontFamily: 'var(--font-display)' }}>
-            ${formatAmount(binaryInfo.carryLeft)}
-          </p>
-        </div>
-        <div className="glass-card rounded-2xl p-4 slide-in border border-amber-600/10" style={{ animationDelay: '0.35s' }} data-testid="card-binary-carry-right">
-          <div className="flex items-center gap-2 mb-2">
-            <BarChart3 className="h-4 w-4 text-amber-300" />
-            <p className="text-xs text-muted-foreground uppercase tracking-wider">Right Carry</p>
-          </div>
-          <p className="text-lg font-bold text-amber-300" style={{ fontFamily: 'var(--font-display)' }}>
-            ${formatAmount(binaryInfo.carryRight)}
-          </p>
-        </div>
-      </div>
-
-      <div className="glass-card rounded-2xl slide-in" style={{ animationDelay: '0.38s' }} data-testid="card-slab-commission">
-        <div className="p-5 border-b border-white/[0.06]">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-amber-600/15 flex items-center justify-center">
-              <Layers className="h-4 w-4 text-amber-300" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-                <span className="gradient-text">Slab-Based Binary Volume</span>
-              </h2>
-              <p className="text-[10px] text-muted-foreground">Per-slab carry volumes, matchable amounts & potential income</p>
-            </div>
-          </div>
-        </div>
-        <div className="p-5 space-y-3">
-          {[
-            { levels: "Lv 1-3",   slabIdx: 0, color: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20" },
-            { levels: "Lv 4-6",   slabIdx: 1, color: "text-yellow-300",  bg: "bg-yellow-600/10",  border: "border-yellow-600/20" },
-            { levels: "Lv 7-9",   slabIdx: 2, color: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/20"  },
-            { levels: "Lv 10-20", slabIdx: 3, color: "text-amber-300",    bg: "bg-amber-600/10",    border: "border-amber-600/20"   },
-          ].map((slab) => {
-            const rate = slabInfo ? Number(slabInfo.rates[slab.slabIdx]) / 100 : [30, 20, 10, 5][slab.slabIdx];
-            const carryL = slabInfo ? slabInfo.carryLeftSlabs[slab.slabIdx] : 0n;
-            const carryR = slabInfo ? slabInfo.carryRightSlabs[slab.slabIdx] : 0n;
-            const matchable = slabInfo ? slabInfo.matchableSlabs[slab.slabIdx] : 0n;
-            const potentialIncome = slabInfo ? slabInfo.potentialIncomeSlabs[slab.slabIdx] : 0n;
-            return (
-              <div key={slab.slabIdx} className={`rounded-xl ${slab.bg} border ${slab.border} overflow-hidden`} data-testid={`row-slab-binary-${slab.slabIdx}`}>
-                <div className="flex items-center justify-between px-4 py-2.5 border-b border-white/[0.04]">
-                  <div className="flex items-center gap-2">
-                    <p className={`text-xs font-bold ${slab.color}`}>{slab.levels}</p>
-                    <Badge variant="outline" className={`text-[10px] ${slab.border} ${slab.color} px-1.5 py-0`}>
-                      {rate}%
-                    </Badge>
-                  </div>
-                  <p className={`text-sm font-bold ${slab.color}`} style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-slab-binary-income-${slab.slabIdx}`}>
-                    ${formatAmount(potentialIncome)}
-                  </p>
-                </div>
-                <div className="grid grid-cols-3 divide-x divide-white/[0.04]">
-                  <div className="px-3 py-2 text-center">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Left Carry</p>
-                    <p className="text-xs font-semibold text-amber-400" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-slab-binary-left-${slab.slabIdx}`}>
-                      ${formatAmount(carryL)}
-                    </p>
-                  </div>
-                  <div className="px-3 py-2 text-center">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Right Carry</p>
-                    <p className="text-xs font-semibold text-amber-300" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-slab-binary-right-${slab.slabIdx}`}>
-                      ${formatAmount(carryR)}
-                    </p>
-                  </div>
-                  <div className="px-3 py-2 text-center">
-                    <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Matchable</p>
-                    <p className="text-xs font-semibold text-foreground" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-slab-binary-matchable-${slab.slabIdx}`}>
-                      ${formatAmount(matchable)}
-                    </p>
-                  </div>
-                </div>
-              </div>
-            );
-          })}
-          <div className="flex items-start gap-2 mt-1 p-3 rounded-xl bg-white/[0.02] border border-white/[0.06]">
-            <Info className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5" />
-            <p className="text-[11px] text-muted-foreground leading-relaxed">
-              Volume is split across slabs by downline depth: Lv 1-3 earns <span className="text-foreground font-medium">30%</span>, Lv 4-6 earns <span className="text-foreground font-medium">20%</span>, Lv 7-9 earns <span className="text-foreground font-medium">10%</span>, Lv 10-20 earns <span className="text-foreground font-medium">5%</span>. Each slab matches the minimum of left and right carry at that level.
-            </p>
-          </div>
-        </div>
-      </div>
-
-      <div className="glass-card rounded-2xl p-5 slide-in border border-yellow-600/10" style={{ animationDelay: '0.42s' }} data-testid="card-binary-pending-match">
-        <div className="flex items-center gap-3 mb-3">
-          <div className="h-9 w-9 rounded-xl bg-yellow-600/15 flex items-center justify-center">
-            <GitBranch className="h-4 w-4 text-yellow-300" />
-          </div>
-          <div>
-            <p className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-              <span className="gradient-text">Claimable Binary Income</span>
-            </p>
-            <p className="text-[10px] text-muted-foreground">Available to claim from carry matching</p>
-          </div>
-        </div>
-        <div className="flex flex-wrap items-center gap-6">
-          <div>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Carry Matchable</p>
-            <p className="text-2xl font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-binary-matchable">
-              ${formatAmount(matchedVolume)}
-            </p>
-          </div>
-          <div>
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Potential Income (30%)</p>
-            <p className="text-lg font-bold text-yellow-300" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-binary-potential">
-              ${formatAmount(matchedVolume * BigInt(30) / BigInt(100))}
-            </p>
-          </div>
-        </div>
-      </div>
-
-      {dayEntries.length > 0 && (
-        <div className="glass-card rounded-2xl slide-in" style={{ animationDelay: '0.4s' }} data-testid="card-binary-daily-summary">
-          <div className="p-5 border-b border-white/[0.06]">
-            <div className="flex items-center gap-3">
-              <div className="h-9 w-9 rounded-xl bg-yellow-600/15 flex items-center justify-center">
-                <CalendarDays className="h-4 w-4 text-yellow-300" />
-              </div>
-              <div>
-                <h2 className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-                  <span className="gradient-text">Daily Claim Summary</span>
-                </h2>
-                <p className="text-[10px] text-muted-foreground">Grouped by day</p>
-              </div>
-            </div>
-          </div>
-          <div className="divide-y divide-white/[0.04]">
-            {dayEntries.map(([day, data]) => (
-              <div key={day} className="flex items-center justify-between gap-3 px-5 py-3.5" data-testid={`row-binary-day-${day}`}>
-                <div className="flex items-center gap-3">
-                  <div className="h-8 w-8 rounded-lg bg-yellow-600/10 flex items-center justify-center shrink-0">
-                    <CalendarDays className="h-3.5 w-3.5 text-yellow-300" />
-                  </div>
-                  <div>
-                    <p className="text-sm font-medium">{day}</p>
-                    <p className="text-[11px] text-muted-foreground">{data.count} claim{data.count > 1 ? "s" : ""}</p>
-                  </div>
-                </div>
-                <span className="text-sm font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }}>
-                  +${formatAmount(data.total)}
-                </span>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div className="glass-card rounded-2xl slide-in" style={{ animationDelay: '0.45s' }} data-testid="card-binary-claim-history">
-        <div className="p-5 border-b border-white/[0.06]">
-          <div className="flex items-center gap-3">
-            <div className="h-9 w-9 rounded-xl bg-amber-600/15 flex items-center justify-center">
-              <GitBranch className="h-4 w-4 text-amber-300" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-                <span className="gradient-text">Claim History</span>
-              </h2>
-              <p className="text-[10px] text-muted-foreground">All binary income claim transactions</p>
-            </div>
-          </div>
-        </div>
-
-        <div className="divide-y divide-white/[0.04]">
-          {loadingTxs ? (
-            <div className="flex items-center justify-center py-12" data-testid="loader-binary-txs">
-              <Loader2 className="h-5 w-5 animate-spin text-muted-foreground" />
-              <span className="ml-2 text-sm text-muted-foreground">Loading claim history...</span>
-            </div>
-          ) : transactions.length === 0 ? (
-            <div className="text-center py-12" data-testid="text-no-binary-txs">
-              <GitBranch className="h-8 w-8 text-muted-foreground/20 mx-auto mb-2" />
-              <p className="text-sm text-muted-foreground">No binary claims yet</p>
-              <p className="text-[11px] text-muted-foreground/60 mt-1">Claims will appear here after you claim binary income</p>
-            </div>
-          ) : (
-            paginatedTxs.map((tx, index) => {
-              const globalIndex = (currentPage - 1) * ITEMS_PER_PAGE + index;
-              return (
-                <div key={`${tx.timestamp}-${globalIndex}`} className="flex items-center gap-3 px-5 py-3.5" data-testid={`row-binary-tx-${globalIndex}`}>
-                  <div className="h-8 w-8 rounded-lg bg-yellow-600/10 flex items-center justify-center shrink-0">
-                    <GitBranch className="h-3.5 w-3.5 text-yellow-300" />
-                  </div>
-                  <div className="flex-1 min-w-0">
-                    <div className="flex items-center gap-2 flex-wrap">
-                      <p className="text-sm font-medium">Binary Claim</p>
-                      <span className="text-[10px] px-1.5 py-0.5 rounded-md bg-yellow-600/10 text-yellow-300 font-medium">
-                        +${formatAmount(tx.amount)}
-                      </span>
-                    </div>
-                    <p className="text-[11px] text-muted-foreground truncate mt-0.5">{formatTimestamp(tx.timestamp)}</p>
-                  </div>
-                </div>
-              );
-            })
-          )}
-        </div>
-
-        {!loadingTxs && transactions.length > ITEMS_PER_PAGE && (
-          <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-white/[0.06]">
-            <p className="text-[11px] text-muted-foreground">
-              Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, transactions.length)} of {transactions.length}
-            </p>
-            <div className="flex items-center gap-1">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                data-testid="button-binary-tx-prev"
-              >
-                <ChevronLeft className="h-4 w-4" />
-              </Button>
-              {Array.from({ length: Math.min(totalPages, 5) }, (_, i) => {
-                let page: number;
-                if (totalPages <= 5) {
-                  page = i + 1;
-                } else if (currentPage <= 3) {
-                  page = i + 1;
-                } else if (currentPage >= totalPages - 2) {
-                  page = totalPages - 4 + i;
-                } else {
-                  page = currentPage - 2 + i;
-                }
-                return (
-                  <Button
-                    key={page}
-                    variant={page === currentPage ? "default" : "ghost"}
-                    size="icon"
-                    onClick={() => setCurrentPage(page)}
-                    className={page === currentPage ? "glow-button text-white" : ""}
-                    data-testid={`button-binary-tx-page-${page}`}
-                  >
-                    <span className="text-xs">{page}</span>
-                  </Button>
-                );
-              })}
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                disabled={currentPage === totalPages}
-                data-testid="button-binary-tx-next"
-              >
-                <ChevronRight className="h-4 w-4" />
-              </Button>
-            </div>
+        {newPairs > 0 && (
+          <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+            <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+            <p className="text-xs text-emerald-400 font-medium">{newPairs} new pair{newPairs !== 1 ? "s" : ""} pending — waiting for admin distribution cycle</p>
           </div>
         )}
+      </div>
+
+      {/* Power Leg */}
+      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.06s" }} data-testid="card-power-leg">
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="h-9 w-9 rounded-xl bg-yellow-600/15 flex items-center justify-center">
+            <Zap className="h-4 w-4 text-yellow-300" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Power Leg</h2>
+            <p className="text-[10px] text-muted-foreground">Stronger arm contributes to power leg</p>
+          </div>
+        </div>
+        <div className="grid grid-cols-2 gap-3">
+          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+            <p className="text-[10px] text-muted-foreground mb-1 capitalize">{stronger} (power leg)</p>
+            <p className="text-lg font-bold text-yellow-300">{strongCount} members</p>
+          </div>
+          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+            <p className="text-[10px] text-muted-foreground mb-1 capitalize">{weaker} (weak leg)</p>
+            <p className="text-lg font-bold text-muted-foreground">{weakCount} members</p>
+          </div>
+        </div>
+        <div className="mt-3 p-3 rounded-xl bg-yellow-600/[0.06] border border-yellow-600/10">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            <span className="text-yellow-300 font-medium">Power Leg Points: {powerLegPts}</span> — Every 10 points from the strong arm generates 1 extra binary pair, on top of matched pairs.
+          </p>
+        </div>
+      </div>
+
+      {/* Rebirth info */}
+      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.07s" }} data-testid="card-rebirth-info">
+        <div className="flex items-center gap-2.5 mb-3">
+          <div className="h-9 w-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
+            <RotateCcw className="h-4 w-4 text-purple-400" />
+          </div>
+          <div>
+            <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Rebirth Counter</h2>
+            <p className="text-[10px] text-muted-foreground">Each rebirth resets income limit to $390</p>
+          </div>
+          <Badge variant="outline" className="ml-auto text-[9px] border-purple-500/30 text-purple-400">
+            {rebirthCount} rebirth{rebirthCount !== 1 ? "s" : ""}
+          </Badge>
+        </div>
+        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            Rebirth Pool: <span className="text-purple-400 font-medium">${parseFloat(formatTokenAmount(userInfo.rebirthPool, 18)).toFixed(2)} USDT</span>.
+            When pool reaches $130, the admin can trigger rebirth — creating a sub-account for you in the binary tree.
+            Your income limit resets to $390 and you start earning again.
+          </p>
+        </div>
+      </div>
+
+      {/* How Binary Works */}
+      <div className="premium-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.08s" }}>
+        <h2 className="text-sm font-bold mb-4" style={{ fontFamily: "var(--font-display)" }}>
+          <span className="gradient-text">How Binary Income Works</span>
+        </h2>
+        <div className="space-y-3">
+          {[
+            { icon: Users, title: "30% of Activation", desc: "30% of each $130 activation goes into the binary pool as MVT tokens.", color: "text-amber-400 bg-amber-500/10" },
+            { icon: GitBranch, title: "Pair Matching", desc: "Each left+right new member pair in your subtree generates 1 matched pair.", color: "text-blue-400 bg-blue-500/10" },
+            { icon: Zap, title: "Power Leg Bonus", desc: "Strong arm generates power leg points → extra pairs. 30% of pool shared via power leg.", color: "text-yellow-300 bg-yellow-600/10" },
+            { icon: TrendingUp, title: "Admin Distribution", desc: "Admin triggers distribution periodically. You earn MVT proportional to your pairs.", color: "text-emerald-400 bg-emerald-500/10" },
+          ].map(({ icon: Icon, title, desc, color }) => (
+            <div key={title} className="flex items-start gap-3">
+              <div className={`w-8 h-8 rounded-lg ${color} flex items-center justify-center shrink-0`}>
+                <Icon className={`h-4 w-4 ${color.split(" ")[0]}`} />
+              </div>
+              <div>
+                <p className="text-xs font-medium text-foreground">{title}</p>
+                <p className="text-[10px] text-muted-foreground">{desc}</p>
+              </div>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
