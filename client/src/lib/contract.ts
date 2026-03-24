@@ -62,6 +62,9 @@ export const MVAULT_ABI = [
   "function mvaultToken() view returns (address)",
   "function PACKAGE_PRICE() view returns (uint256)",
   "function INCOME_LIMIT() view returns (uint256)",
+  // Admin distribution
+  "function distributeBinaryIncome(uint256 offset, uint256 limit) external",
+  "function distributePowerLeg(uint256 offset, uint256 limit) external",
   // Events
   "event Registered(address indexed user, address indexed sponsor, address indexed binaryParent, bool placeLeft)",
   "event Activated(address indexed user, uint256 mvtMinted, uint256 grossMvt, uint256 levelAmt, uint256 binaryAmt, uint256 reserveAmt)",
