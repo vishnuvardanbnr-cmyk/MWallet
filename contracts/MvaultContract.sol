@@ -19,35 +19,42 @@ interface IMvaultToken {
 // ─────────────────────────────────────────────────────────────────────────────
 // MvaultContract
 //
-// Flow on activation:
-//   1. User pays $130 USDT
-//   2. Contract mints MVT via MvaultToken  (token keeps 10%, we receive 90%)
-//   3. Of the minted MVT:
-//        40% → level income  (15 upline levels; unqualified share → adminPool)
-//        30% → binaryPool    (distributed by admin per cycle)
-//        30% → reservePool   (for future use)
+// Activation ($130 USDT):
+//   $130 → MvaultToken mints MVT (token keeps 10%)
+//   Gross MVT (pre-deduction, e.g. 1,300) is the basis for all splits:
+//     40% → level income   (15 upline levels)
+//     30% → binaryPool     (admin distributes per cycle)
+//     30% → reservePool    (future use)
 //
-// Level rates (% of total minted):
-//   L1=20%, L2=5%, L3=4%, L4=3%, L5=2%, L6=1%, L7=1%, L8-L15=0.5% each
-//   Sum = 20+5+4+3+2+1+1+8×0.5 = 40% ✓
+// Income limit  = 3 × $130 = $390 USDT per user.
+//   When user sells MVT → USDT first fills income limit → excess to rebirthPool.
+//   Once incomeLimit = 0 all sell proceeds go to rebirthPool.
+//
+// Rebirth:
+//   Requires rebirthPool ≥ $130.
+//   On rebirth(subAccount):
+//     • $130 deducted from rebirthPool  → funds sub-account activation.
+//     • $130 transferred from rebirthPool → credited to main account usdtBalance.
+//     • incomeLimit resets to $390.
+//     • Sub-account registered + activated (same distributions).
+//     • Sub-account's level-income sponsor = main account's sponsor
+//       → so sub-account's L1 income goes to the person who referred the main account.
+//     • Sub-account placed in binary tree (BFS from main account for open slot).
+//
+// Level rates (% of gross MVT, sum = 40%):
+//   L1=20%  L2=5%  L3=4%  L4=3%  L5=2%  L6=1%  L7=1%  L8-L15=0.5% each
 //
 // Qualification to receive level income:
-//   L1        → 0 directs required
-//   L2–L4     → 2 directs required
-//   L5–L7     → 5 directs required
-//   L8–L15    → 10 directs required
+//   L1 → 0 directs   L2–L4 → 2 directs   L5–L7 → 5 directs   L8–L15 → 10 directs
 //
-// Binary income (admin distributes once per cycle):
-//   Step 1 – distributeBinaryIncome(batch):
-//             calculates new pairs per user, distributes 70% of binaryPool,
-//             sets powerLegPoints = newPairs × 10
-//   Step 2 – distributePowerLeg(batch):
-//             distributes 30% of binaryPool proportional to powerLegPoints,
-//             then resets all powerLegPoints to 0
+// Binary distribution (admin, 2-step per cycle):
+//   Step 1 distributeBinaryIncome:  70% to pair matchers; sets powerLegPoints = newPairs×10
+//   Step 2 distributePowerLeg:      30% proportional to powerLegPoints; resets points to 0
 //
 // Virtual MVT balance:
-//   MVT tokens are held by this contract; each user's share is tracked virtually.
-//   User calls sellMvt(amount) → contract calls MvaultToken.sell() → user receives USDT.
+//   All MVT held by this contract, tracked per user.
+//   sellMvt(amount) → burns MVT → USDT routed through income limit / rebirthPool.
+//   withdrawUsdt(amount) → user pulls accumulated USDT balance.
 // ─────────────────────────────────────────────────────────────────────────────
 contract MvaultContract is Ownable, ReentrancyGuard {
 
@@ -56,32 +63,40 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     IMvaultToken  public           mvaultToken;
 
     // ── Constants ─────────────────────────────────────────────────────────────
-    uint256 public constant PACKAGE_PRICE  = 130 * 1e18; // $130 USDT (18 decimals)
-    uint256 public constant LEVEL_ALLOC    = 40;          // % of minted → level income
-    uint256 public constant BINARY_ALLOC   = 30;          // % of minted → binary pool
-    // RESERVE_ALLOC = 30 (remainder)
+    uint256 public constant PACKAGE_PRICE = 130 * 1e18; // $130 USDT (18 decimals)
+    uint256 public constant INCOME_LIMIT  = 390 * 1e18; // 3 × $130 per activation cycle
+    uint256 public constant LEVEL_ALLOC   = 40;         // % of gross MVT → level income
+    uint256 public constant BINARY_ALLOC  = 30;         // % of gross MVT → binary pool
 
     // ── User record ───────────────────────────────────────────────────────────
     struct User {
         bool    isRegistered;
         bool    isActive;
-        // Referral / level tree
+        // Level / sponsor tree
         address sponsor;
         uint256 directCount;
         // Binary tree
         address binaryParent;
-        bool    placedLeft;       // true = placed on left side of binaryParent
+        bool    placedLeft;
         address leftChild;
         address rightChild;
-        uint256 leftSubUsers;     // total users in left subtree
-        uint256 rightSubUsers;    // total users in right subtree
-        uint256 matchedPairs;     // cumulative pairs as of last distribution (watermark)
-        // Balances
-        uint256 mvtBalance;       // virtual MVT claimable
+        uint256 leftSubUsers;     // users in left subtree
+        uint256 rightSubUsers;    // users in right subtree
+        uint256 matchedPairs;     // watermark: cumulative pairs as of last distribution
+        // Virtual MVT
+        uint256 mvtBalance;       // available to sell
         uint256 totalReceived;    // lifetime MVT credited
-        uint256 totalSold;        // lifetime MVT sold (burned)
-        // Power leg (reset each cycle)
+        uint256 totalSold;        // lifetime MVT sold
+        // USDT income
+        uint256 incomeLimit;      // remaining USDT earning capacity (resets on rebirth)
+        uint256 usdtBalance;      // withdrawable USDT
+        uint256 rebirthPool;      // USDT accumulating toward next rebirth
+        uint256 totalUsdtEarned;  // lifetime USDT received to usdtBalance
+        // Power leg (resets each cycle)
         uint256 powerLegPoints;
+        // Rebirth
+        address mainAccount;      // if sub-account → points to main; else address(0)
+        uint256 rebirthCount;
         // Meta
         uint256 joinedAt;
     }
@@ -91,13 +106,13 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint256   public totalUsers;
 
     // ── Pool balances (virtual MVT) ───────────────────────────────────────────
-    uint256 public binaryPool;   // 30% per activation, cleared each cycle
-    uint256 public reservePool;  // 30% per activation
-    uint256 public adminPool;    // unqualified level income + leftover pool amounts
+    uint256 public binaryPool;
+    uint256 public reservePool;
+    uint256 public adminPool;
 
-    // Binary distribution state (set during distributeBinaryIncome, consumed in distributePowerLeg)
-    uint256 private _powerLeg30Reserve; // the 30% of binaryPool allocated to power legs this cycle
-    bool    private _binaryDistributed; // true between the two admin steps
+    // Binary distribution state
+    uint256 private _powerLeg30Reserve;
+    bool    private _binaryDistributed;
 
     // ── Events ────────────────────────────────────────────────────────────────
     event Registered(address indexed user, address indexed sponsor, address indexed binaryParent, bool placeLeft);
@@ -106,10 +121,12 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     event LevelIncomeSkipped(address indexed upline, uint8 level, uint256 amount);
     event BinaryIncomeDistributed(uint256 totalPool, uint256 binary70, uint256 powerLeg30, uint256 totalPairs);
     event PowerLegDistributed(uint256 totalPowerLeg30, uint256 totalPowerLegs);
-    event MvtSold(address indexed user, uint256 mvtAmount, uint256 usdtOut);
+    event MvtSold(address indexed user, uint256 mvtAmount, uint256 usdtToIncome, uint256 usdtToRebirth);
+    event UsdtWithdrawn(address indexed user, uint256 amount);
+    event Reborn(address indexed mainAccount, address indexed subAccount, uint256 rebirthIndex);
     event MvaultTokenUpdated(address newToken);
-    event AdminWithdraw(address indexed to, uint256 mvtAmount);
-    event ReserveWithdraw(address indexed to, uint256 mvtAmount);
+    event AdminWithdraw(address indexed to, uint256 amount);
+    event ReserveWithdraw(address indexed to, uint256 amount);
 
     // ── Errors ────────────────────────────────────────────────────────────────
     error AlreadyRegistered();
@@ -118,6 +135,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     error InvalidSponsor();
     error PositionTaken();
     error InsufficientVirtualBalance();
+    error InsufficientUsdtBalance();
+    error InsufficientRebirthPool();
+    error NoOpenBinarySlot();
     error ZeroAddress();
     error ZeroAmount();
     error TransferFailed();
@@ -127,8 +147,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────────────────
     constructor(address _usdt, address _mvaultToken) Ownable(msg.sender) {
         if (_usdt == address(0) || _mvaultToken == address(0)) revert ZeroAddress();
-        usdtToken    = IERC20(_usdt);
-        mvaultToken  = IMvaultToken(_mvaultToken);
+        usdtToken   = IERC20(_usdt);
+        mvaultToken = IMvaultToken(_mvaultToken);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -146,10 +166,10 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * @notice Register a new user.
-     * @param sponsor       Sponsor (referrer) address. Pass address(0) for first user.
-     * @param binaryParent  Node to place under in binary tree. Pass address(0) to default to sponsor.
-     * @param placeLeft     true = place on sponsor/parent's left side, false = right.
+     * @notice Register a new user in the system.
+     * @param sponsor       Your referrer. Pass address(0) only for the very first (root) user.
+     * @param binaryParent  Node to be placed under. Pass address(0) to default to sponsor.
+     * @param placeLeft     true = left side of binaryParent, false = right.
      */
     function register(
         address sponsor,
@@ -159,13 +179,11 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (users[msg.sender].isRegistered) revert AlreadyRegistered();
 
         if (totalUsers == 0) {
-            // ── First / root user ────────────────────────────────────────────
-            _createUser(msg.sender, address(0), address(0), false);
+            // Root / first user — no sponsor
+            _createUser(msg.sender, address(0), address(0), false, address(0));
         } else {
-            // ── Normal registration ──────────────────────────────────────────
             if (!users[sponsor].isRegistered) revert InvalidSponsor();
 
-            // Default binary parent to sponsor if not specified or invalid
             address parent = (binaryParent != address(0) && users[binaryParent].isRegistered)
                 ? binaryParent
                 : sponsor;
@@ -173,48 +191,45 @@ contract MvaultContract is Ownable, ReentrancyGuard {
             if (placeLeft  && users[parent].leftChild  != address(0)) revert PositionTaken();
             if (!placeLeft && users[parent].rightChild != address(0)) revert PositionTaken();
 
-            _createUser(msg.sender, sponsor, parent, placeLeft);
+            _createUser(msg.sender, sponsor, parent, placeLeft, address(0));
 
-            // Assign child slot
-            if (placeLeft) {
-                users[parent].leftChild = msg.sender;
-            } else {
-                users[parent].rightChild = msg.sender;
-            }
+            if (placeLeft) users[parent].leftChild  = msg.sender;
+            else           users[parent].rightChild = msg.sender;
 
-            // Increment sponsor's direct count
             users[sponsor].directCount++;
-
-            // Walk up the binary tree and increment subtree user counts
             _updateAncestorCounts(msg.sender);
         }
 
         emit Registered(msg.sender, sponsor, binaryParent, placeLeft);
     }
 
-    function _createUser(address u, address sponsor, address parent, bool placeLeft) internal {
+    function _createUser(
+        address u,
+        address sponsor,
+        address parent,
+        bool    placeLeft,
+        address main
+    ) internal {
         users[u].isRegistered  = true;
         users[u].sponsor       = sponsor;
         users[u].binaryParent  = parent;
         users[u].placedLeft    = placeLeft;
+        users[u].mainAccount   = main;
         users[u].joinedAt      = block.timestamp;
         allUsers.push(u);
         totalUsers++;
     }
 
     /**
-     * @dev Walk up the binary tree from `newUser` incrementing subtree counters on each ancestor.
+     * @dev Walk up the binary tree and increment subtree counters on each ancestor.
      */
     function _updateAncestorCounts(address newUser) internal {
         address cur    = users[newUser].binaryParent;
         bool    isLeft = users[newUser].placedLeft;
 
         while (cur != address(0)) {
-            if (isLeft) {
-                users[cur].leftSubUsers++;
-            } else {
-                users[cur].rightSubUsers++;
-            }
+            if (isLeft) users[cur].leftSubUsers++;
+            else        users[cur].rightSubUsers++;
             isLeft = users[cur].placedLeft;
             cur    = users[cur].binaryParent;
         }
@@ -225,59 +240,53 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * @notice Pay $130 USDT and activate. Mints MVT and distributes income.
+     * @notice Pay $130 USDT and activate.
      *         Caller must have pre-approved this contract for PACKAGE_PRICE USDT.
-     *
-     * Distribution basis is the GROSS calculated MVT (before the token contract's
-     * 10% mint deduction), so all income percentages are applied to the full
-     * 1,300 MVT figure.  The actual MVT held by this contract is 1,170 MVT (90%).
-     * Virtual balances may therefore slightly exceed real holdings, which is covered
-     * by the continuous growth of the liquidity pool.
      */
     function activate() external nonReentrant {
         User storage u = users[msg.sender];
         if (!u.isRegistered) revert NotRegistered();
         if (u.isActive)      revert AlreadyActive();
 
-        // ── Pull USDT ────────────────────────────────────────────────────────
         bool ok = usdtToken.transferFrom(msg.sender, address(this), PACKAGE_PRICE);
         if (!ok) revert TransferFailed();
 
-        // ── Snapshot buy price BEFORE minting (price changes after) ──────────
-        uint256 buyPrice = mvaultToken.getBuyPrice();
+        _doActivate(msg.sender);
+    }
 
-        // Gross MVT = what $130 would buy at current price (e.g. 1,300 at 0.1 USDT)
-        // This is the basis for ALL income distribution.
+    /**
+     * @dev Core activation logic.  USDT must already be in this contract before calling.
+     */
+    function _doActivate(address user) internal {
+        // Snapshot buy price BEFORE minting (price rises after)
+        uint256 buyPrice = mvaultToken.getBuyPrice();
+        // Gross MVT = what $130 buys at current price (e.g. 1,300 MVT at 0.1 USDT)
         uint256 grossMvt = (PACKAGE_PRICE * 1e18) / buyPrice;
 
-        // ── Approve MvaultToken to spend USDT and mint ───────────────────────
+        // Approve token contract and mint
         usdtToken.approve(address(mvaultToken), PACKAGE_PRICE);
-
         uint256 before = mvaultToken.balanceOf(address(this));
         mvaultToken.addLiquidityAndMint(address(this), PACKAGE_PRICE);
         uint256 minted = mvaultToken.balanceOf(address(this)) - before; // actual 90%
 
-        // ── Split based on GROSS MVT (1,300) not net minted (1,170) ──────────
-        uint256 levelAmt   = (grossMvt * LEVEL_ALLOC)  / 100;   // 40% of 1,300 = 520
-        uint256 binaryAmt  = (grossMvt * BINARY_ALLOC) / 100;   // 30% of 1,300 = 390
-        uint256 reserveAmt = grossMvt - levelAmt - binaryAmt;   // 30% of 1,300 = 390
+        // Split on GROSS basis (1,300 not 1,170)
+        uint256 levelAmt   = (grossMvt * LEVEL_ALLOC)  / 100;  // 40%
+        uint256 binaryAmt  = (grossMvt * BINARY_ALLOC) / 100;  // 30%
+        uint256 reserveAmt = grossMvt - levelAmt - binaryAmt;  // 30%
 
         binaryPool  += binaryAmt;
         reservePool += reserveAmt;
 
-        u.isActive = true;
+        users[user].isActive    = true;
+        users[user].incomeLimit = INCOME_LIMIT; // $390
 
-        // ── Distribute level income (from gross basis) ───────────────────────
-        _distributeLevelIncome(msg.sender, grossMvt, levelAmt);
+        _distributeLevelIncome(user, grossMvt, levelAmt);
 
-        emit Activated(msg.sender, minted, grossMvt, levelAmt, binaryAmt, reserveAmt);
+        emit Activated(user, minted, grossMvt, levelAmt, binaryAmt, reserveAmt);
     }
 
     /**
-     * @dev Walk up 15 sponsor levels and credit level income.
-     *      Each level's share = grossMvt × rate.
-     *      Rates sum to exactly 40% = levelAmt, dust goes to adminPool.
-     *      Unqualified shares go to adminPool.
+     * @dev Walks up 15 sponsor levels, credits qualifying uplines, unqualified → adminPool.
      */
     function _distributeLevelIncome(
         address from,
@@ -308,31 +317,24 @@ contract MvaultContract is Ownable, ReentrancyGuard {
             cur = users[cur].sponsor;
         }
 
-        // Any dust left (rounding) also goes to admin
-        if (levelAmt > distributed) {
-            adminPool += levelAmt - distributed;
-        }
+        // Dust from rounding → admin
+        if (levelAmt > distributed) adminPool += levelAmt - distributed;
     }
 
-    /**
-     * @dev Returns the MVT share for a given level (as % of total minted).
-     *      L1=20%, L2=5%, L3=4%, L4=3%, L5=2%, L6=1%, L7=1%, L8-L15=0.5%
-     */
-    function _levelShare(uint256 minted, uint8 lvl) internal pure returns (uint256) {
-        if (lvl == 1) return (minted * 20) / 100;
-        if (lvl == 2) return (minted * 5)  / 100;
-        if (lvl == 3) return (minted * 4)  / 100;
-        if (lvl == 4) return (minted * 3)  / 100;
-        if (lvl == 5) return (minted * 2)  / 100;
-        if (lvl == 6) return (minted * 1)  / 100;
-        if (lvl == 7) return (minted * 1)  / 100;
-        if (lvl >= 8 && lvl <= 15) return (minted * 5) / 1000; // 0.5%
+    /** @dev Level share as % of gross MVT.  Rates sum to 40%. */
+    function _levelShare(uint256 grossMvt, uint8 lvl) internal pure returns (uint256) {
+        if (lvl == 1)                  return (grossMvt * 20)  / 100;
+        if (lvl == 2)                  return (grossMvt * 5)   / 100;
+        if (lvl == 3)                  return (grossMvt * 4)   / 100;
+        if (lvl == 4)                  return (grossMvt * 3)   / 100;
+        if (lvl == 5)                  return (grossMvt * 2)   / 100;
+        if (lvl == 6)                  return (grossMvt * 1)   / 100;
+        if (lvl == 7)                  return (grossMvt * 1)   / 100;
+        if (lvl >= 8 && lvl <= 15)    return (grossMvt * 5)   / 1000; // 0.5%
         return 0;
     }
 
-    /**
-     * @dev Minimum direct referrals required to receive income at a given level.
-     */
+    /** @dev Minimum directs needed to qualify at each level. */
     function _directReq(uint8 lvl) internal pure returns (uint256) {
         if (lvl <= 1) return 0;
         if (lvl <= 4) return 2;
@@ -341,20 +343,170 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // SELL MVT
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Convert virtual MVT balance to USDT.
+     *         USDT is held in the contract; call withdrawUsdt() to pull it.
+     *
+     *         Routing:
+     *           ① If incomeLimit > 0  → USDT fills incomeLimit first  → usdtBalance
+     *           ② Excess              → rebirthPool
+     *           ③ If incomeLimit = 0  → all USDT goes to rebirthPool
+     */
+    function sellMvt(uint256 amount) external nonReentrant {
+        if (amount == 0) revert ZeroAmount();
+        User storage u = users[msg.sender];
+        if (!u.isActive)           revert NotRegistered();
+        if (u.mvtBalance < amount) revert InsufficientVirtualBalance();
+
+        u.mvtBalance -= amount;
+        u.totalSold  += amount;
+
+        // Burn MVT via token contract; receive USDT
+        uint256 usdtBefore = usdtToken.balanceOf(address(this));
+        mvaultToken.sell(amount);
+        uint256 usdtReceived = usdtToken.balanceOf(address(this)) - usdtBefore;
+
+        uint256 toIncome  = 0;
+        uint256 toRebirth = 0;
+
+        if (u.incomeLimit > 0) {
+            toIncome  = usdtReceived > u.incomeLimit ? u.incomeLimit : usdtReceived;
+            toRebirth = usdtReceived - toIncome;
+            u.usdtBalance     += toIncome;
+            u.incomeLimit     -= toIncome;
+            u.totalUsdtEarned += toIncome;
+        } else {
+            toRebirth = usdtReceived;
+        }
+
+        u.rebirthPool += toRebirth;
+
+        emit MvtSold(msg.sender, amount, toIncome, toRebirth);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // WITHDRAW USDT
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Pull your accumulated USDT balance to your wallet.
+     */
+    function withdrawUsdt(uint256 amount) external nonReentrant {
+        if (amount == 0) revert ZeroAmount();
+        User storage u = users[msg.sender];
+        if (u.usdtBalance < amount) revert InsufficientUsdtBalance();
+
+        u.usdtBalance -= amount;
+        bool ok = usdtToken.transfer(msg.sender, amount);
+        if (!ok) revert TransferFailed();
+
+        emit UsdtWithdrawn(msg.sender, amount);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // REBIRTH
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Create a rebirth sub-account when rebirthPool ≥ $130.
+     *
+     * What happens:
+     *   1. $130 deducted from rebirthPool → funds the sub-account activation.
+     *   2. $130 deducted from rebirthPool → credited to main account usdtBalance.
+     *      (If rebirthPool after step 1 < $130, only what remains is credited.)
+     *   3. Main account incomeLimit resets to $390.
+     *   4. Sub-account registered with sponsor = main account's sponsor
+     *      (so sub's L1 income goes to the person who referred the main account).
+     *   5. Sub-account placed in binary tree via BFS from main account.
+     *   6. Sub-account activated — same distributions as a normal activation.
+     *
+     * @param subAccount  A fresh (unregistered) wallet address for the sub-account.
+     */
+    function rebirth(address subAccount) external nonReentrant {
+        if (subAccount == address(0)) revert ZeroAddress();
+
+        User storage u = users[msg.sender];
+        require(u.isActive, "Not active");
+        if (u.rebirthPool < PACKAGE_PRICE) revert InsufficientRebirthPool();
+        require(!users[subAccount].isRegistered, "Sub-account already registered");
+
+        // ── 1. Deduct $130 for activation ────────────────────────────────────
+        u.rebirthPool -= PACKAGE_PRICE;
+
+        // ── 2. Credit $130 to main wallet (capped at what's left in pool) ────
+        uint256 mainCredit = u.rebirthPool >= PACKAGE_PRICE
+            ? PACKAGE_PRICE
+            : u.rebirthPool;
+        u.rebirthPool     -= mainCredit;
+        u.usdtBalance     += mainCredit;
+        u.totalUsdtEarned += mainCredit;
+
+        // ── 3. Reset income limit ─────────────────────────────────────────────
+        u.incomeLimit = INCOME_LIMIT;
+
+        // ── 4. Register sub-account ───────────────────────────────────────────
+        // Sponsor = main account's sponsor so sub-account's L1 goes to
+        // the person who originally referred the main account.
+        address subSponsor = u.sponsor;
+
+        // Find nearest open binary slot starting from main account (BFS)
+        (address binParent, bool goLeft) = _findOpenBinarySlot(msg.sender);
+
+        _createUser(subAccount, subSponsor, binParent, goLeft, msg.sender);
+
+        if (goLeft) users[binParent].leftChild  = subAccount;
+        else        users[binParent].rightChild = subAccount;
+
+        if (subSponsor != address(0)) users[subSponsor].directCount++;
+        _updateAncestorCounts(subAccount);
+
+        // ── 5 & 6. Activate sub-account using contract's USDT ────────────────
+        // Contract already holds the $130 USDT (deducted from rebirthPool above).
+        _doActivate(subAccount);
+
+        u.rebirthCount++;
+
+        emit Reborn(msg.sender, subAccount, u.rebirthCount);
+    }
+
+    /**
+     * @dev BFS from `start` to find the first node with an open left or right child slot.
+     *      Gas cost grows with tree size — acceptable for infrequent rebirth calls.
+     */
+    function _findOpenBinarySlot(address start)
+        internal
+        view
+        returns (address parent, bool goLeft)
+    {
+        address[] memory queue = new address[](totalUsers + 1);
+        uint256 front = 0;
+        uint256 back  = 0;
+        queue[back++] = start;
+
+        while (front < back) {
+            address cur = queue[front++];
+            if (users[cur].leftChild  == address(0)) return (cur, true);
+            if (users[cur].rightChild == address(0)) return (cur, false);
+            if (users[cur].leftChild  != address(0)) queue[back++] = users[cur].leftChild;
+            if (users[cur].rightChild != address(0)) queue[back++] = users[cur].rightChild;
+        }
+        revert NoOpenBinarySlot();
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // BINARY INCOME DISTRIBUTION  (admin — Step 1 of 2)
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * @notice STEP 1: Distribute 70% of binary pool to users with new pair matches.
-     *         Sets powerLegPoints = newPairs × 10 for each matching user.
-     *         Call distributePowerLeg() after this to complete the cycle.
+     * @notice STEP 1: Distribute 70% of binaryPool to users with new pair matches.
+     *         Sets powerLegPoints = newPairs × 10 for matching users.
+     *         Call distributePowerLeg() after processing all batches to close the cycle.
      *
-     * @param offset  Start index in allUsers array (for batch processing).
-     * @param limit   Max users to process in this call. Pass allUsers.length for all.
-     *
-     * NOTE: If your user base is large, call this in multiple batches with increasing
-     *       offsets until all users are processed, then call finaliseBinaryDistribution()
-     *       to close the cycle before calling distributePowerLeg().
+     * @param offset  Start index in allUsers array.
+     * @param limit   How many users to process in this call.
      */
     function distributeBinaryIncome(
         uint256 offset,
@@ -364,63 +516,51 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         require(binaryPool > 0, "Empty binary pool");
 
         uint256 pool = binaryPool;
-        binaryPool = 0;
+        binaryPool   = 0;
 
-        uint256 binary70    = (pool * 70) / 100;
-        uint256 powerLeg30  = pool - binary70;
-
+        uint256 binary70   = (pool * 70) / 100;
+        uint256 powerLeg30 = pool - binary70;
         _powerLeg30Reserve = powerLeg30;
 
-        // ── Count total new pairs across the batch ────────────────────────────
         uint256 end = offset + limit;
         if (end > allUsers.length) end = allUsers.length;
 
+        // First pass — count total new pairs in this batch
         uint256 totalNewPairs = 0;
-
         for (uint256 i = offset; i < end; i++) {
             address u = allUsers[i];
             if (!users[u].isActive) continue;
             uint256 pairs = _minOf(users[u].leftSubUsers, users[u].rightSubUsers);
-            uint256 newPairs = pairs > users[u].matchedPairs
-                ? pairs - users[u].matchedPairs
-                : 0;
-            totalNewPairs += newPairs;
+            if (pairs > users[u].matchedPairs) {
+                totalNewPairs += pairs - users[u].matchedPairs;
+            }
         }
 
-        // ── Distribute 70% proportionally to new pairs ────────────────────────
         if (totalNewPairs == 0) {
-            // No pairs this cycle — move funds to admin
-            adminPool += binary70;
-            adminPool += powerLeg30;
+            adminPool += binary70 + powerLeg30;
             _powerLeg30Reserve = 0;
             emit BinaryIncomeDistributed(pool, 0, 0, 0);
             return;
         }
 
+        // Second pass — distribute 70% and assign power leg points
         for (uint256 i = offset; i < end; i++) {
             address u = allUsers[i];
             if (!users[u].isActive) continue;
 
-            uint256 pairs = _minOf(users[u].leftSubUsers, users[u].rightSubUsers);
+            uint256 pairs    = _minOf(users[u].leftSubUsers, users[u].rightSubUsers);
             uint256 newPairs = pairs > users[u].matchedPairs
-                ? pairs - users[u].matchedPairs
-                : 0;
-
+                ? pairs - users[u].matchedPairs : 0;
             if (newPairs == 0) continue;
 
             uint256 share = (binary70 * newPairs) / totalNewPairs;
-            users[u].mvtBalance    += share;
-            users[u].totalReceived += share;
-
-            // Assign power leg points for next step
-            users[u].powerLegPoints += newPairs * 10;
-
-            // Advance watermark
-            users[u].matchedPairs = pairs;
+            users[u].mvtBalance      += share;
+            users[u].totalReceived   += share;
+            users[u].powerLegPoints  += newPairs * 10;
+            users[u].matchedPairs     = pairs;
         }
 
         _binaryDistributed = true;
-
         emit BinaryIncomeDistributed(pool, binary70, powerLeg30, totalNewPairs);
     }
 
@@ -429,7 +569,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * @notice STEP 2: Distribute the 30% power leg reserve proportionally to
+     * @notice STEP 2: Distribute the 30% power-leg reserve proportionally to
      *         powerLegPoints, then reset all power leg points to 0.
      *
      * @param offset  Start index in allUsers array.
@@ -444,13 +584,12 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 end = offset + limit;
         if (end > allUsers.length) end = allUsers.length;
 
-        // ── Count total power legs in this batch ──────────────────────────────
+        // Count total power legs in this batch
         uint256 totalPowerLegs = 0;
         for (uint256 i = offset; i < end; i++) {
             totalPowerLegs += users[allUsers[i]].powerLegPoints;
         }
 
-        // ── Distribute powerLeg30 proportionally ──────────────────────────────
         uint256 reserve = _powerLeg30Reserve;
         if (totalPowerLegs > 0 && reserve > 0) {
             for (uint256 i = offset; i < end; i++) {
@@ -464,48 +603,15 @@ contract MvaultContract is Ownable, ReentrancyGuard {
             adminPool += reserve;
         }
 
-        // ── Reset power leg points ────────────────────────────────────────────
+        // Reset power legs
         for (uint256 i = offset; i < end; i++) {
             users[allUsers[i]].powerLegPoints = 0;
         }
 
-        // ── Close cycle ───────────────────────────────────────────────────────
-        _powerLeg30Reserve  = 0;
-        _binaryDistributed  = false;
+        _powerLeg30Reserve = 0;
+        _binaryDistributed = false;
 
         emit PowerLegDistributed(reserve, totalPowerLegs);
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // SELL MVT  (user — convert virtual balance to USDT)
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * @notice Sell `amount` of your virtual MVT balance for USDT.
-     *         The contract burns the MVT via MvaultToken and forwards USDT to you.
-     */
-    function sellMvt(uint256 amount) external nonReentrant {
-        if (amount == 0) revert ZeroAmount();
-        User storage u = users[msg.sender];
-        if (!u.isActive) revert NotRegistered();
-        if (u.mvtBalance < amount) revert InsufficientVirtualBalance();
-
-        u.mvtBalance -= amount;
-        u.totalSold  += amount;
-
-        // Record USDT balance before sell
-        uint256 usdtBefore = usdtToken.balanceOf(address(this));
-
-        // Burn MVT and receive USDT from MvaultToken
-        mvaultToken.sell(amount);
-
-        uint256 usdtReceived = usdtToken.balanceOf(address(this)) - usdtBefore;
-
-        // Forward USDT to user
-        bool ok = usdtToken.transfer(msg.sender, usdtReceived);
-        if (!ok) revert TransferFailed();
-
-        emit MvtSold(msg.sender, amount, usdtReceived);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -513,26 +619,24 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * @notice Withdraw from adminPool as virtual MVT (credited to admin's wallet balance).
-     *         The admin can then call sellMvt() to convert, or use reserve for ops.
+     * @notice Move MVT from adminPool to a target address's virtual balance.
      */
     function withdrawAdminPool(address to, uint256 amount) external onlyOwner {
         if (to == address(0)) revert ZeroAddress();
         require(adminPool >= amount, "Exceeds admin pool");
-        adminPool -= amount;
-        // Credit as virtual balance so admin can sell via sellMvt()
+        adminPool               -= amount;
         users[to].mvtBalance    += amount;
         users[to].totalReceived += amount;
         emit AdminWithdraw(to, amount);
     }
 
     /**
-     * @notice Withdraw from reservePool (virtual MVT credited to a given address).
+     * @notice Move MVT from reservePool to a target address's virtual balance.
      */
     function withdrawReservePool(address to, uint256 amount) external onlyOwner {
         if (to == address(0)) revert ZeroAddress();
         require(reservePool >= amount, "Exceeds reserve pool");
-        reservePool -= amount;
+        reservePool             -= amount;
         users[to].mvtBalance    += amount;
         users[to].totalReceived += amount;
         emit ReserveWithdraw(to, amount);
@@ -556,8 +660,13 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 mvtBalance,
         uint256 totalReceived,
         uint256 totalSold,
+        uint256 incomeLimit,
+        uint256 usdtBalance,
+        uint256 rebirthPool,
         uint256 powerLegPoints,
         uint256 matchedPairs,
+        address mainAccount,
+        uint256 rebirthCount,
         uint256 joinedAt
     ) {
         User storage d = users[u];
@@ -566,13 +675,24 @@ contract MvaultContract is Ownable, ReentrancyGuard {
             d.binaryParent, d.placedLeft, d.leftChild, d.rightChild,
             d.leftSubUsers, d.rightSubUsers,
             d.mvtBalance, d.totalReceived, d.totalSold,
-            d.powerLegPoints, d.matchedPairs, d.joinedAt
+            d.incomeLimit, d.usdtBalance, d.rebirthPool,
+            d.powerLegPoints, d.matchedPairs,
+            d.mainAccount, d.rebirthCount, d.joinedAt
         );
+    }
+
+    /**
+     * @notice Check whether a user can trigger a rebirth and how much is in their pool.
+     */
+    function canRebirth(address user) external view returns (bool eligible, uint256 poolBalance) {
+        poolBalance = users[user].rebirthPool;
+        eligible    = poolBalance >= PACKAGE_PRICE;
     }
 
     function getCurrentBinaryPairs(address u) external view returns (uint256 currentPairs, uint256 newPairs) {
         currentPairs = _minOf(users[u].leftSubUsers, users[u].rightSubUsers);
-        newPairs = currentPairs > users[u].matchedPairs ? currentPairs - users[u].matchedPairs : 0;
+        newPairs = currentPairs > users[u].matchedPairs
+            ? currentPairs - users[u].matchedPairs : 0;
     }
 
     function getMvtPrice() external view returns (uint256 buyPrice, uint256 sellPrice) {
@@ -580,9 +700,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         sellPrice = mvaultToken.getSellPrice();
     }
 
-    function getAllUsersCount() external view returns (uint256) {
-        return allUsers.length;
-    }
+    function getAllUsersCount() external view returns (uint256) { return allUsers.length; }
 
     function getPoolBalances() external view returns (
         uint256 binary,
