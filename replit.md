@@ -14,17 +14,20 @@ M-Vault is a Web3 MLM/DeFi platform for BNB Smart Chain. Users connect MetaMask 
 - **Blockchain**: BSC (BNB Smart Chain) — testnet by default
 - **Process manager (VPS)**: PM2
 
-## Smart Contracts (NOT YET DEPLOYED — pending)
+## Smart Contracts
 
-### New System (MvaultContract + MvaultToken)
-- **MvaultContract**: `VITE_MVAULT_CONTRACT_ADDRESS` — main MLM contract
+### New System (MvaultContract + MvaultToken) — BSC TESTNET DEPLOYED
+- **MvaultContract**: `0x35238F0960b86F5c48ee4098ffcB887Fb029168C`
   - $130 USDT activation (single package)
   - 40% level / 30% binary / 30% reserve MVT split
   - 3× income cap ($390), rebirth mechanics
   - 10% of every MVT sell goes to personal BTC pool
   - Address-based registration (sponsor address, binary parent, side)
-- **MvaultToken (MVT)**: `VITE_MVT_TOKEN_ADDRESS` — bonding-curve ERC-20
-  - Buy price rises with supply; sell price = 95% of buy price
+- **MvaultToken (MVT)**: `0x0c4A8271828C760fae1D72cAEE7b12bc8186b6bD`
+  - Bonding-curve ERC-20 (buy price rises with supply)
+  - sell price = 90% of buy price
+  - Deployer: `0x12Fcf3d1084455d3677a110925D73b01F3846750`
+  - Linked: MvaultToken.setMvaultContract(MvaultContract) ✓
 
 ### Legacy (kept for board/swap pages)
 - **MLMContract (old)**: `VITE_CONTRACT_ADDRESS` = `0x6Ff2b61d1882e7a122b09a109F78F5b2E5ef174e`
