@@ -28,7 +28,7 @@ export const MVT_TOKEN_ADDRESS =
 export const TOKEN_ADDRESS =
   import.meta.env.VITE_PAYMENT_TOKEN_ADDRESS || "0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3";
 
-// ── Legacy (old) contract — kept for board/swap/musdt pages ──────────────────
+// ── Legacy (old) contract — kept for board/swap pages ────────────────────────
 export const CONTRACT_ADDRESS =
   import.meta.env.VITE_CONTRACT_ADDRESS || "0x6Ff2b61d1882e7a122b09a109F78F5b2E5ef174e";
 
@@ -86,7 +86,7 @@ export const MVT_ABI = [
   "event PriceUpdated(uint256 newBuyPrice, uint256 newSellPrice)",
 ];
 
-// ── Legacy ABI (for board, swap, musdt pages) ─────────────────────────────────
+// ── Legacy ABI (for board, swap pages) ───────────────────────────────────────
 export const MLM_ABI = [
   "function register(uint256 _sponsorId, uint256 _binaryParentId, bool _placeLeft) external",
   "function activatePackage(uint8 _pkg) external",

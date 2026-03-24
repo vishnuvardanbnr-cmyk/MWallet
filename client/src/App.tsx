@@ -28,7 +28,6 @@ import DeepPlacementPage from "@/pages/deep-placement";
 import StorePage from "@/pages/store";
 import SwapPage from "@/pages/swap";
 import PaidStakingPage from "@/pages/paid-staking";
-import MusdtStakingPage from "@/pages/musdt-staking";
 import SellTokensPage from "@/pages/sell-tokens";
 
 function ScrollToTop() {
@@ -339,9 +338,6 @@ function App() {
                     </Route>
                     <Route path="/paid-staking">
                       <PaidStakingPage account={web3.account!} />
-                    </Route>
-                    <Route path="/musdt-staking">
-                      <MusdtStakingPage account={web3.account!} binaryInfo={web3.binaryInfo} userInfo={web3.userInfo} />
                     </Route>
                     <Route path="/sell-tokens">
                       <SellTokensPage
