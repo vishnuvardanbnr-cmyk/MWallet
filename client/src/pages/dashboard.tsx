@@ -56,6 +56,8 @@ export default function Dashboard({
   const [subAccounts, setSubAccounts] = useState<SubAccountInfo[]>([]);
   const [copiedAddr, setCopiedAddr] = useState<string | null>(null);
 
+  const isSubAccount = userInfo.mainAccount !== ZERO_ADDRESS;
+
   const copyAddr = useCallback((addr: string) => {
     navigator.clipboard.writeText(addr);
     setCopiedAddr(addr);
@@ -123,8 +125,6 @@ export default function Dashboard({
   const rightCount = Number(userInfo.rightSubUsers);
   const currentPairs = Number(binaryPairs.currentPairs);
   const newPairs = Number(binaryPairs.newPairs);
-
-  const isSubAccount = userInfo.mainAccount !== ZERO_ADDRESS;
 
   return (
     <div className="p-4 sm:p-6 space-y-5 relative z-10">
