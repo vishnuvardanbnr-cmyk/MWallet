@@ -1,7 +1,7 @@
-import { useState, useCallback } from "react";
-import { DollarSign, TrendingUp, TrendingDown, Coins, RefreshCw, Copy, User, Users, Wallet, ArrowRight, GitBranch, Zap, Shield, Bitcoin, RotateCcw, Info, ChevronRight } from "lucide-react";
+import { useState, useCallback, useEffect } from "react";
+import { DollarSign, TrendingUp, TrendingDown, Coins, RefreshCw, Copy, User, Users, Wallet, ArrowRight, GitBranch, Zap, Shield, Bitcoin, RotateCcw, Info, ChevronRight, Check, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { formatTokenAmount, shortenAddress } from "@/lib/contract";
+import { formatTokenAmount, shortenAddress, getMvaultContract } from "@/lib/contract";
 import type { UserInfo, MvtPrice, BinaryPairs, ProfileOnChain } from "@/hooks/use-web3";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
@@ -42,6 +42,68 @@ export default function Dashboard({
 }: DashboardProps) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
+
+  // ── Sub-accounts (rebirth) ────────────────────────────────────────────────
+  interface SubAccountInfo {
+    address: string;
+    mvtBalance: bigint;
+    usdtBalance: bigint;
+    incomeLimit: bigint;
+    rebirthCount: bigint;
+    isActive: boolean;
+    rebirthIndex: number;
+  }
+  const [subAccounts, setSubAccounts] = useState<SubAccountInfo[]>([]);
+  const [copiedAddr, setCopiedAddr] = useState<string | null>(null);
+
+  const copyAddr = useCallback((addr: string) => {
+    navigator.clipboard.writeText(addr);
+    setCopiedAddr(addr);
+    toast({ title: "Copied", description: "Address copied to clipboard" });
+    setTimeout(() => setCopiedAddr(null), 2000);
+  }, [toast]);
+
+  useEffect(() => {
+    if (!account || isSubAccount) return;
+    (async () => {
+      try {
+        const provider = new ethers.BrowserProvider((window as any).ethereum);
+        const contract = getMvaultContract(provider);
+        const filter = contract.filters.Reborn(account);
+        let events: any[];
+        try {
+          events = await contract.queryFilter(filter, 0);
+        } catch {
+          const current = await provider.getBlockNumber();
+          events = await contract.queryFilter(filter, Math.max(0, current - 100000));
+        }
+        if (!events.length) { setSubAccounts([]); return; }
+
+        const results: SubAccountInfo[] = [];
+        for (let i = 0; i < events.length; i++) {
+          const subAddr: string = events[i].args?.[1];
+          if (!subAddr) continue;
+          try {
+            const info = await contract.getUserInfo(subAddr);
+            results.push({
+              address: subAddr,
+              mvtBalance: info[10],
+              usdtBalance: info[14],
+              incomeLimit: info[13],
+              rebirthCount: info[20],
+              isActive: info[1],
+              rebirthIndex: i + 1,
+            });
+          } catch {
+            results.push({ address: subAddr, mvtBalance: 0n, usdtBalance: 0n, incomeLimit: 0n, rebirthCount: 0n, isActive: false, rebirthIndex: i + 1 });
+          }
+        }
+        setSubAccounts(results);
+      } catch (e) {
+        console.error("fetchSubAccounts error:", e);
+      }
+    })();
+  }, [account, isSubAccount]);
 
   const buyPriceNum = parseFloat(formatTokenAmount(mvtPrice.buyPrice, 18));
   const sellPriceNum = parseFloat(formatTokenAmount(mvtPrice.sellPrice, 18));
@@ -235,6 +297,111 @@ export default function Dashboard({
               ${(130 - rebirthPoolNum).toFixed(2)} more needed to trigger rebirth ($130 required)
             </p>
           )}
+        </div>
+      )}
+
+      {/* My Accounts — sub-account list (main account view) */}
+      {!isSubAccount && subAccounts.length > 0 && (
+        <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.075s" }} data-testid="card-my-accounts">
+          <div className="flex items-center gap-2.5 mb-4">
+            <div className="h-9 w-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
+              <RotateCcw className="h-4.5 w-4.5 text-purple-400" />
+            </div>
+            <div>
+              <p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>My Rebirth Accounts</p>
+              <p className="text-[10px] text-muted-foreground">{subAccounts.length} sub-account{subAccounts.length !== 1 ? "s" : ""} — switch wallet in MetaMask to operate</p>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            {subAccounts.map((sub) => (
+              <div key={sub.address} className="rounded-xl border border-purple-500/15 bg-purple-500/[0.04] p-3" data-testid={`card-subaccount-${sub.rebirthIndex}`}>
+                <div className="flex items-center justify-between mb-2.5">
+                  <div className="flex items-center gap-2">
+                    <div className="h-7 w-7 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                      <User className="h-3.5 w-3.5 text-purple-400" />
+                    </div>
+                    <div>
+                      <p className="text-[10px] font-semibold text-purple-300" style={{ fontFamily: "var(--font-display)" }}>
+                        Rebirth #{sub.rebirthIndex}
+                      </p>
+                      <p className="text-[9px] font-mono text-muted-foreground">{shortenAddress(sub.address)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <Badge variant="outline" className={`text-[9px] ${sub.isActive ? "border-emerald-500/30 text-emerald-400" : "border-muted/30 text-muted-foreground"}`}>
+                      {sub.isActive ? "Active" : "Inactive"}
+                    </Badge>
+                    <button
+                      onClick={() => copyAddr(sub.address)}
+                      className="p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors"
+                      title="Copy address"
+                      data-testid={`button-copy-subaccount-${sub.rebirthIndex}`}
+                    >
+                      {copiedAddr === sub.address
+                        ? <Check className="h-3.5 w-3.5 text-emerald-400" />
+                        : <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+                      }
+                    </button>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="text-center rounded-lg bg-white/[0.02] p-2">
+                    <p className="text-[9px] text-muted-foreground mb-0.5">MVT</p>
+                    <p className="text-[11px] font-bold text-amber-300" style={{ fontFamily: "var(--font-display)" }}>
+                      {parseFloat(formatTokenAmount(sub.mvtBalance, 18)).toFixed(1)}
+                    </p>
+                  </div>
+                  <div className="text-center rounded-lg bg-white/[0.02] p-2">
+                    <p className="text-[9px] text-muted-foreground mb-0.5">USDT</p>
+                    <p className="text-[11px] font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }}>
+                      ${parseFloat(formatTokenAmount(sub.usdtBalance, 18)).toFixed(2)}
+                    </p>
+                  </div>
+                  <div className="text-center rounded-lg bg-white/[0.02] p-2">
+                    <p className="text-[9px] text-muted-foreground mb-0.5">Limit</p>
+                    <p className="text-[11px] font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }}>
+                      ${parseFloat(formatTokenAmount(sub.incomeLimit, 18)).toFixed(0)}
+                    </p>
+                  </div>
+                </div>
+
+                <p className="text-[9px] text-muted-foreground/60 mt-2 text-center">
+                  Switch MetaMask to <span className="font-mono text-purple-300/80">{sub.address.slice(0, 10)}…</span> to operate this account
+                </p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Sub-account banner — "go back to main" */}
+      {isSubAccount && (
+        <div className="glass-card rounded-2xl p-4 slide-in border border-amber-500/20" style={{ animationDelay: "0.075s" }} data-testid="card-main-account-link">
+          <div className="flex items-center gap-2.5">
+            <div className="h-8 w-8 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0">
+              <ExternalLink className="h-4 w-4 text-amber-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-xs font-semibold text-amber-300" style={{ fontFamily: "var(--font-display)" }}>Rebirth Sub-Account</p>
+              <p className="text-[10px] text-muted-foreground">Main account: <span className="font-mono">{shortenAddress(userInfo.mainAccount)}</span></p>
+            </div>
+            <button
+              onClick={() => copyAddr(userInfo.mainAccount)}
+              className="p-1.5 rounded-lg hover:bg-white/[0.06] transition-colors shrink-0"
+              title="Copy main account address"
+              data-testid="button-copy-main-account"
+            >
+              {copiedAddr === userInfo.mainAccount
+                ? <Check className="h-3.5 w-3.5 text-emerald-400" />
+                : <Copy className="h-3.5 w-3.5 text-muted-foreground" />
+              }
+            </button>
+          </div>
+          <p className="text-[9px] text-muted-foreground/60 mt-2">
+            To switch back to your main account, change to the main wallet address in MetaMask.
+          </p>
         </div>
       )}
 
