@@ -101,7 +101,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
     // ── Events ────────────────────────────────────────────────────────────────
     event Registered(address indexed user, address indexed sponsor, address indexed binaryParent, bool placeLeft);
-    event Activated(address indexed user, uint256 mvtMinted, uint256 levelAmt, uint256 binaryAmt, uint256 reserveAmt);
+    event Activated(address indexed user, uint256 mvtMinted, uint256 grossMvt, uint256 levelAmt, uint256 binaryAmt, uint256 reserveAmt);
     event LevelIncomePaid(address indexed to, address indexed from, uint8 level, uint256 amount);
     event LevelIncomeSkipped(address indexed upline, uint8 level, uint256 amount);
     event BinaryIncomeDistributed(uint256 totalPool, uint256 binary70, uint256 powerLeg30, uint256 totalPairs);
@@ -227,6 +227,12 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     /**
      * @notice Pay $130 USDT and activate. Mints MVT and distributes income.
      *         Caller must have pre-approved this contract for PACKAGE_PRICE USDT.
+     *
+     * Distribution basis is the GROSS calculated MVT (before the token contract's
+     * 10% mint deduction), so all income percentages are applied to the full
+     * 1,300 MVT figure.  The actual MVT held by this contract is 1,170 MVT (90%).
+     * Virtual balances may therefore slightly exceed real holdings, which is covered
+     * by the continuous growth of the liquidity pool.
      */
     function activate() external nonReentrant {
         User storage u = users[msg.sender];
@@ -237,45 +243,52 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         bool ok = usdtToken.transferFrom(msg.sender, address(this), PACKAGE_PRICE);
         if (!ok) revert TransferFailed();
 
+        // ── Snapshot buy price BEFORE minting (price changes after) ──────────
+        uint256 buyPrice = mvaultToken.getBuyPrice();
+
+        // Gross MVT = what $130 would buy at current price (e.g. 1,300 at 0.1 USDT)
+        // This is the basis for ALL income distribution.
+        uint256 grossMvt = (PACKAGE_PRICE * 1e18) / buyPrice;
+
         // ── Approve MvaultToken to spend USDT and mint ───────────────────────
         usdtToken.approve(address(mvaultToken), PACKAGE_PRICE);
 
         uint256 before = mvaultToken.balanceOf(address(this));
         mvaultToken.addLiquidityAndMint(address(this), PACKAGE_PRICE);
-        uint256 minted = mvaultToken.balanceOf(address(this)) - before;
+        uint256 minted = mvaultToken.balanceOf(address(this)) - before; // actual 90%
 
-        // ── Split minted MVT ─────────────────────────────────────────────────
-        uint256 levelAmt  = (minted * LEVEL_ALLOC)  / 100;   // 40%
-        uint256 binaryAmt = (minted * BINARY_ALLOC) / 100;   // 30%
-        uint256 reserveAmt = minted - levelAmt - binaryAmt;  // 30%
+        // ── Split based on GROSS MVT (1,300) not net minted (1,170) ──────────
+        uint256 levelAmt   = (grossMvt * LEVEL_ALLOC)  / 100;   // 40% of 1,300 = 520
+        uint256 binaryAmt  = (grossMvt * BINARY_ALLOC) / 100;   // 30% of 1,300 = 390
+        uint256 reserveAmt = grossMvt - levelAmt - binaryAmt;   // 30% of 1,300 = 390
 
         binaryPool  += binaryAmt;
         reservePool += reserveAmt;
 
         u.isActive = true;
 
-        // ── Distribute level income ──────────────────────────────────────────
-        _distributeLevelIncome(msg.sender, minted, levelAmt);
+        // ── Distribute level income (from gross basis) ───────────────────────
+        _distributeLevelIncome(msg.sender, grossMvt, levelAmt);
 
-        emit Activated(msg.sender, minted, levelAmt, binaryAmt, reserveAmt);
+        emit Activated(msg.sender, minted, grossMvt, levelAmt, binaryAmt, reserveAmt);
     }
 
     /**
      * @dev Walk up 15 sponsor levels and credit level income.
-     *      Each level's share = minted × rate.
-     *      Total of all rates = 40% = levelAmt, so no rounding pool needed.
+     *      Each level's share = grossMvt × rate.
+     *      Rates sum to exactly 40% = levelAmt, dust goes to adminPool.
      *      Unqualified shares go to adminPool.
      */
     function _distributeLevelIncome(
         address from,
-        uint256 minted,
+        uint256 grossMvt,
         uint256 levelAmt
     ) internal {
         address cur = users[from].sponsor;
         uint256 distributed = 0;
 
         for (uint8 lvl = 1; lvl <= 15 && cur != address(0); lvl++) {
-            uint256 share = _levelShare(minted, lvl);
+            uint256 share = _levelShare(grossMvt, lvl);
             if (share == 0) { cur = users[cur].sponsor; continue; }
 
             distributed += share;
