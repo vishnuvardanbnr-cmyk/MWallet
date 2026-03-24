@@ -3,7 +3,7 @@ import { User, Mail, Phone, Globe, Wallet, Loader2, Save, Users, Copy, Check, Sh
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { shortenAddress, getMlmContract } from "@/lib/contract";
+import { shortenAddress, getMvaultContract } from "@/lib/contract";
 import { ethers } from "ethers";
 import type { UserInfo } from "@/hooks/use-web3";
 
@@ -37,8 +37,8 @@ export default function Settings({ account, userInfo, profileOnChain, saveProfil
     (async () => {
       try {
         const provider = new ethers.BrowserProvider((window as any).ethereum);
-        const mlm = getMlmContract(provider);
-        const [displayName, email, , , profileSet] = await mlm.getProfile(userInfo.sponsor);
+        const contract = getMvaultContract(provider);
+        const [displayName, email, , , profileSet] = await contract.getProfile(userInfo.sponsor);
         if (profileSet) {
           if (displayName) setSponsorName(displayName);
           if (email) setSponsorEmail(email);

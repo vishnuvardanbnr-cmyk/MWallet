@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
 import {
-  getMvaultContract, getTokenContract, getMlmContract,
+  getMvaultContract, getTokenContract,
   MVAULT_CONTRACT_ADDRESS, TOKEN_ADDRESS,
   NETWORK, formatTokenAmount,
 } from "@/lib/contract";
@@ -184,10 +184,9 @@ export function useWeb3() {
           setBinaryPairs({ currentPairs: curr, newPairs: newP });
         } catch { }
 
-        // Profile from MLM contract (on-chain)
+        // Profile from new MvaultContract (on-chain)
         try {
-          const mlm = getMlmContract(provider);
-          const [displayName, email, phone, country, profileSet] = await mlm.getProfile(address);
+          const [displayName, email, phone, country, profileSet] = await contract.getProfile(address);
           setProfileOnChain({ displayName, email, phone, country, profileSet });
         } catch {
           setProfileOnChain(null);
@@ -293,15 +292,15 @@ export function useWeb3() {
     await fetchUserData();
   }, [getSigner, fetchUserData]);
 
-  // ── Profile (on-chain via MLMContract) ─────────────────────────────────────
+  // ── Profile (on-chain via MvaultContract) ──────────────────────────────────
 
   const saveProfileOnChain = useCallback(async (
     displayName: string, email: string, phone: string, country: string,
   ) => {
     if (!account) return;
     const signer = await getSigner();
-    const mlm = getMlmContract(signer);
-    const tx = await mlm.setProfile(displayName, email, phone, country);
+    const contract = getMvaultContract(signer);
+    const tx = await contract.setProfile(displayName, email, phone, country);
     await tx.wait();
     setProfileOnChain({ displayName, email, phone, country, profileSet: true });
   }, [account, getSigner]);

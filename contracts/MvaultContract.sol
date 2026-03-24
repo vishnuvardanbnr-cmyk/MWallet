@@ -103,6 +103,12 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 rebirthCount;
         // Meta
         uint256 joinedAt;
+        // Profile
+        string  displayName;
+        string  email;
+        string  phone;
+        string  country;
+        bool    profileSet;
     }
 
     mapping(address => User) public users;
@@ -130,6 +136,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     event BtcPoolWithdrawn(address indexed user, uint256 amount);
     event UsdtWithdrawn(address indexed user, uint256 amount);
     event Reborn(address indexed mainAccount, address indexed subAccount, uint256 rebirthIndex);
+    event ProfileUpdated(address indexed user);
     event MvaultTokenUpdated(address newToken);
     event AdminWithdraw(address indexed to, uint256 amount);
     event ReserveWithdraw(address indexed to, uint256 amount);
@@ -769,6 +776,37 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
     function getMvtContractBalance() external view returns (uint256) {
         return mvaultToken.balanceOf(address(this));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // PROFILE
+    // ─────────────────────────────────────────────────────────────────────────
+
+    function setProfile(
+        string calldata _displayName,
+        string calldata _email,
+        string calldata _phone,
+        string calldata _country
+    ) external {
+        require(users[msg.sender].isRegistered, "Not registered");
+        User storage u = users[msg.sender];
+        u.displayName = _displayName;
+        u.email       = _email;
+        u.phone       = _phone;
+        u.country     = _country;
+        u.profileSet  = true;
+        emit ProfileUpdated(msg.sender);
+    }
+
+    function getProfile(address _user) external view returns (
+        string memory displayName,
+        string memory email,
+        string memory phone,
+        string memory country,
+        bool profileSet
+    ) {
+        User storage u = users[_user];
+        return (u.displayName, u.email, u.phone, u.country, u.profileSet);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

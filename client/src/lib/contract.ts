@@ -45,6 +45,9 @@ export const MVAULT_ABI = [
   "function withdrawBtcPool(uint256 amount) external",
   // Rebirth
   "function rebirth(address subAccount, bool placeLeft) external",
+  // Profile
+  "function setProfile(string _displayName, string _email, string _phone, string _country) external",
+  "function getProfile(address _user) view returns (string displayName, string email, string phone, string country, bool profileSet)",
   // Views
   "function getUserInfo(address u) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubUsers, uint256 rightSubUsers, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 btcPoolBalance, uint256 powerLegPoints, uint256 matchedPairs, address mainAccount, uint256 rebirthCount, uint256 joinedAt)",
   "function getBtcPoolInfo(address u) view returns (uint256 btcPoolBalance, uint256 totalBtcEarned)",
