@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
 import {
-  getMvaultContract, getTokenContract,
+  getMvaultContract, getTokenContract, getMlmContract,
   MVAULT_CONTRACT_ADDRESS, TOKEN_ADDRESS,
   NETWORK, formatTokenAmount,
 } from "@/lib/contract";
@@ -184,21 +184,11 @@ export function useWeb3() {
           setBinaryPairs({ currentPairs: curr, newPairs: newP });
         } catch { }
 
-        // Profile from backend
+        // Profile from MLM contract (on-chain)
         try {
-          const res = await fetch(`/api/profiles/${address.toLowerCase()}`);
-          if (res.ok) {
-            const p = await res.json();
-            setProfileOnChain({
-              displayName: p.displayName || "",
-              email:       p.email || "",
-              phone:       p.phone || "",
-              country:     p.country || "",
-              profileSet:  true,
-            });
-          } else {
-            setProfileOnChain(null);
-          }
+          const mlm = getMlmContract(provider);
+          const [displayName, email, phone, country, profileSet] = await mlm.getProfile(address);
+          setProfileOnChain({ displayName, email, phone, country, profileSet });
         } catch {
           setProfileOnChain(null);
         }
@@ -303,23 +293,18 @@ export function useWeb3() {
     await fetchUserData();
   }, [getSigner, fetchUserData]);
 
-  // ── Profile (backend-only, no on-chain) ────────────────────────────────────
+  // ── Profile (on-chain via MLMContract) ─────────────────────────────────────
 
   const saveProfileOnChain = useCallback(async (
     displayName: string, email: string, phone: string, country: string,
   ) => {
     if (!account) return;
-    const res = await fetch("/api/profiles", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ walletAddress: account.toLowerCase(), displayName, email, phone, country }),
-    });
-    if (!res.ok) {
-      const d = await res.json().catch(() => ({}));
-      throw new Error(d.message || "Failed to save profile");
-    }
+    const signer = await getSigner();
+    const mlm = getMlmContract(signer);
+    const tx = await mlm.setProfile(displayName, email, phone, country);
+    await tx.wait();
     setProfileOnChain({ displayName, email, phone, country, profileSet: true });
-  }, [account]);
+  }, [account, getSigner]);
 
   // ── Direct referrals (via events) ──────────────────────────────────────────
 

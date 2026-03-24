@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -114,36 +114,21 @@ function LoadingScreen() {
 function App() {
   const web3 = useWeb3();
   const [hasProfile, setHasProfile] = useState<boolean | null>(null);
-  const [profileLoading, setProfileLoading] = useState(false);
-
-  const checkProfile = useCallback(async (walletAddress: string) => {
-    setProfileLoading(true);
-    try {
-      const res = await fetch(`/api/profiles/${walletAddress.toLowerCase()}`);
-      setHasProfile(res.ok);
-    } catch {
-      setHasProfile(false);
-    } finally {
-      setProfileLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
-    if (web3.account && web3.isRegistered && web3.profileOnChain) {
-      setHasProfile(web3.profileOnChain.profileSet);
-    } else if (web3.account && web3.isRegistered) {
-      checkProfile(web3.account);
+    if (web3.account && web3.isRegistered) {
+      setHasProfile(web3.profileOnChain?.profileSet ?? false);
     } else {
       setHasProfile(null);
     }
-  }, [web3.account, web3.isRegistered, web3.profileOnChain, checkProfile]);
+  }, [web3.account, web3.isRegistered, web3.profileOnChain]);
 
   const disconnect = () => window.location.reload();
 
   const getFlowStep = () => {
     if (!web3.account) return "connect";
     const isInitialLoad = !web3.initialLoaded;
-    if ((isInitialLoad && web3.loading) || profileLoading || (web3.isRegistered && hasProfile === null)) return "loading";
+    if ((isInitialLoad && web3.loading) || (web3.isRegistered && hasProfile === null)) return "loading";
     if (!web3.isRegistered) return "register";
     if (!web3.userInfo || !web3.userInfo.isActive) return "activate";
     if (!hasProfile) return "profile";

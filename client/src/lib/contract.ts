@@ -177,6 +177,8 @@ export function getContract(signerOrProvider: ethers.Signer | ethers.Provider) {
   return new ethers.Contract(CONTRACT_ADDRESS, MLM_ABI, signerOrProvider);
 }
 
+export const getMlmContract = getContract;
+
 export function getBoardHandlerContract(signerOrProvider: ethers.Signer | ethers.Provider) {
   return new ethers.Contract(BOARD_HANDLER_ADDRESS, BOARD_HANDLER_ABI, signerOrProvider);
 }

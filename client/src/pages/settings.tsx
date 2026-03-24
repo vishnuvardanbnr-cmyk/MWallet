@@ -3,7 +3,8 @@ import { User, Mail, Phone, Globe, Wallet, Loader2, Save, Users, Copy, Check, Sh
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { shortenAddress } from "@/lib/contract";
+import { shortenAddress, getMlmContract } from "@/lib/contract";
+import { ethers } from "ethers";
 import type { UserInfo } from "@/hooks/use-web3";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
@@ -35,11 +36,12 @@ export default function Settings({ account, userInfo, profileOnChain, saveProfil
     setSponsorLoading(true);
     (async () => {
       try {
-        const res = await fetch(`/api/profiles/${userInfo.sponsor.toLowerCase()}`);
-        if (res.ok) {
-          const p = await res.json();
-          if (p.displayName) setSponsorName(p.displayName);
-          if (p.email) setSponsorEmail(p.email);
+        const provider = new ethers.BrowserProvider((window as any).ethereum);
+        const mlm = getMlmContract(provider);
+        const [displayName, email, , , profileSet] = await mlm.getProfile(userInfo.sponsor);
+        if (profileSet) {
+          if (displayName) setSponsorName(displayName);
+          if (email) setSponsorEmail(email);
         }
       } catch {}
       setSponsorLoading(false);
