@@ -63,10 +63,11 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     IMvaultToken  public           mvaultToken;
 
     // ── Constants ─────────────────────────────────────────────────────────────
-    uint256 public constant PACKAGE_PRICE = 130 * 1e18; // $130 USDT (18 decimals)
-    uint256 public constant INCOME_LIMIT  = 390 * 1e18; // 3 × $130 per activation cycle
-    uint256 public constant LEVEL_ALLOC   = 40;         // % of gross MVT → level income
-    uint256 public constant BINARY_ALLOC  = 30;         // % of gross MVT → binary pool
+    uint256 public constant PACKAGE_PRICE  = 130 * 1e18; // $130 USDT (18 decimals)
+    uint256 public constant INCOME_LIMIT   = 390 * 1e18; // 3 × $130 per activation cycle
+    uint256 public constant LEVEL_ALLOC    = 40;          // % of gross MVT → level income
+    uint256 public constant BINARY_ALLOC   = 30;          // % of gross MVT → binary pool
+    uint256 public constant BTC_POOL_RATE  = 10;          // % of sell USDT → user BTC pool
 
     // ── User record ───────────────────────────────────────────────────────────
     struct User {
@@ -92,6 +93,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 usdtBalance;      // withdrawable USDT
         uint256 rebirthPool;      // USDT accumulating toward next rebirth
         uint256 totalUsdtEarned;  // lifetime USDT received to usdtBalance
+        // BTC pool (10% deducted from every sell, per user — like backup contract)
+        uint256 btcPoolBalance;   // accumulated USDT for BTC purchase
+        uint256 totalBtcEarned;   // lifetime BTC pool credits
         // Power leg (resets each cycle)
         uint256 powerLegPoints;
         // Rebirth
@@ -121,7 +125,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     event LevelIncomeSkipped(address indexed upline, uint8 level, uint256 amount);
     event BinaryIncomeDistributed(uint256 totalPool, uint256 binary70, uint256 powerLeg30, uint256 totalPairs);
     event PowerLegDistributed(uint256 totalPowerLeg30, uint256 totalPowerLegs);
-    event MvtSold(address indexed user, uint256 mvtAmount, uint256 usdtToIncome, uint256 usdtToRebirth);
+    event MvtSold(address indexed user, uint256 mvtAmount, uint256 usdtNet, uint256 usdtToBtcPool, uint256 usdtToIncome, uint256 usdtToRebirth);
+    event BtcPoolCredited(address indexed user, uint256 amount);
+    event BtcPoolWithdrawn(address indexed user, uint256 amount);
     event UsdtWithdrawn(address indexed user, uint256 amount);
     event Reborn(address indexed mainAccount, address indexed subAccount, uint256 rebirthIndex);
     event MvaultTokenUpdated(address newToken);
@@ -136,6 +142,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     error PositionTaken();
     error InsufficientVirtualBalance();
     error InsufficientUsdtBalance();
+    error InsufficientBtcPool();
     error InsufficientRebirthPool();
     error NoOpenBinarySlot();
     error ZeroAddress();
@@ -369,22 +376,31 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         mvaultToken.sell(amount);
         uint256 usdtReceived = usdtToken.balanceOf(address(this)) - usdtBefore;
 
+        // ── Deduct 10% to user's BTC pool first ──────────────────────────────
+        uint256 btcCharge = (usdtReceived * BTC_POOL_RATE) / 100;
+        uint256 netUsdt   = usdtReceived - btcCharge;
+
+        u.btcPoolBalance += btcCharge;
+        u.totalBtcEarned += btcCharge;
+        emit BtcPoolCredited(msg.sender, btcCharge);
+
+        // ── Route remaining 90% through income limit → rebirth pool ──────────
         uint256 toIncome  = 0;
         uint256 toRebirth = 0;
 
         if (u.incomeLimit > 0) {
-            toIncome  = usdtReceived > u.incomeLimit ? u.incomeLimit : usdtReceived;
-            toRebirth = usdtReceived - toIncome;
+            toIncome  = netUsdt > u.incomeLimit ? u.incomeLimit : netUsdt;
+            toRebirth = netUsdt - toIncome;
             u.usdtBalance     += toIncome;
             u.incomeLimit     -= toIncome;
             u.totalUsdtEarned += toIncome;
         } else {
-            toRebirth = usdtReceived;
+            toRebirth = netUsdt;
         }
 
         u.rebirthPool += toRebirth;
 
-        emit MvtSold(msg.sender, amount, toIncome, toRebirth);
+        emit MvtSold(msg.sender, amount, netUsdt, btcCharge, toIncome, toRebirth);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -407,25 +423,37 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // WITHDRAW BTC POOL
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Withdraw from your BTC pool balance.
+     *         The USDT is sent to your wallet; the frontend/app handles BTC swap.
+     *         10% of every sell accumulates here (same as backup contract pattern).
+     */
+    function withdrawBtcPool(uint256 amount) external nonReentrant {
+        if (amount == 0) revert ZeroAmount();
+        User storage u = users[msg.sender];
+        if (u.btcPoolBalance < amount) revert InsufficientBtcPool();
+
+        u.btcPoolBalance -= amount;
+        bool ok = usdtToken.transfer(msg.sender, amount);
+        if (!ok) revert TransferFailed();
+
+        emit BtcPoolWithdrawn(msg.sender, amount);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // REBIRTH
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * @notice Create a rebirth sub-account when rebirthPool ≥ $130.
-     *
-     * What happens:
-     *   1. $130 deducted from rebirthPool → funds the sub-account activation.
-     *   2. $130 deducted from rebirthPool → credited to main account usdtBalance.
-     *      (If rebirthPool after step 1 < $130, only what remains is credited.)
-     *   3. Main account incomeLimit resets to $390.
-     *   4. Sub-account registered with sponsor = main account's sponsor
-     *      (so sub's L1 income goes to the person who referred the main account).
-     *   5. Sub-account placed in binary tree via BFS from main account.
-     *   6. Sub-account activated — same distributions as a normal activation.
-     *
-     * @param subAccount  A fresh (unregistered) wallet address for the sub-account.
+     * @param subAccount  Fresh (unregistered) wallet address for the sub-account.
+     * @param placeLeft   true = place sub-account on LEFT side of the open slot,
+     *                    false = RIGHT side.  Tries directly under main account first;
+     *                    if that side is taken, searches deeper on the chosen side (BFS).
      */
-    function rebirth(address subAccount) external nonReentrant {
+    function rebirth(address subAccount, bool placeLeft) external nonReentrant {
         if (subAccount == address(0)) revert ZeroAddress();
 
         User storage u = users[msg.sender];
@@ -436,7 +464,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         // ── 1. Deduct $130 for activation ────────────────────────────────────
         u.rebirthPool -= PACKAGE_PRICE;
 
-        // ── 2. Credit $130 to main wallet (capped at what's left in pool) ────
+        // ── 2. Credit $130 to main wallet (capped at what remains in pool) ───
         uint256 mainCredit = u.rebirthPool >= PACKAGE_PRICE
             ? PACKAGE_PRICE
             : u.rebirthPool;
@@ -448,23 +476,23 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         u.incomeLimit = INCOME_LIMIT;
 
         // ── 4. Register sub-account ───────────────────────────────────────────
-        // Sponsor = main account's sponsor so sub-account's L1 goes to
+        // Sponsor = main account's sponsor → sub-account's L1 income goes to
         // the person who originally referred the main account.
         address subSponsor = u.sponsor;
 
-        // Find nearest open binary slot starting from main account (BFS)
-        (address binParent, bool goLeft) = _findOpenBinarySlot(msg.sender);
+        // Place on the user's chosen side under main account.
+        // If that slot is already taken, BFS deeper on the same preferred side.
+        (address binParent, bool actualLeft) = _findSlotOnSide(msg.sender, placeLeft);
 
-        _createUser(subAccount, subSponsor, binParent, goLeft, msg.sender);
+        _createUser(subAccount, subSponsor, binParent, actualLeft, msg.sender);
 
-        if (goLeft) users[binParent].leftChild  = subAccount;
-        else        users[binParent].rightChild = subAccount;
+        if (actualLeft) users[binParent].leftChild  = subAccount;
+        else            users[binParent].rightChild = subAccount;
 
         if (subSponsor != address(0)) users[subSponsor].directCount++;
         _updateAncestorCounts(subAccount);
 
-        // ── 5 & 6. Activate sub-account using contract's USDT ────────────────
-        // Contract already holds the $130 USDT (deducted from rebirthPool above).
+        // ── 5 & 6. Activate sub-account (USDT already in contract) ───────────
         _doActivate(subAccount);
 
         u.rebirthCount++;
@@ -473,26 +501,43 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev BFS from `start` to find the first node with an open left or right child slot.
-     *      Gas cost grows with tree size — acceptable for infrequent rebirth calls.
+     * @dev BFS from `start`, searching only on the preferred side first.
+     *      If the preferred side's slot is open at `start`, returns immediately.
+     *      Otherwise explores deeper on the preferred side; falls back to other side
+     *      if the preferred subtree is completely full.
      */
-    function _findOpenBinarySlot(address start)
+    function _findSlotOnSide(address start, bool preferLeft)
         internal
         view
         returns (address parent, bool goLeft)
     {
+        // Check direct slot under `start` first
+        if (preferLeft  && users[start].leftChild  == address(0)) return (start, true);
+        if (!preferLeft && users[start].rightChild == address(0)) return (start, false);
+
+        // BFS deeper, honouring the preferred side
         address[] memory queue = new address[](totalUsers + 1);
         uint256 front = 0;
         uint256 back  = 0;
-        queue[back++] = start;
+
+        // Seed with the preferred child subtree
+        address preferredChild = preferLeft
+            ? users[start].leftChild
+            : users[start].rightChild;
+        if (preferredChild != address(0)) queue[back++] = preferredChild;
 
         while (front < back) {
             address cur = queue[front++];
             if (users[cur].leftChild  == address(0)) return (cur, true);
             if (users[cur].rightChild == address(0)) return (cur, false);
-            if (users[cur].leftChild  != address(0)) queue[back++] = users[cur].leftChild;
-            if (users[cur].rightChild != address(0)) queue[back++] = users[cur].rightChild;
+            queue[back++] = users[cur].leftChild;
+            queue[back++] = users[cur].rightChild;
         }
+
+        // Fallback: check the other side of `start`
+        if (!preferLeft && users[start].leftChild  == address(0)) return (start, true);
+        if (preferLeft  && users[start].rightChild == address(0)) return (start, false);
+
         revert NoOpenBinarySlot();
     }
 
@@ -663,6 +708,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 incomeLimit,
         uint256 usdtBalance,
         uint256 rebirthPool,
+        uint256 btcPoolBalance,
         uint256 powerLegPoints,
         uint256 matchedPairs,
         address mainAccount,
@@ -676,9 +722,20 @@ contract MvaultContract is Ownable, ReentrancyGuard {
             d.leftSubUsers, d.rightSubUsers,
             d.mvtBalance, d.totalReceived, d.totalSold,
             d.incomeLimit, d.usdtBalance, d.rebirthPool,
+            d.btcPoolBalance,
             d.powerLegPoints, d.matchedPairs,
             d.mainAccount, d.rebirthCount, d.joinedAt
         );
+    }
+
+    /**
+     * @notice Returns BTC pool details for a user.
+     */
+    function getBtcPoolInfo(address u) external view returns (
+        uint256 btcPoolBalance,
+        uint256 totalBtcEarned
+    ) {
+        return (users[u].btcPoolBalance, users[u].totalBtcEarned);
     }
 
     /**
