@@ -36,6 +36,24 @@ export const DEPOSIT_ADMIN_WALLET = "0x127323b3053a901620f8d461c88fc6a7d9c7de2e"
 
 // ── MvaultContract ABI ────────────────────────────────────────────────────────
 export const MVAULT_ABI = [
+  // Custom errors — required for Ethers v6 to decode revert reasons
+  "error AlreadyRegistered()",
+  "error NotRegistered()",
+  "error AlreadyActive()",
+  "error InvalidSponsor()",
+  "error PositionTaken()",
+  "error InsufficientVirtualBalance()",
+  "error InsufficientUsdtBalance()",
+  "error InsufficientBtcPool()",
+  "error InsufficientRebirthPool()",
+  "error NoOpenBinarySlot()",
+  "error ZeroAddress()",
+  "error ZeroAmount()",
+  "error TransferFailed()",
+  "error BinaryNotDistributed()",
+  "error BinaryAlreadyDistributed()",
+  "error BoardHandlerNotSet()",
+  "error InsufficientBtcPoolForBoard()",
   // Registration & activation
   "function register(address sponsor, address binaryParent, bool placeLeft) external",
   "function activate() external",
@@ -57,6 +75,7 @@ export const MVAULT_ABI = [
   "function getMvtPrice() view returns (uint256 buyPrice, uint256 sellPrice)",
   "function totalUsers() view returns (uint256)",
   "function getAllUsersCount() view returns (uint256)",
+  "function getDirectReferralsPaginated(address _user, uint256 _offset, uint256 _limit) view returns (address[] referrals, uint256 total)",
   "function getPoolBalances() view returns (uint256 binary, uint256 reserve, uint256 admin)",
   "function getMvtContractBalance() view returns (uint256)",
   "function getTransactions(address user, uint256 offset, uint256 limit) view returns (tuple(uint8 txType, uint32 ts, uint256 amount, uint8 level, address addr)[] records, uint256 total)",
@@ -238,6 +257,41 @@ export function parseTokenAmount(amount: string, decimals: number = 18): bigint 
 export function shortenAddress(addr: string): string {
   if (!addr) return "";
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
+}
+
+// ── Contract error decoder ────────────────────────────────────────────────────
+// Maps Ethers v6 custom error names to user-friendly messages.
+const CONTRACT_ERROR_MESSAGES: Record<string, string> = {
+  AlreadyRegistered:          "This wallet is already registered.",
+  NotRegistered:              "This wallet is not registered.",
+  AlreadyActive:              "Your account is already activated.",
+  InvalidSponsor:             "Invalid sponsor address — they must be a registered member.",
+  PositionTaken:              "That binary tree position is already taken. Try the other side.",
+  InsufficientVirtualBalance: "Insufficient MVT balance.",
+  InsufficientUsdtBalance:    "Insufficient USDT balance.",
+  InsufficientBtcPool:        "Insufficient BTC pool balance.",
+  InsufficientRebirthPool:    "Insufficient rebirth pool balance ($130 needed).",
+  NoOpenBinarySlot:           "No open slot found in the binary tree.",
+  ZeroAddress:                "Invalid address provided.",
+  ZeroAmount:                 "Amount must be greater than zero.",
+  TransferFailed:             "Token transfer failed. Check your balance and approval.",
+  BinaryNotDistributed:       "Binary income not yet distributed by admin.",
+  BinaryAlreadyDistributed:   "Binary income already distributed.",
+  BoardHandlerNotSet:         "Board module not configured yet.",
+  InsufficientBtcPoolForBoard:"Insufficient BTC pool balance to enter the board.",
+};
+
+export function decodeContractError(err: any): string {
+  // Ethers v6: custom errors set err.errorName when the error is in the ABI
+  if (err?.errorName && CONTRACT_ERROR_MESSAGES[err.errorName]) {
+    return CONTRACT_ERROR_MESSAGES[err.errorName];
+  }
+  // User rejected the transaction
+  if (err?.code === "ACTION_REJECTED" || err?.code === 4001) {
+    return "Transaction was rejected in your wallet.";
+  }
+  // Fallback chain
+  return err?.reason || err?.shortMessage || err?.message || "Transaction failed. Please try again.";
 }
 
 export const PACKAGE_NAMES = ["None", "Starter", "Basic", "Pro", "Elite", "Stockiest", "Super Stockiest"];

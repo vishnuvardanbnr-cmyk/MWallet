@@ -5,7 +5,7 @@ import {
   Loader2, LogOut, UserPlus, Wallet, CheckCircle2, X,
   AlertCircle, Shield, ArrowRight, Users,
 } from "lucide-react";
-import { shortenAddress, getMvaultContract, MVAULT_CONTRACT_ADDRESS } from "@/lib/contract";
+import { shortenAddress, getMvaultContract, MVAULT_CONTRACT_ADDRESS, decodeContractError } from "@/lib/contract";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { ethers } from "ethers";
@@ -125,8 +125,7 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
       await register(sponsor, binaryParent || sponsor, selectedSide);
       toast({ title: "Registered!", description: "You are now registered. Please activate your account." });
     } catch (err: any) {
-      const msg = err?.reason || err?.shortMessage || err?.message || "Registration failed";
-      toast({ title: "Registration Failed", description: msg.slice(0, 150), variant: "destructive" });
+      toast({ title: "Registration Failed", description: decodeContractError(err), variant: "destructive" });
     } finally { setLoading(false); }
   };
 
