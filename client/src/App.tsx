@@ -32,7 +32,7 @@ import RegisterForPage from "@/pages/register-for";
 import SellTokensPage from "@/pages/sell-tokens";
 
 function ScrollToTop() {
-  const [location] = useLocation();
+  const [location, setLocation] = useLocation();
   useEffect(() => {
     window.scrollTo(0, 0);
     const main = document.querySelector("main");
@@ -115,6 +115,7 @@ function LoadingScreen() {
 function App() {
   const web3 = useWeb3();
   const [hasProfile, setHasProfile] = useState<boolean | null>(null);
+  const [, navigate] = useLocation();
 
   useEffect(() => {
     if (web3.account && web3.isRegistered) {
@@ -192,7 +193,7 @@ function App() {
         <ProfileSetupPage
           account={web3.account!}
           saveProfileOnChain={web3.saveProfileOnChain}
-          onComplete={() => setHasProfile(true)}
+          onComplete={() => { navigate("/"); setHasProfile(true); }}
           disconnect={disconnect}
         />
       </ThemeProvider>

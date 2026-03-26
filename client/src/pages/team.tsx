@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Users, GitBranch, Loader2, ChevronLeft, ChevronRight,
   User, Copy, Check, ArrowDownLeft, ArrowDownRight, Layers,
-  AlertCircle, Search,
+  AlertCircle, Search, ArrowLeft, Home,
 } from "lucide-react";
 import { SiWhatsapp } from "react-icons/si";
 import { Badge } from "@/components/ui/badge";
@@ -25,24 +25,55 @@ interface TeamProps {
 
 type Tab = "binary" | "levels" | "directs";
 
-function TreeNode({ address, label, color }: { address: string; label: string; color: string }) {
+interface TreeNodeProps {
+  address: string;
+  label: string;
+  color: string;
+  isLeft: boolean;
+  onDrillDown?: (addr: string) => void;
+  loading?: boolean;
+}
+
+function TreeNode({ address, label, color, onDrillDown, loading }: TreeNodeProps) {
   const isEmpty = !address || address === ZERO_ADDRESS;
   return (
-    <div
-      className={`rounded-xl p-4 w-full text-center transition-all ${isEmpty ? "bg-white/[0.02] border border-dashed border-white/[0.08]" : `glass-card border ${color}`}`}
+    <button
+      disabled={isEmpty || loading}
+      onClick={() => !isEmpty && onDrillDown?.(address)}
+      className={`rounded-xl p-4 w-full text-center transition-all group ${
+        isEmpty
+          ? "bg-white/[0.02] border border-dashed border-white/[0.08] cursor-default"
+          : `glass-card border ${color} hover:opacity-80 active:scale-[0.98] cursor-pointer`
+      }`}
       data-testid={`card-tree-${label.toLowerCase().replace(" ", "-")}`}
     >
       <div className={`h-8 w-8 mx-auto rounded-lg flex items-center justify-center mb-2 ${isEmpty ? "bg-white/[0.03]" : "bg-white/[0.06]"}`}>
-        <User className={`h-4 w-4 ${isEmpty ? "text-muted-foreground/40" : "text-foreground"}`} />
+        {loading ? (
+          <Loader2 className="h-4 w-4 animate-spin text-amber-400" />
+        ) : (
+          <User className={`h-4 w-4 ${isEmpty ? "text-muted-foreground/40" : "text-foreground"}`} />
+        )}
       </div>
       <p className="text-xs font-medium text-muted-foreground mb-0.5">{label}</p>
       {isEmpty ? (
         <p className="text-xs text-muted-foreground/50">Empty slot</p>
       ) : (
-        <p className="text-xs font-mono gradient-text">{shortenAddress(address)}</p>
+        <>
+          <p className="text-xs font-mono gradient-text">{shortenAddress(address)}</p>
+          <p className="text-[9px] text-muted-foreground/50 mt-1 group-hover:text-amber-400/60 transition-colors">tap to expand</p>
+        </>
       )}
-    </div>
+    </button>
   );
+}
+
+interface BinaryNodeInfo {
+  address: string;
+  leftChild: string;
+  rightChild: string;
+  displayName: string;
+  leftSubUsers: bigint;
+  rightSubUsers: bigint;
 }
 
 export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, account }: TeamProps) {
@@ -100,6 +131,54 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
     const msg = `Join me on M-Vault — the DeFi MLM ecosystem on BNB Smart Chain! Activate for $130 and earn up to $390 (3×). Use my ${side} referral link: ${link}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
   };
+
+  // ── Binary drill-down ───────────────────────────────────────────────────────
+  const [viewStack, setViewStack] = useState<BinaryNodeInfo[]>([]);
+  const [drillLoading, setDrillLoading] = useState<"left" | "right" | null>(null);
+
+  const loadNodeInfo = useCallback(async (addr: string): Promise<BinaryNodeInfo | null> => {
+    try {
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const contract = getMvaultContract(provider);
+      const info = await contract.getUserInfo(addr);
+      return {
+        address: addr,
+        leftChild: info[6] ?? ZERO_ADDRESS,
+        rightChild: info[7] ?? ZERO_ADDRESS,
+        displayName: info.displayName ?? "",
+        leftSubUsers: info.leftSubUsers ?? 0n,
+        rightSubUsers: info.rightSubUsers ?? 0n,
+      };
+    } catch { return null; }
+  }, []);
+
+  // Initialise binary view with the logged-in user's info
+  useEffect(() => {
+    if (tab !== "binary" || viewStack.length > 0) return;
+    const root: BinaryNodeInfo = {
+      address: account,
+      leftChild: userInfo.leftChild,
+      rightChild: userInfo.rightChild,
+      displayName: "",
+      leftSubUsers: userInfo.leftSubUsers,
+      rightSubUsers: userInfo.rightSubUsers,
+    };
+    setViewStack([root]);
+  }, [tab, account, userInfo, viewStack.length]);
+
+  const handleDrillDown = useCallback(async (addr: string, side: "left" | "right") => {
+    setDrillLoading(side);
+    const nodeInfo = await loadNodeInfo(addr);
+    setDrillLoading(null);
+    if (nodeInfo) setViewStack(prev => [...prev, nodeInfo]);
+  }, [loadNodeInfo]);
+
+  const handleBack = useCallback(() => {
+    setViewStack(prev => prev.slice(0, -1));
+  }, []);
+
+  const currentNode = viewStack[viewStack.length - 1] ?? null;
+  const isAtRoot = viewStack.length <= 1;
 
   // ── BFS level traversal ─────────────────────────────────────────────────────
   const loadLevelMembers = async () => {
@@ -233,27 +312,102 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
       </div>
 
       {/* ── Binary Tree tab ─────────────────────────────────────────────────── */}
-      {tab === "binary" && (
-        <div className="glass-card rounded-2xl p-5 slide-in" data-testid="card-binary-tree">
-          <div className="flex flex-col items-center gap-4">
-            {/* Me */}
-            <div className="rounded-xl px-5 py-3 bg-gradient-to-br from-amber-500/20 to-yellow-400/10 border border-amber-500/30 text-center w-full max-w-[180px]" data-testid="card-self-node">
-              <div className="h-8 w-8 mx-auto rounded-lg bg-amber-500/20 flex items-center justify-center mb-1.5">
-                <User className="h-4 w-4 text-yellow-300" />
+      {tab === "binary" && currentNode && (
+        <div className="glass-card rounded-2xl overflow-hidden slide-in" data-testid="card-binary-tree">
+          {/* Header with back nav */}
+          <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/[0.05]">
+            <div className="flex items-center gap-1 flex-1 overflow-hidden">
+              {/* Breadcrumb */}
+              <button
+                onClick={() => setViewStack(prev => prev.slice(0, 1))}
+                className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-400 transition-colors shrink-0"
+                data-testid="button-binary-home"
+              >
+                <Home className="h-3 w-3" /> Root
+              </button>
+              {viewStack.slice(1).map((node, idx) => (
+                <div key={node.address} className="flex items-center gap-1 overflow-hidden">
+                  <ChevronRight className="h-3 w-3 text-muted-foreground/40 shrink-0" />
+                  <button
+                    onClick={() => setViewStack(prev => prev.slice(0, idx + 2))}
+                    className={`text-[10px] truncate max-w-[80px] transition-colors ${idx === viewStack.length - 2 ? "text-amber-400 font-semibold" : "text-muted-foreground hover:text-foreground"}`}
+                    data-testid={`button-breadcrumb-${idx}`}
+                  >
+                    {node.displayName || shortenAddress(node.address)}
+                  </button>
+                </div>
+              ))}
+            </div>
+            {!isAtRoot && (
+              <button
+                onClick={handleBack}
+                className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors px-2.5 py-1.5 rounded-lg bg-white/[0.03] border border-white/[0.06] hover:border-white/[0.12] shrink-0"
+                data-testid="button-binary-back"
+              >
+                <ArrowLeft className="h-3.5 w-3.5" /> Back
+              </button>
+            )}
+          </div>
+
+          <div className="p-5">
+            <div className="flex flex-col items-center gap-4">
+              {/* Current node */}
+              <div className={`rounded-xl px-5 py-3 text-center w-full max-w-[200px] ${
+                isAtRoot
+                  ? "bg-gradient-to-br from-amber-500/20 to-yellow-400/10 border border-amber-500/30"
+                  : "bg-gradient-to-br from-violet-500/20 to-blue-400/10 border border-violet-500/30"
+              }`} data-testid="card-self-node">
+                <div className={`h-8 w-8 mx-auto rounded-lg flex items-center justify-center mb-1.5 ${
+                  isAtRoot ? "bg-amber-500/20" : "bg-violet-500/20"
+                }`}>
+                  <User className={`h-4 w-4 ${isAtRoot ? "text-yellow-300" : "text-violet-300"}`} />
+                </div>
+                <p className={`text-xs font-semibold ${isAtRoot ? "text-yellow-300" : "text-violet-300"}`}>
+                  {isAtRoot ? "You" : (currentNode.displayName || "Member")}
+                </p>
+                <p className="text-[9px] font-mono text-muted-foreground mt-0.5">{shortenAddress(currentNode.address)}</p>
+                <div className="flex items-center justify-center gap-3 mt-1.5">
+                  <span className="text-[9px] text-blue-400/70">{String(currentNode.leftSubUsers || 0n)} left</span>
+                  <span className="text-muted-foreground/30">·</span>
+                  <span className="text-[9px] text-purple-400/70">{String(currentNode.rightSubUsers || 0n)} right</span>
+                </div>
               </div>
-              <p className="text-xs font-semibold text-yellow-300">You</p>
-              <p className="text-[9px] font-mono text-muted-foreground">{shortenAddress(account)}</p>
-            </div>
 
-            <div className="w-px h-4 bg-white/[0.08]" />
+              {/* Connector lines */}
+              <div className="flex items-start w-full max-w-[300px] relative">
+                <div className="absolute left-1/4 right-1/4 top-0 h-px bg-white/[0.08]" />
+                <div className="absolute left-1/4 top-0 w-px h-3 bg-white/[0.08]" />
+                <div className="absolute right-1/4 top-0 w-px h-3 bg-white/[0.08]" />
+              </div>
 
-            <div className="grid grid-cols-2 gap-4 w-full">
-              <TreeNode address={userInfo.leftChild}  label="Left Child"  color="border-blue-500/30" />
-              <TreeNode address={userInfo.rightChild} label="Right Child" color="border-purple-500/30" />
-            </div>
-            <div className="grid grid-cols-2 gap-4 w-full text-center">
-              <p className="text-[10px] text-muted-foreground">{leftCount} total below</p>
-              <p className="text-[10px] text-muted-foreground">{rightCount} total below</p>
+              {/* Children */}
+              <div className="grid grid-cols-2 gap-3 w-full">
+                <TreeNode
+                  address={currentNode.leftChild}
+                  label="Left Child"
+                  color="border-blue-500/30"
+                  isLeft={true}
+                  loading={drillLoading === "left"}
+                  onDrillDown={(addr) => handleDrillDown(addr, "left")}
+                />
+                <TreeNode
+                  address={currentNode.rightChild}
+                  label="Right Child"
+                  color="border-purple-500/30"
+                  isLeft={false}
+                  loading={drillLoading === "right"}
+                  onDrillDown={(addr) => handleDrillDown(addr, "right")}
+                />
+              </div>
+
+              {/* Depth indicator */}
+              <div className="flex items-center gap-2 text-[10px] text-muted-foreground/50">
+                <GitBranch className="h-3 w-3" />
+                <span>Depth {viewStack.length - 1}</span>
+                {(currentNode.leftChild === ZERO_ADDRESS && currentNode.rightChild === ZERO_ADDRESS) && (
+                  <span className="text-amber-400/50">· Leaf node</span>
+                )}
+              </div>
             </div>
           </div>
         </div>
