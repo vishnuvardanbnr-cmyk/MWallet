@@ -16,6 +16,17 @@ interface IMvaultToken {
     function balanceOf(address account) external view returns (uint256);
 }
 
+// ─────────────────────────────────────────────
+// MvaultBoardMatrix interface
+// ─────────────────────────────────────────────
+interface IMvaultBoardMatrix {
+    function enterBoard(address user, uint256 boardLevel) external;
+    function getBoardPrice(uint256 boardLevel) external view returns (uint256);
+    function getBoardQueueLength(uint256 boardLevel) external view returns (uint256);
+    function getBoardMatrixInfo(uint256 boardLevel, uint256 index) external view returns (address owner, uint256 filledCount, bool completed);
+    function getBoardCurrentIndex(uint256 boardLevel) external view returns (uint256);
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // MvaultContract
 //
@@ -60,8 +71,9 @@ interface IMvaultToken {
 contract MvaultContract is Ownable, ReentrancyGuard {
 
     // ── External contracts ────────────────────────────────────────────────────
-    IERC20        public immutable usdtToken;
-    IMvaultToken  public           mvaultToken;
+    IERC20              public immutable usdtToken;
+    IMvaultToken        public           mvaultToken;
+    IMvaultBoardMatrix  public           boardHandler;
 
     // ── Constants ─────────────────────────────────────────────────────────────
     uint256 public constant PACKAGE_PRICE  = 130 * 1e18; // $130 USDT (18 decimals)
@@ -127,6 +139,10 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint256 private _powerLeg30Reserve;
     bool    private _binaryDistributed;
 
+    // ── Board Matrix tracking ──────────────────────────────────────────────────
+    mapping(address => uint256) public boardEntryCount;
+    mapping(address => uint256) public totalBoardRewardsEarned;
+
     // ── Events ────────────────────────────────────────────────────────────────
     event Registered(address indexed user, address indexed sponsor, address indexed binaryParent, bool placeLeft);
     event Activated(address indexed user, uint256 mvtMinted, uint256 grossMvt, uint256 levelAmt, uint256 binaryAmt, uint256 adminAmt);
@@ -143,6 +159,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     event MvaultTokenUpdated(address newToken);
     event AdminWithdraw(address indexed to, uint256 amount);
     event ReserveWithdraw(address indexed to, uint256 amount);
+    event BoardEntered(address indexed user, uint256 boardLevel, uint256 usdtDeducted);
+    event BoardRewardCredited(address indexed user, uint256 usdtAmount, uint256 boardLevel);
+    event BoardHandlerUpdated(address indexed newHandler);
 
     // ── Errors ────────────────────────────────────────────────────────────────
     error AlreadyRegistered();
@@ -160,6 +179,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     error TransferFailed();
     error BinaryNotDistributed();
     error BinaryAlreadyDistributed();
+    error BoardHandlerNotSet();
+    error InsufficientBtcPoolForBoard();
 
     // ─────────────────────────────────────────────────────────────────────────
     constructor(address _usdt, address _mvaultToken) Ownable(msg.sender) {
@@ -176,6 +197,65 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (_mvaultToken == address(0)) revert ZeroAddress();
         mvaultToken = IMvaultToken(_mvaultToken);
         emit MvaultTokenUpdated(_mvaultToken);
+    }
+
+    function setBoardHandler(address _boardHandler) external onlyOwner {
+        if (_boardHandler == address(0)) revert ZeroAddress();
+        boardHandler = IMvaultBoardMatrix(_boardHandler);
+        emit BoardHandlerUpdated(_boardHandler);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // BOARD MATRIX — ENTRY
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Use your BTC pool balance to enter the Board Matrix at Level 1.
+     *         BTC pool fills automatically (10% of every MVT sell).
+     *         Requires boardHandler to be set by admin.
+     */
+    function enterBoardPool() external nonReentrant {
+        if (address(boardHandler) == address(0)) revert BoardHandlerNotSet();
+
+        User storage u = users[msg.sender];
+        require(u.isActive, "Not active");
+
+        uint256 price = boardHandler.getBoardPrice(1);
+        if (u.btcPoolBalance < price) revert InsufficientBtcPoolForBoard();
+
+        // Deduct from user's BTC pool
+        u.btcPoolBalance -= price;
+
+        // Transfer USDT to board handler
+        bool ok = usdtToken.transfer(address(boardHandler), price);
+        if (!ok) revert TransferFailed();
+
+        // Register entry in board matrix
+        boardEntryCount[msg.sender]++;
+        boardHandler.enterBoard(msg.sender, 1);
+
+        emit BoardEntered(msg.sender, 1, price);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // BOARD MATRIX — REWARD CALLBACK (called by MvaultBoardMatrix)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Called by the board matrix contract when a board completes.
+     *         USDT is transferred to this contract before this call,
+     *         then credited to the user's withdrawable usdtBalance.
+     */
+    function creditBoardReward(address _user, uint256 _usdtAmount, uint256 _boardLevel) external nonReentrant {
+        require(msg.sender == address(boardHandler), "Not board handler");
+        require(_user != address(0), "ZA");
+        require(_usdtAmount > 0, "ZA");
+
+        users[_user].usdtBalance     += _usdtAmount;
+        users[_user].totalUsdtEarned += _usdtAmount;
+        totalBoardRewardsEarned[_user] += _usdtAmount;
+
+        emit BoardRewardCredited(_user, _usdtAmount, _boardLevel);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -770,6 +850,41 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     }
 
     function getAllUsersCount() external view returns (uint256) { return allUsers.length; }
+
+    function getBoardPrice(uint256 _level) external view returns (uint256) {
+        if (address(boardHandler) == address(0)) return 0;
+        return boardHandler.getBoardPrice(_level);
+    }
+
+    function getBoardQueueLength(uint256 _level) external view returns (uint256) {
+        if (address(boardHandler) == address(0)) return 0;
+        return boardHandler.getBoardQueueLength(_level);
+    }
+
+    function getBoardMatrixInfo(uint256 _level, uint256 _index) external view returns (
+        address owner, uint256 filledCount, bool completed
+    ) {
+        return boardHandler.getBoardMatrixInfo(_level, _index);
+    }
+
+    function getBoardCurrentIndex(uint256 _level) external view returns (uint256) {
+        if (address(boardHandler) == address(0)) return 0;
+        return boardHandler.getBoardCurrentIndex(_level);
+    }
+
+    function getUserBoardStats(address _user) external view returns (
+        uint256 entries,
+        uint256 totalRewards
+    ) {
+        return (boardEntryCount[_user], totalBoardRewardsEarned[_user]);
+    }
+
+    function canEnterBoard(address _user) external view returns (bool eligible, uint256 btcBalance, uint256 boardPrice) {
+        if (address(boardHandler) == address(0)) return (false, 0, 0);
+        btcBalance = users[_user].btcPoolBalance;
+        boardPrice = boardHandler.getBoardPrice(1);
+        eligible   = users[_user].isActive && btcBalance >= boardPrice;
+    }
 
     function getPoolBalances() external view returns (
         uint256 binary,
