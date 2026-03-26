@@ -126,16 +126,14 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
       const contract = getMvaultContract(provider);
       await Promise.all(toFetch.map(async (addr) => {
         try {
-          const [info, profile] = await Promise.all([
-            contract.getUserInfo(addr),
-            contract.getProfile(addr),
-          ]);
+          const profile = await contract.getProfile(addr);
+          // New contract has no numeric userId — use shortened address as identifier
           memberMetaCache.current.set(addr, {
-            userId: String(info[0] ?? "?"),
+            userId: addr.slice(2, 8).toUpperCase(),
             name: profile[0] || profile.displayName || "",
           });
         } catch {
-          memberMetaCache.current.set(addr, { userId: "?", name: "" });
+          memberMetaCache.current.set(addr, { userId: addr.slice(2, 8).toUpperCase(), name: "" });
         }
       }));
       setMetaVersion(v => v + 1);
@@ -265,6 +263,14 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
   useEffect(() => {
     if (tab === "directs") loadReferrals();
   }, [loadReferrals, tab]);
+
+  // Auto-load level 1 when switching to levels tab
+  useEffect(() => {
+    if (tab === "levels" && levelLoaded === null && !levelLoading) {
+      loadLevelMembers();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab]);
 
   const copyLink = (side: "left" | "right") => {
     const link = `${window.location.origin}?ref=${account}&side=${side}`;
