@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, LogOut, UserPlus, Wallet, CheckCircle2, X,
-  AlertCircle, Shield, ArrowRight, Users, GitBranch, ChevronLeft, ChevronRight,
+  AlertCircle, Shield, ArrowRight, Users,
 } from "lucide-react";
 import { shortenAddress, getMvaultContract, MVAULT_CONTRACT_ADDRESS } from "@/lib/contract";
 import { Logo } from "@/components/logo";
@@ -303,66 +303,6 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
                   )}
                 </div>
 
-                {/* Binary Parent */}
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
-                    Binary Placement Parent
-                    <span className="ml-2 text-muted-foreground/50 normal-case font-normal">defaults to sponsor</span>
-                  </label>
-                  <Input
-                    value={binaryParentAddress}
-                    onChange={(e) => setBinaryParentAddress(e.target.value)}
-                    placeholder="0x... leave blank to use sponsor"
-                    className="bg-white/[0.03] border-white/[0.08] text-sm font-mono focus:border-amber-500/30 transition-colors"
-                    data-testid="input-binary-parent-address"
-                    disabled={loading}
-                  />
-                </div>
-
-                {/* Placement Side */}
-                <div className="space-y-2">
-                  <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">Placement Side</label>
-                  <div className="grid grid-cols-2 gap-2">
-                    {[
-                      { label: "Left Leg", icon: ChevronLeft, value: true },
-                      { label: "Right Leg", icon: ChevronRight, value: false },
-                    ].map(({ label, icon: Icon, value }) => (
-                      <button
-                        key={label}
-                        onClick={() => setSelectedSide(value)}
-                        className={`py-3 rounded-xl text-sm font-semibold transition-all border flex items-center justify-center gap-2 ${
-                          selectedSide === value
-                            ? "bg-amber-500/12 border-amber-500/30 text-amber-400"
-                            : "bg-white/[0.02] border-white/[0.06] text-muted-foreground hover:border-white/[0.12]"
-                        }`}
-                        data-testid={`button-place-${value ? "left" : "right"}`}
-                      >
-                        <Icon className="h-4 w-4" />
-                        {label}
-                      </button>
-                    ))}
-                  </div>
-                  {/* Binary tree visual */}
-                  <div className="flex items-center justify-center gap-6 pt-1 pb-0.5">
-                    <div className="flex flex-col items-center gap-1.5">
-                      <div className="h-8 w-8 rounded-full bg-amber-500/15 border border-amber-500/30 flex items-center justify-center">
-                        <GitBranch className="h-4 w-4 text-amber-400" />
-                      </div>
-                      <div className="flex gap-4">
-                        <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center transition-all ${selectedSide ? "bg-amber-500/20 border-amber-500/50" : "bg-white/[0.04] border-white/[0.12]"}`}>
-                          {selectedSide && <div className="h-2 w-2 rounded-full bg-amber-400" />}
-                        </div>
-                        <div className={`h-6 w-6 rounded-full border-2 flex items-center justify-center transition-all ${!selectedSide ? "bg-amber-500/20 border-amber-500/50" : "bg-white/[0.04] border-white/[0.12]"}`}>
-                          {!selectedSide && <div className="h-2 w-2 rounded-full bg-amber-400" />}
-                        </div>
-                      </div>
-                      <div className="flex gap-4">
-                        <span className={`text-[9px] font-semibold ${selectedSide ? "text-amber-400" : "text-muted-foreground/40"}`}>You</span>
-                        <span className={`text-[9px] font-semibold ${!selectedSide ? "text-amber-400" : "text-muted-foreground/40"}`}>You</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
               </>
             )}
 
