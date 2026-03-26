@@ -349,6 +349,7 @@ export function useWeb3() {
         btcWithdrawEvts,
         btcCreditedEvts,
         levelEvts,
+        levelSkippedEvts,
         rebirthEvts,
         binaryEvts,
         powerLegEvts,
@@ -361,6 +362,7 @@ export function useWeb3() {
         contract.queryFilter(contract.filters.BtcPoolWithdrawn(account), startBlock).catch(() => []),
         contract.queryFilter(contract.filters.BtcPoolCredited(account), startBlock).catch(() => []),
         contract.queryFilter(contract.filters.LevelIncomePaid(account), startBlock).catch(() => []),
+        contract.queryFilter(contract.filters.LevelIncomeSkipped(account), startBlock).catch(() => []),
         contract.queryFilter(contract.filters.Reborn(account), startBlock).catch(() => []),
         contract.queryFilter(contract.filters.BinaryIncomePaid(account), startBlock).catch(() => []),
         contract.queryFilter(contract.filters.PowerLegIncomePaid(account), startBlock).catch(() => []),
@@ -404,6 +406,11 @@ export function useWeb3() {
         const from = e.args?.[1] as string ?? "";
         const shortFrom = from && from !== "0x0000000000000000000000000000000000000000" ? `${from.slice(0, 6)}...${from.slice(-4)}` : "";
         all.push({ type: "Level Income", amount: e.args?.[3] ?? 0n, detail: `Level ${lvl}${shortFrom ? ` from ${shortFrom}` : ""}`, timestamp: await getTs(e.blockNumber), isIncome: true, blockNumber: e.blockNumber });
+      }
+      for (const e of (levelSkippedEvts as RawEvt[])) {
+        const lvl = Number(e.args?.[1] ?? 0);
+        const amt = e.args?.[2] ?? 0n;
+        all.push({ type: "Level Income Missed", amount: amt, detail: `Level ${lvl} — need more directs`, timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
       }
       for (const e of (rebirthEvts as RawEvt[])) {
         const sub = e.args?.[1] as string ?? "";

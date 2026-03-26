@@ -123,6 +123,7 @@ export default function Dashboard({
 
   const leftCount = Number(userInfo.leftSubUsers);
   const rightCount = Number(userInfo.rightSubUsers);
+  const directCount = Number(userInfo.directCount);
   const currentPairs = Number(binaryPairs.currentPairs);
   const newPairs = Number(binaryPairs.newPairs);
 
@@ -423,6 +424,28 @@ export default function Dashboard({
           <p className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-power-leg-points">{Number(userInfo.powerLegPoints)}</p>
         </div>
       </div>
+
+      {/* Level Income Qualification Alert */}
+      {userInfo.isActive && directCount < 2 && (
+        <div className="glass-card rounded-2xl p-4 border border-orange-500/20 slide-in" style={{ animationDelay: "0.10s" }} data-testid="card-income-alert">
+          <div className="flex items-start gap-3">
+            <div className="h-8 w-8 rounded-lg bg-orange-500/15 flex items-center justify-center shrink-0">
+              <Info className="h-4 w-4 text-orange-400" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold text-orange-300" style={{ fontFamily: "var(--font-display)" }}>
+                Level Income Locked
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                You need <strong className="text-orange-300">{2 - directCount} more direct referral{2 - directCount !== 1 ? "s" : ""}</strong> to unlock level income. Until then, income from your referrals' activations is sent to the admin pool.
+              </p>
+              <button onClick={() => setLocation("/income")} className="mt-2 text-[10px] text-orange-400 hover:text-orange-300 flex items-center gap-1" data-testid="link-income-details">
+                See qualification requirements <ChevronRight className="h-3 w-3" />
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Quick Actions */}
       <div className="grid grid-cols-2 gap-3 slide-in" style={{ animationDelay: "0.11s" }}>

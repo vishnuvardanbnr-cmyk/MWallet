@@ -78,6 +78,7 @@ export const MVAULT_ABI = [
   "event Registered(address indexed user, address indexed sponsor, address indexed binaryParent, bool placeLeft)",
   "event Activated(address indexed user, uint256 mvtMinted, uint256 grossMvt, uint256 levelAmt, uint256 binaryAmt, uint256 reserveAmt)",
   "event LevelIncomePaid(address indexed to, address indexed from, uint8 level, uint256 amount)",
+  "event LevelIncomeSkipped(address indexed upline, uint8 level, uint256 amount)",
   "event MvtSold(address indexed user, uint256 mvtAmount, uint256 usdtNet, uint256 usdtToBtcPool, uint256 usdtToIncome, uint256 usdtToRebirth)",
   "event BtcPoolCredited(address indexed user, uint256 amount)",
   "event BtcPoolWithdrawn(address indexed user, uint256 amount)",

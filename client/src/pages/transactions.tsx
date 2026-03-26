@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { ArrowLeftRight, Loader2, ArrowDownToLine, ArrowUpRight, RefreshCw, Package, Coins, Wallet, ChevronLeft, ChevronRight, Users, GitBranch, Layers, Trophy, Star, Zap, TrendingDown, Repeat2 } from "lucide-react";
+import { ArrowLeftRight, Loader2, ArrowDownToLine, ArrowUpRight, RefreshCw, Package, Coins, Wallet, ChevronLeft, ChevronRight, Users, GitBranch, Layers, Trophy, Star, Zap, TrendingDown, Repeat2, Ban } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -51,7 +51,8 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
       case "Withdrawal":        return ArrowDownToLine;
       case "BTC Pool Withdraw": return ArrowDownToLine;
       case "BTC Pool Credited": return Coins;
-      case "Level Income":      return Users;
+      case "Level Income":        return Users;
+      case "Level Income Missed": return Ban;
       case "Binary Income":     return GitBranch;
       case "Power Leg Income":  return Zap;
       case "Rebirth":           return Repeat2;
@@ -68,7 +69,8 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
       case "Withdrawal":        return { text: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10" };
       case "BTC Pool Withdraw": return { text: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10" };
       case "BTC Pool Credited": return { text: "text-amber-300",   bg: "bg-amber-600/10",   border: "border-amber-600/10" };
-      case "Level Income":      return { text: "text-yellow-300",  bg: "bg-yellow-600/10",  border: "border-yellow-600/10" };
+      case "Level Income":        return { text: "text-yellow-300",  bg: "bg-yellow-600/10",  border: "border-yellow-600/10" };
+      case "Level Income Missed": return { text: "text-orange-400",  bg: "bg-orange-500/8",   border: "border-orange-500/10" };
       case "Binary Income":     return { text: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/10" };
       case "Power Leg Income":  return { text: "text-violet-400",  bg: "bg-violet-500/10",  border: "border-violet-500/10" };
       case "Rebirth":           return { text: "text-sky-400",     bg: "bg-sky-500/10",     border: "border-sky-500/10" };
@@ -156,9 +158,18 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
                     </div>
                   </div>
                   <div className="flex items-center gap-3">
-                    <span className={`font-bold text-sm ${tx.isIncome || tx.type === "Withdrawal" ? "text-emerald-400" : ""}`} style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-tx-amount-${globalIndex}`}>
-                      {tx.isIncome || tx.type === "Withdrawal" ? "+" : "-"}${formatAmount(tx.amount)}
-                    </span>
+                    {tx.type === "Level Income Missed" ? (
+                      <div className="text-right">
+                        <span className="font-bold text-sm text-orange-400/70 line-through" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-tx-amount-${globalIndex}`}>
+                          ${formatAmount(tx.amount)}
+                        </span>
+                        <p className="text-[9px] text-orange-400/60">Missed — sent to admin</p>
+                      </div>
+                    ) : (
+                      <span className={`font-bold text-sm ${tx.isIncome || tx.type === "Withdrawal" ? "text-emerald-400" : ""}`} style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-tx-amount-${globalIndex}`}>
+                        {tx.isIncome || tx.type === "Withdrawal" ? "+" : "-"}${formatAmount(tx.amount)}
+                      </span>
+                    )}
                   </div>
                 </div>
               );
