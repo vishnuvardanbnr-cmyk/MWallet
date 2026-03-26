@@ -219,7 +219,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     event Staked(address indexed user, uint256 stakeIndex, uint256 usdtAmount, uint256 mvtMinted, bool isLocked);
     event Unstaked(address indexed user, uint256 stakeIndex, uint256 mvtReturned, uint256 usdtReceived, uint256 adminCapCut);
     event ConvertedToLocked(address indexed user, uint256 stakeIndex, uint256 lockedSince);
-    event StakeLevelIncomePaid(address indexed to, address indexed from, uint8 level, uint256 usdtAmount);
+    event StakeLevelIncomePaid(address indexed to, address indexed from, uint8 level, uint256 mvtAmount);
 
     // ── Errors ────────────────────────────────────────────────────────────────
     error AlreadyRegistered();
@@ -905,11 +905,16 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * @notice Stake USDT. 15% is distributed as level income (USDT) to 5 uplines.
-     *         Remaining 85% buys MVT at current bonding-curve price (held here).
+     * @notice Stake USDT.
+     *         100% USDT buys MVT via bonding curve (token internally mints 90% = "gross MVT").
+     *         From gross MVT:
+     *           15% of theoretical (= 15/90 of grossMvt) → level income in MVT to 5 uplines
+     *                                                        (rates: 10/2/1/1/1 per 90 units)
+     *            5% of theoretical (=  5/90 of grossMvt) → admin pool in MVT
+     *           70% of theoretical (= 70/90 of grossMvt) → staked for the user
      * @param usdtAmount  Must be >= MIN_STAKE_USDT ($50).
-     * @param isLocked    false = flexible (2× cap, instant unstake)
-     *                    true  = locked  (no cap, 10-month lock)
+     * @param isLocked    false = flexible (2× cap on USDT return, instant unstake)
+     *                    true  = locked  (no cap, 10-month lock, bonus token distribution to uplines)
      */
     function stake(uint256 usdtAmount, bool isLocked) external nonReentrant {
         require(usdtAmount >= MIN_STAKE_USDT, "Below $50 minimum");
@@ -919,43 +924,55 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         bool ok = usdtToken.transferFrom(msg.sender, address(this), usdtAmount);
         require(ok, "USDT transfer failed");
 
-        // 15% level income in USDT to 5 uplines
-        uint8[5] memory rates = [10, 2, 1, 1, 1];
+        // 100% USDT → MVT (token mints 90% of theoretical = "gross MVT")
+        usdtToken.approve(address(mvaultToken), usdtAmount);
+        uint256 balBefore = mvaultToken.balanceOf(address(this));
+        mvaultToken.addLiquidityAndMint(address(this), usdtAmount);
+        uint256 grossMvt = mvaultToken.balanceOf(address(this)) - balBefore;
+        require(grossMvt > 0, "No MVT minted");
+
+        // Level income in MVT: rates [10,2,1,1,1] per 90 units of grossMvt  (sums to 15/90)
+        // Unqualified upline shares accumulate to levelToAdmin
+        uint8[5] memory levelRates = [10, 2, 1, 1, 1];
         address cur = users[msg.sender].sponsor;
         uint256 levelDistributed = 0;
+        uint256 levelToAdmin     = 0;
         for (uint8 i = 0; i < 5; i++) {
-            uint256 share = (usdtAmount * rates[i]) / 100;
-            if (share == 0) { if (cur != address(0)) cur = users[cur].sponsor; continue; }
+            uint256 share = grossMvt * levelRates[i] / 90;
+            if (share == 0) {
+                if (cur != address(0)) cur = users[cur].sponsor;
+                continue;
+            }
             if (cur == address(0) || !users[cur].isActive) {
-                adminPool += share;
+                levelToAdmin += share;
             } else {
-                users[cur].usdtBalance += share;
-                levelDistributed += share;
+                users[cur].mvtBalance    += share;
+                users[cur].totalReceived += share;
+                levelDistributed         += share;
                 emit StakeLevelIncomePaid(cur, msg.sender, i + 1, share);
             }
             cur = users[cur].sponsor;
         }
-        uint256 adminShare = (usdtAmount * 15 / 100) - levelDistributed;
-        if (adminShare > 0) adminPool += adminShare;
 
-        // 85% buys MVT — minted to address(this)
-        uint256 forTokens = usdtAmount - (usdtAmount * 15 / 100);
-        usdtToken.approve(address(mvaultToken), forTokens);
-        uint256 balBefore = mvaultToken.balanceOf(address(this));
-        mvaultToken.addLiquidityAndMint(address(this), forTokens);
-        uint256 mvtMinted = mvaultToken.balanceOf(address(this)) - balBefore;
-        require(mvtMinted > 0, "No MVT minted");
+        // Admin alloc: 5/90 of grossMvt + any unqualified level shares
+        uint256 adminAmt = grossMvt * 5 / 90;
+        adminPool += adminAmt + levelToAdmin;
+
+        // Staked: grossMvt minus all level alloc (15/90) and admin alloc (5/90) = 70/90
+        uint256 levelTotal = levelDistributed + levelToAdmin;
+        uint256 stakedMvt  = grossMvt - levelTotal - adminAmt;
+        require(stakedMvt > 0, "No tokens to stake");
 
         uint256 stakeIndex = _stakes[msg.sender].length;
         _stakes[msg.sender].push(StakePosition({
-            mvtAmount:    mvtMinted,
+            mvtAmount:    stakedMvt,
             usdtInvested: usdtAmount,
             stakedAt:     block.timestamp,
             lockedSince:  isLocked ? block.timestamp : 0,
             active:       true
         }));
 
-        emit Staked(msg.sender, stakeIndex, usdtAmount, mvtMinted, isLocked);
+        emit Staked(msg.sender, stakeIndex, usdtAmount, stakedMvt, isLocked);
     }
 
     /**
