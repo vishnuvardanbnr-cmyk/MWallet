@@ -1,683 +1,577 @@
-import { useState, useCallback } from "react";
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Coins, TrendingUp, DollarSign, Clock, CheckCircle2, AlertCircle, Loader2, ArrowDownUp, Flame, BarChart3, RefreshCw, Lock, Unlock, ShoppingBag } from "lucide-react";
-import { useToast } from "@/hooks/use-toast";
+import { useState, useEffect, useCallback } from "react";
+import {
+  Coins, Lock, Unlock, DollarSign, Loader2, TrendingUp,
+  Info, CheckCircle, AlertCircle, RefreshCw, ArrowLeft, Zap, Shield
+} from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { apiRequest } from "@/lib/queryClient";
-
-interface PaidStakingPageProps {
-  account: string;
-}
-
-interface PaidStakingPlan {
-  id: number;
-  walletAddress: string;
-  usdtInvested: string;
-  buyPriceAtEntry: string;
-  totalTokensMinted: string;
-  userTokens: string;
-  adminTokens: string;
-  dailyRewardUsdt: string;
-  startDate: string;
-  endDate: string;
-  isActive: boolean;
-  unstaked: boolean;
-  usdtReturnedOnUnstake: string | null;
-}
-
-interface MTokenPurchaseBatch {
-  id: number;
-  walletAddress: string;
-  tokenAmount: string;
-  tokensRemaining: string;
-  entryPrice: string;
-  batchType: string;
-  stakingPlanId: number | null;
-  purchasedAt: string;
-}
-
-interface MTokenBalance {
-  mainBalance: string;
-  rewardBalance: string;
-  totalRewardEarned: string;
-}
-
-interface TokenTransaction {
-  id: number;
-  txType: string;
-  tokenAmount: string;
-  usdtAmount: string | null;
-  priceAtTxn: string | null;
-  note: string | null;
-  createdAt: string;
-}
-
-interface PageData {
-  activePlan: PaidStakingPlan | null;
-  allPlans: PaidStakingPlan[];
-  mTokenBalance: MTokenBalance | null;
-  usdtBalance: string;
-  currentBuyPrice: string;
-  currentSellPrice: string;
-  tokenTransactions: TokenTransaction[];
-  overrideTotalUsdt: string;
-  freeBatches: MTokenPurchaseBatch[];
-  stakedBatch: MTokenPurchaseBatch | null;
-}
+import { useToast } from "@/hooks/use-toast";
+import { getMvaultContract, getTokenContract, MVAULT_CONTRACT_ADDRESS, formatTokenAmount } from "@/lib/contract";
+import { ethers } from "ethers";
+import { useQuery } from "@tanstack/react-query";
 
 interface TokenPrice {
   buyPrice: string;
   sellPrice: string;
-  liquidity: string;
-  circulatingSupply: string;
 }
 
-export default function PaidStakingPage({ account }: PaidStakingPageProps) {
-  const { toast } = useToast();
-  const qc = useQueryClient();
+interface StakePosition {
+  index: number;
+  mvtAmount: bigint;
+  usdtInvested: bigint;
+  stakedAt: number;
+  isLocked: boolean;
+}
 
-  const [stakeAmount, setStakeAmount] = useState("");
-  const [buyHoldAmount, setBuyHoldAmount] = useState("");
-  const [sellStakedAmount, setSellStakedAmount] = useState("");
-  const [sellMainAmount, setSellMainAmount] = useState("");
+interface Props {
+  account: string;
+  stakeUsdt?: (usdtAmount: string, isLocked: boolean) => Promise<void>;
+  unstakePosition?: (stakeIndex: number) => Promise<void>;
+  getActiveStakesOnChain?: (user: string) => Promise<StakePosition[]>;
+  approveToken?: () => Promise<void>;
+  tokenDecimals?: number;
+}
 
-  const { data, isLoading, refetch } = useQuery<PageData>({
-    queryKey: ["/api/paidstaking", account],
-    queryFn: () => fetch(`/api/paidstaking/${account.toLowerCase()}`).then(r => r.json()),
+const LEVEL_RATES = [10, 2, 1, 1, 1];
+const FLEXIBLE_UNSTAKE_FEE = 5;
+const LOCKED_UNSTAKE_LEVELS = [5, 2, 1, 1, 1];
+
+function fmt(n: number, d = 2) {
+  return n.toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d });
+}
+
+function fmtDate(ts: number) {
+  return new Date(ts * 1000).toLocaleDateString(undefined, {
+    year: "numeric", month: "short", day: "numeric",
   });
+}
+
+export default function PaidStakingPage({
+  account,
+  stakeUsdt,
+  unstakePosition,
+  getActiveStakesOnChain,
+  approveToken,
+  tokenDecimals = 18,
+}: Props) {
+  const { toast } = useToast();
+  const [activeTab, setActiveTab] = useState<"flexible" | "locked">("flexible");
+  const [usdtInput, setUsdtInput] = useState("");
+  const [staking, setStaking] = useState(false);
+  const [approvingUsdt, setApprovingUsdt] = useState(false);
+  const [unstakingIndex, setUnstakingIndex] = useState<number | null>(null);
+  const [positions, setPositions] = useState<StakePosition[]>([]);
+  const [loadingPositions, setLoadingPositions] = useState(false);
+  const [usdtAllowance, setUsdtAllowance] = useState<bigint>(0n);
+  const [walletUsdtBalance, setWalletUsdtBalance] = useState<bigint>(0n);
 
   const { data: price } = useQuery<TokenPrice>({
     queryKey: ["/api/token/price"],
+    refetchInterval: 30000,
   });
 
-  const invalidate = () => { qc.invalidateQueries({ queryKey: ["/api/paidstaking", account] }); qc.invalidateQueries({ queryKey: ["/api/token/price"] }); };
+  const buyPrice = parseFloat(price?.buyPrice ?? "0.0036");
+  const sellPrice = parseFloat(price?.sellPrice ?? "0.00324");
 
-  const stakeMut = useMutation({
-    mutationFn: (usdtAmount: string) => apiRequest("POST", "/api/paidstaking/stake", { walletAddress: account, usdtAmount }),
-    onSuccess: (r: any) => {
-      toast({ title: "Staking Activated!", description: `${parseFloat(r.userTokens).toFixed(2)} M-Tokens locked for 10 months. 4x sell cap = $${parseFloat(r.capPrice).toFixed(6)}/token` });
-      setStakeAmount("");
-      invalidate();
-    },
-    onError: (e: any) => toast({ title: "Stake Failed", description: e.message, variant: "destructive" }),
-  });
+  const loadPositions = useCallback(async () => {
+    if (!getActiveStakesOnChain || !account) return;
+    setLoadingPositions(true);
+    try {
+      const pos = await getActiveStakesOnChain(account);
+      setPositions(pos);
+    } catch {
+      setPositions([]);
+    } finally {
+      setLoadingPositions(false);
+    }
+  }, [getActiveStakesOnChain, account]);
 
-  const buyHoldMut = useMutation({
-    mutationFn: (usdtAmount: string) => apiRequest("POST", "/api/paidstaking/buy-hold", { walletAddress: account, usdtAmount }),
-    onSuccess: (r: any) => {
-      toast({ title: "Tokens Purchased!", description: `${parseFloat(r.tokens).toFixed(2)} M-Tokens added to your balance. 2x sell cap = $${parseFloat(r.capPrice).toFixed(6)}/token` });
-      setBuyHoldAmount("");
-      invalidate();
-    },
-    onError: (e: any) => toast({ title: "Purchase Failed", description: e.message, variant: "destructive" }),
-  });
+  const loadWalletData = useCallback(async () => {
+    if (!account) return;
+    try {
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const usdt = getTokenContract(provider);
+      const [allowance, bal] = await Promise.all([
+        usdt.allowance(account, MVAULT_CONTRACT_ADDRESS),
+        usdt.balanceOf(account),
+      ]);
+      setUsdtAllowance(allowance as bigint);
+      setWalletUsdtBalance(bal as bigint);
+    } catch {}
+  }, [account]);
 
-  const sellStakedMut = useMutation({
-    mutationFn: ({ planId, tokenAmount }: { planId: number; tokenAmount: string }) =>
-      apiRequest("POST", "/api/paidstaking/sell-staked", { walletAddress: account, planId, tokenAmount }),
-    onSuccess: (r: any) => {
-      toast({ title: "Staked Tokens Sold!", description: `Received $${parseFloat(r.usdtReceived).toFixed(4)} USDT. Effective price: $${parseFloat(r.effectivePrice).toFixed(8)}/token.${parseFloat(r.companyRetains) > 0 ? ` Company retained: $${parseFloat(r.companyRetains).toFixed(4)} (above 4x cap).` : ""}` });
-      setSellStakedAmount("");
-      invalidate();
-    },
-    onError: (e: any) => toast({ title: "Sell Failed", description: e.message, variant: "destructive" }),
-  });
+  useEffect(() => {
+    loadPositions();
+    loadWalletData();
+  }, [loadPositions, loadWalletData]);
 
-  const sellMainMut = useMutation({
-    mutationFn: (tokenAmount: string) => apiRequest("POST", "/api/paidstaking/sell-main-tokens", { walletAddress: account, tokenAmount }),
-    onSuccess: (r: any) => {
-      toast({ title: "Tokens Sold!", description: `${parseFloat(r.tokensBurned).toFixed(4)} M-Tokens burned → $${parseFloat(r.usdtReceived).toFixed(4)} USDT credited.${parseFloat(r.companyRetains) > 0 ? ` Company retained: $${parseFloat(r.companyRetains).toFixed(4)} (above 2x cap).` : ""}` });
-      setSellMainAmount("");
-      invalidate();
-    },
-    onError: (e: any) => toast({ title: "Sell Failed", description: e.message, variant: "destructive" }),
-  });
+  const usdtAmt = parseFloat(usdtInput) || 0;
+  const levelIncome = LEVEL_RATES.map(r => (usdtAmt * r) / 100);
+  const totalLevelPct = LEVEL_RATES.reduce((a, b) => a + b, 0);
+  const forTokens = usdtAmt * (1 - totalLevelPct / 100);
+  const estimatedMvt = buyPrice > 0 ? forTokens / buyPrice : 0;
 
-  const buyPrice = parseFloat(data?.currentBuyPrice ?? price?.buyPrice ?? "0.0036");
-  const sellPrice = parseFloat(data?.currentSellPrice ?? price?.sellPrice ?? "0.00324");
-  const usdtBalance = parseFloat(data?.usdtBalance ?? "0");
-  const mainBalance = parseFloat(data?.mTokenBalance?.mainBalance ?? "0");
-  const plan = data?.activePlan ?? null;
-  const stakedBatch = data?.stakedBatch ?? null;
-  const freeBatches = data?.freeBatches ?? [];
+  const amountBn = usdtAmt > 0 ? ethers.parseUnits(usdtInput || "0", 18) : 0n;
+  const needsApproval = usdtAllowance < amountBn;
+  const walletBalNum = parseFloat(formatTokenAmount(walletUsdtBalance, tokenDecimals));
 
-  const daysLeft = plan ? Math.max(0, Math.ceil((new Date(plan.endDate).getTime() - Date.now()) / 86400000)) : 0;
-  const daysElapsed = plan ? Math.floor((Date.now() - new Date(plan.startDate).getTime()) / 86400000) : 0;
-  const progressPct = plan ? Math.min(100, (daysElapsed / 300) * 100) : 0;
-  const canSellStaked = plan && daysLeft === 0 && stakedBatch && parseFloat(stakedBatch.tokensRemaining) > 0;
-  const stakedTokensRemaining = stakedBatch ? parseFloat(stakedBatch.tokensRemaining) : 0;
-  const capPriceStaked = stakedBatch ? parseFloat(stakedBatch.entryPrice) * 4 : 0;
-  const effectiveSellPriceStaked = Math.min(sellPrice, capPriceStaked);
+  const handleApprove = async () => {
+    if (!approveToken) return;
+    setApprovingUsdt(true);
+    try {
+      await approveToken();
+      await loadWalletData();
+      toast({ title: "USDT Approved", description: "You can now stake USDT." });
+    } catch (e: any) {
+      toast({ title: "Approval Failed", description: e?.message ?? "Please try again.", variant: "destructive" });
+    } finally {
+      setApprovingUsdt(false);
+    }
+  };
 
-  const stakePreview = stakeAmount && buyPrice > 0 ? {
-    user: (parseFloat(stakeAmount) / buyPrice * 0.7).toFixed(2),
-    admin: (parseFloat(stakeAmount) / buyPrice * 0.2).toFixed(2),
-    cap4x: (buyPrice * 4).toFixed(6),
-    maxReturn: (parseFloat(stakeAmount) / buyPrice * 0.7 * buyPrice * 4).toFixed(2),
-  } : null;
+  const handleStake = async () => {
+    if (!stakeUsdt) return;
+    if (usdtAmt < 50) {
+      toast({ title: "Minimum $50", description: "Please enter at least $50 USDT.", variant: "destructive" });
+      return;
+    }
+    if (usdtAmt > walletBalNum) {
+      toast({ title: "Insufficient Balance", description: "You don't have enough USDT in your wallet.", variant: "destructive" });
+      return;
+    }
+    setStaking(true);
+    try {
+      await stakeUsdt(usdtInput, activeTab === "locked");
+      toast({
+        title: "Staked Successfully!",
+        description: `$${fmt(usdtAmt)} USDT staked as ${activeTab} position. ~${fmt(estimatedMvt)} MVT locked.`,
+      });
+      setUsdtInput("");
+      await loadPositions();
+      await loadWalletData();
+    } catch (e: any) {
+      toast({ title: "Stake Failed", description: e?.message ?? "Transaction failed.", variant: "destructive" });
+    } finally {
+      setStaking(false);
+    }
+  };
 
-  const buyHoldPreview = buyHoldAmount && buyPrice > 0 ? {
-    tokens: (parseFloat(buyHoldAmount) / buyPrice).toFixed(2),
-    cap2x: (buyPrice * 2).toFixed(6),
-    maxReturn: (parseFloat(buyHoldAmount) / buyPrice * buyPrice * 2).toFixed(2),
-  } : null;
+  const handleUnstake = async (pos: StakePosition) => {
+    if (!unstakePosition) return;
+    setUnstakingIndex(pos.index);
+    try {
+      await unstakePosition(pos.index);
+      toast({ title: "Unstaked Successfully!", description: "Your USDT has been sent to your wallet." });
+      await loadPositions();
+      await loadWalletData();
+    } catch (e: any) {
+      toast({ title: "Unstake Failed", description: e?.message ?? "Transaction failed.", variant: "destructive" });
+    } finally {
+      setUnstakingIndex(null);
+    }
+  };
 
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center py-20">
-        <div className="text-center space-y-4">
-          <div className="w-12 h-12 mx-auto rounded-xl gradient-icon flex items-center justify-center pulse-glow">
-            <Loader2 className="w-6 h-6 animate-spin text-yellow-300" />
-          </div>
-          <p className="text-sm text-muted-foreground">Loading paid staking...</p>
-        </div>
-      </div>
-    );
-  }
+  const getUnstakePreview = (pos: StakePosition) => {
+    const totalMvt = parseFloat(formatTokenAmount(pos.mvtAmount, tokenDecimals));
+    if (pos.isLocked) {
+      const distrib = LOCKED_UNSTAKE_LEVELS.map(r => (totalMvt * r) / 100);
+      const totalDistribPct = LOCKED_UNSTAKE_LEVELS.reduce((a, b) => a + b, 0);
+      const toSell = totalMvt * (1 - totalDistribPct / 100);
+      const usdtOut = toSell * sellPrice;
+      return { distrib, toSell, usdtOut, totalDistribPct };
+    } else {
+      const sponsorTokens = (totalMvt * FLEXIBLE_UNSTAKE_FEE) / 100;
+      const toSell = totalMvt - sponsorTokens;
+      const usdtOut = toSell * sellPrice;
+      return { sponsorTokens, toSell, usdtOut };
+    }
+  };
+
+  const totalStakedMvt = positions.reduce((sum, p) => sum + parseFloat(formatTokenAmount(p.mvtAmount, tokenDecimals)), 0);
+  const totalStakedUsdt = positions.reduce((sum, p) => sum + parseFloat(formatTokenAmount(p.usdtInvested, tokenDecimals)), 0);
 
   return (
-    <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-5">
+    <div className="p-4 sm:p-6 space-y-6 max-w-2xl mx-auto">
 
-      {/* Title */}
-      <div className="text-center space-y-1">
-        <h1 className="text-2xl font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-paidstaking-title">
-          M-Token Staking
-        </h1>
-        <p className="text-xs text-muted-foreground">Lock USDT · Get M-Tokens · Sell at up to 4x your entry price</p>
+      {/* Header */}
+      <div className="slide-in">
+        <div className="flex items-center gap-3">
+          <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-amber-500/20 via-yellow-500/20 to-amber-400/20 flex items-center justify-center">
+            <Coins className="h-6 w-6 text-yellow-300" />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }}
+              data-testid="text-staking-title">
+              MVT Staking
+            </h1>
+            <p className="text-sm text-muted-foreground">Invest USDT · Buy MVT · Earn level income</p>
+          </div>
+        </div>
       </div>
 
-      {/* Token Price Ticker */}
-      <div className="glass-card rounded-2xl p-4" data-testid="card-token-price">
+      {/* Stats Row */}
+      <div className="grid grid-cols-3 gap-3 slide-in" style={{ animationDelay: "0.05s" }}>
+        <div className="glass-card rounded-xl p-3 text-center">
+          <DollarSign className="h-4 w-4 mx-auto text-emerald-400 mb-1" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Wallet USDT</p>
+          <p className="text-sm font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }}
+            data-testid="text-wallet-usdt">
+            ${fmt(walletBalNum)}
+          </p>
+        </div>
+        <div className="glass-card rounded-xl p-3 text-center">
+          <Coins className="h-4 w-4 mx-auto text-yellow-300 mb-1" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Staked MVT</p>
+          <p className="text-sm font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }}
+            data-testid="text-staked-mvt">
+            {fmt(totalStakedMvt)} M
+          </p>
+        </div>
+        <div className="glass-card rounded-xl p-3 text-center">
+          <TrendingUp className="h-4 w-4 mx-auto text-amber-400 mb-1" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Total Invested</p>
+          <p className="text-sm font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}
+            data-testid="text-total-invested">
+            ${fmt(totalStakedUsdt)}
+          </p>
+        </div>
+      </div>
+
+      {/* Token Price */}
+      <div className="glass-card rounded-2xl p-4 slide-in" style={{ animationDelay: "0.07s" }}
+        data-testid="card-token-price">
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-yellow-300" />
+            <TrendingUp className="h-4 w-4 text-yellow-300" />
             <span className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>M Token Price</span>
           </div>
-          <button onClick={() => refetch()} className="text-yellow-300 hover:text-yellow-200 transition-colors" data-testid="button-refresh-price">
-            <RefreshCw className="w-3.5 h-3.5" />
+          <button onClick={() => loadWalletData()} className="text-yellow-300 hover:text-yellow-200 transition-colors"
+            data-testid="button-refresh">
+            <RefreshCw className="h-3.5 w-3.5" />
           </button>
         </div>
-        <div className="grid grid-cols-3 gap-3">
+        <div className="grid grid-cols-2 gap-3">
           <div className="text-center p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Buy Price</p>
-            <p className="text-sm font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-buy-price">
-              ${buyPrice.toFixed(6)}
-            </p>
+            <p className="text-sm font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }}
+              data-testid="text-buy-price">${buyPrice.toFixed(6)}</p>
           </div>
           <div className="text-center p-3 rounded-xl bg-orange-500/5 border border-orange-500/10">
             <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Sell Price</p>
-            <p className="text-sm font-bold text-orange-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-sell-price">
-              ${sellPrice.toFixed(6)}
-            </p>
-          </div>
-          <div className="text-center p-3 rounded-xl bg-yellow-600/5 border border-yellow-600/10">
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Listing</p>
-            <p className="text-sm font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }}>
-              $0.003600
-            </p>
-          </div>
-        </div>
-        <div className="grid grid-cols-2 gap-3 mt-3">
-          <div className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.05]">
-            <span className="text-[10px] text-muted-foreground">Liquidity</span>
-            <span className="text-[11px] font-bold text-amber-300">${parseFloat(price?.liquidity ?? "0").toLocaleString(undefined, { maximumFractionDigits: 2 })}</span>
-          </div>
-          <div className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.05]">
-            <span className="text-[10px] text-muted-foreground">Circulating</span>
-            <span className="text-[11px] font-bold text-amber-400">{parseFloat(price?.circulatingSupply ?? "0").toLocaleString(undefined, { maximumFractionDigits: 0 })} M</span>
+            <p className="text-sm font-bold text-orange-400" style={{ fontFamily: "var(--font-display)" }}
+              data-testid="text-sell-price">${sellPrice.toFixed(6)}</p>
           </div>
         </div>
       </div>
 
-      {/* Balances */}
-      <div className="grid grid-cols-3 gap-3">
-        <div className="premium-card rounded-xl p-3 text-center" data-testid="card-usdt-balance">
-          <DollarSign className="w-4 h-4 mx-auto text-emerald-400 mb-1" />
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">USDT Balance</p>
-          <p className="text-sm font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-usdt-balance">
-            ${usdtBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-          </p>
-        </div>
-        <div className="premium-card rounded-xl p-3 text-center" data-testid="card-locked-tokens">
-          <Lock className="w-4 h-4 mx-auto text-yellow-300 mb-1" />
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Locked (4x)</p>
-          <p className="text-sm font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }} data-testid="text-locked-tokens">
-            {stakedTokensRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })} M
-          </p>
-        </div>
-        <div className="premium-card rounded-xl p-3 text-center" data-testid="card-free-tokens">
-          <Coins className="w-4 h-4 mx-auto text-amber-400 mb-1" />
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Held (2x)</p>
-          <p className="text-sm font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-free-tokens">
-            {mainBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })} M
-          </p>
-        </div>
-      </div>
+      {/* Staking Form */}
+      <div className="glass-card rounded-2xl p-5 space-y-5 slide-in" style={{ animationDelay: "0.1s" }}
+        data-testid="card-stake-form">
 
-      {/* Active Staking Plan */}
-      {plan && plan.isActive && (
-        <div className="glass-card rounded-2xl p-5 space-y-4" data-testid="card-active-plan">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className="h-9 w-9 rounded-xl bg-yellow-600/15 flex items-center justify-center">
-                <Lock className="h-4 w-4 text-yellow-300" />
-              </div>
-              <div>
-                <p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Active Staking Plan</p>
-                <p className="text-[10px] text-muted-foreground">${parseFloat(plan.usdtInvested).toLocaleString()} USDT staked · 10-month lock</p>
-              </div>
-            </div>
-            <Badge className="bg-yellow-600/10 text-yellow-300 border-yellow-600/20 text-[10px]">Locked</Badge>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Locked Tokens</p>
-              <p className="text-sm font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-locked-amount">
-                {stakedTokensRemaining.toLocaleString(undefined, { maximumFractionDigits: 2 })} M
-              </p>
-            </div>
-            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Days Left</p>
-              <p className="text-sm font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }} data-testid="text-days-left">
-                {daysLeft > 0 ? `${daysLeft} days` : "Unlocked!"}
-              </p>
-            </div>
-            <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Entry Price</p>
-              <p className="text-sm font-bold text-amber-300" style={{ fontFamily: "var(--font-display)" }}>
-                ${parseFloat(plan.buyPriceAtEntry).toFixed(6)}
-              </p>
-            </div>
-            <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/15">
-              <p className="text-[10px] text-emerald-400/80 uppercase tracking-wider mb-1">4x Cap Price</p>
-              <p className="text-sm font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }}>
-                ${capPriceStaked.toFixed(6)}
-              </p>
-            </div>
-          </div>
-
-          {/* Lock period progress */}
-          <div className="space-y-1.5">
-            <div className="flex items-center justify-between text-[10px] text-muted-foreground">
-              <span>{daysElapsed} / 300 days elapsed</span>
-              <span>{progressPct.toFixed(1)}%</span>
-            </div>
-            <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
-              <div
-                className="h-full rounded-full bg-gradient-to-r from-yellow-600 to-amber-400 transition-all duration-500"
-                style={{ width: `${progressPct}%` }}
-              />
-            </div>
-          </div>
-
-          {/* Potential return summary */}
-          {stakedTokensRemaining > 0 && (
-            <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15 space-y-1.5">
-              <p className="text-[10px] text-amber-400 uppercase tracking-wider font-medium">Potential Return at 4x Cap</p>
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-muted-foreground">{stakedTokensRemaining.toFixed(2)} tokens × ${capPriceStaked.toFixed(6)}</span>
-                <span className="font-bold text-amber-400">${(stakedTokensRemaining * capPriceStaked).toFixed(2)} USDT</span>
-              </div>
-              {sellPrice < capPriceStaked && (
-                <div className="flex items-center justify-between text-xs pt-1 border-t border-white/[0.05]">
-                  <span className="text-muted-foreground">At current sell price (${sellPrice.toFixed(6)})</span>
-                  <span className="font-bold text-orange-400">${(stakedTokensRemaining * sellPrice).toFixed(2)} USDT</span>
-                </div>
-              )}
-            </div>
-          )}
-
-          {/* Sell staked tokens — available after lock ends */}
-          {canSellStaked && (
-            <div className="space-y-3 pt-1">
-              <div className="flex items-center gap-2">
-                <Unlock className="w-4 h-4 text-emerald-400" />
-                <span className="text-sm font-semibold text-emerald-400">Sell Staked Tokens</span>
-                <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[10px]">Unlocked</Badge>
-              </div>
-              <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] px-3 py-2.5">
-                <p className="text-[10px] text-muted-foreground mb-1">Amount to Sell</p>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    value={sellStakedAmount}
-                    onChange={(e) => setSellStakedAmount(e.target.value)}
-                    placeholder="0.00"
-                    className="flex-1 bg-transparent text-sm font-bold text-foreground outline-none placeholder:text-muted-foreground/30"
-                    data-testid="input-sell-staked-amount"
-                  />
-                  <button
-                    onClick={() => setSellStakedAmount(stakedTokensRemaining.toFixed(8))}
-                    className="text-[10px] text-yellow-300 hover:text-yellow-200 font-semibold uppercase tracking-wider px-2 py-1 rounded-md bg-yellow-600/10 hover:bg-yellow-600/15 transition-colors shrink-0"
-                    data-testid="button-max-sell-staked"
-                  >
-                    MAX
-                  </button>
-                  <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-yellow-600/10 border border-yellow-600/20 shrink-0">
-                    <span className="text-xs font-bold text-yellow-300">M</span>
-                  </div>
-                </div>
-              </div>
-              {sellStakedAmount && parseFloat(sellStakedAmount) > 0 && (
-                <div className="space-y-1.5 p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">Effective price (min of sell vs 4x cap)</span>
-                    <span className="font-medium">${effectiveSellPriceStaked.toFixed(8)}</span>
-                  </div>
-                  <div className="flex items-center justify-between text-xs">
-                    <span className="text-muted-foreground">You receive</span>
-                    <span className="font-bold text-emerald-400">${(parseFloat(sellStakedAmount) * effectiveSellPriceStaked).toFixed(4)} USDT</span>
-                  </div>
-                  {sellPrice > capPriceStaked && (
-                    <div className="flex items-center justify-between text-xs">
-                      <span className="text-orange-400/80">Company retains (above 4x cap)</span>
-                      <span className="font-bold text-orange-400">${(parseFloat(sellStakedAmount) * (sellPrice - capPriceStaked)).toFixed(4)} USDT</span>
-                    </div>
-                  )}
-                </div>
-              )}
-              <button
-                onClick={() => plan && sellStakedMut.mutate({ planId: plan.id, tokenAmount: sellStakedAmount })}
-                disabled={sellStakedMut.isPending || !sellStakedAmount || parseFloat(sellStakedAmount) <= 0 || parseFloat(sellStakedAmount) > stakedTokensRemaining}
-                className="w-full glow-button text-white font-bold py-3 px-6 rounded-xl text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-                data-testid="button-sell-staked"
-              >
-                {sellStakedMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Unlock className="w-4 h-4" />}
-                {sellStakedMut.isPending ? "Processing..." : "Sell Staked Tokens"}
-              </button>
-            </div>
-          )}
-
-          {daysLeft > 0 && (
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]">
-              <Clock className="w-3.5 h-3.5 text-muted-foreground shrink-0" />
-              <p className="text-[10px] text-muted-foreground">
-                Tokens unlock on {new Date(plan.endDate).toLocaleDateString()} ({daysLeft} days remaining). You can sell after the lock period ends.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Sell Held M-Tokens (mainBalance / free batches with 2x cap) */}
-      {mainBalance > 0 && (
-        <div className="glass-card rounded-2xl p-5 space-y-4" data-testid="card-sell-main-tokens">
-          <div className="flex items-center gap-2">
-            <Coins className="w-4 h-4 text-amber-400" />
-            <span className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>Sell Held M-Tokens</span>
-            <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-[10px]">2x Cap</Badge>
-          </div>
-          <p className="text-[10px] text-muted-foreground">
-            Sell freely held M-Tokens (Buy &amp; Hold). FIFO order. Each batch capped at 2x its entry price — excess stays in company liquidity.
-          </p>
-
-          {freeBatches.length > 0 && (
-            <div className="space-y-1.5">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Your Batches (FIFO)</p>
-              {freeBatches.slice(0, 5).map((b) => {
-                const cap2x = parseFloat(b.entryPrice) * 2;
-                const rem = parseFloat(b.tokensRemaining);
-                return (
-                  <div key={b.id} className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.04]" data-testid={`row-batch-${b.id}`}>
-                    <div>
-                      <p className="text-[10px] font-medium">Entry: ${parseFloat(b.entryPrice).toFixed(6)}</p>
-                      <p className="text-[9px] text-muted-foreground">Cap: ${cap2x.toFixed(6)} · {new Date(b.purchasedAt).toLocaleDateString()}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-[10px] font-bold text-amber-400">{rem.toFixed(2)} M</p>
-                      <p className="text-[9px] text-muted-foreground">≈ ${(rem * Math.min(sellPrice, cap2x)).toFixed(4)}</p>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-
-          <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] px-3 py-2.5">
-            <p className="text-[10px] text-muted-foreground mb-1">Amount to Sell</p>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                value={sellMainAmount}
-                onChange={(e) => setSellMainAmount(e.target.value)}
-                placeholder="0.00"
-                className="flex-1 bg-transparent text-sm font-bold text-foreground outline-none placeholder:text-muted-foreground/30"
-                data-testid="input-sell-main-amount"
-              />
-              <button
-                onClick={() => setSellMainAmount(mainBalance.toFixed(8))}
-                className="text-[10px] text-yellow-300 hover:text-yellow-200 font-semibold uppercase tracking-wider px-2 py-1 rounded-md bg-yellow-600/10 hover:bg-yellow-600/15 transition-colors shrink-0"
-                data-testid="button-max-main"
-              >
-                MAX
-              </button>
-              <div className="flex items-center gap-1.5 px-2 py-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 shrink-0">
-                <span className="text-xs font-bold text-amber-400">M</span>
-              </div>
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-1.5">Balance: {mainBalance.toLocaleString(undefined, { maximumFractionDigits: 4 })} M</p>
-          </div>
-
+        {/* Tabs */}
+        <div className="flex rounded-xl bg-white/[0.03] p-1 gap-1">
           <button
-            onClick={() => sellMainMut.mutate(sellMainAmount)}
-            disabled={sellMainMut.isPending || !sellMainAmount || parseFloat(sellMainAmount) <= 0 || parseFloat(sellMainAmount) > mainBalance}
-            className="w-full glow-button text-white font-bold py-3 px-6 rounded-xl text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-            data-testid="button-sell-main-tokens"
+            onClick={() => setActiveTab("flexible")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+              activeTab === "flexible"
+                ? "bg-gradient-to-r from-amber-500/20 to-yellow-500/20 text-yellow-300 border border-yellow-500/20"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            data-testid="tab-flexible"
           >
-            {sellMainMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Flame className="w-4 h-4" />}
-            {sellMainMut.isPending ? "Processing..." : "Sell & Burn → USDT"}
+            <Zap className="h-4 w-4" />
+            Flexible
+          </button>
+          <button
+            onClick={() => setActiveTab("locked")}
+            className={`flex-1 flex items-center justify-center gap-2 py-2.5 rounded-lg text-sm font-semibold transition-all ${
+              activeTab === "locked"
+                ? "bg-gradient-to-r from-violet-500/20 to-purple-500/20 text-violet-300 border border-violet-500/20"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
+            data-testid="tab-locked"
+          >
+            <Shield className="h-4 w-4" />
+            Locked
           </button>
         </div>
-      )}
 
-      {/* Start Paid Staking */}
-      {!plan && (
-        <div className="glass-card rounded-2xl p-5 space-y-4" data-testid="card-new-stake">
-          <div className="flex items-center gap-2">
-            <div className="h-9 w-9 rounded-xl bg-yellow-600/15 flex items-center justify-center">
-              <Lock className="h-4 w-4 text-yellow-300" />
-            </div>
-            <div>
-              <p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Start Paid Staking</p>
-              <p className="text-[10px] text-muted-foreground">Lock USDT for 10 months · 70% of tokens go to you · sell at up to 4x entry price</p>
-            </div>
-          </div>
-
-          <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
-            <p className="text-xs text-muted-foreground mb-2">USDT Amount to Stake</p>
-            <div className="flex items-center gap-2">
-              <input
-                type="number"
-                value={stakeAmount}
-                onChange={(e) => setStakeAmount(e.target.value)}
-                placeholder="0.00"
-                className="min-w-0 flex-1 bg-transparent text-xl font-bold text-foreground outline-none placeholder:text-muted-foreground/30"
-                style={{ fontFamily: "var(--font-display)" }}
-                data-testid="input-stake-amount"
-              />
-              <button
-                onClick={() => setStakeAmount(usdtBalance.toFixed(2))}
-                className="text-[10px] text-yellow-300 hover:text-yellow-200 font-semibold uppercase tracking-wider px-2 py-1 rounded-md bg-yellow-600/10 hover:bg-yellow-600/15 transition-colors shrink-0"
-                data-testid="button-max-stake"
-              >
-                MAX
-              </button>
-              <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shrink-0">
-                <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
-                <span className="text-xs font-bold text-emerald-400 hidden sm:inline">USDT</span>
-              </div>
-            </div>
-            <p className="text-[10px] text-muted-foreground mt-2">Balance: ${usdtBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
-          </div>
-
-          {stakePreview && (
-            <div className="space-y-2 p-3 rounded-xl bg-yellow-600/5 border border-yellow-600/15">
-              <p className="text-[10px] text-yellow-300 uppercase tracking-wider font-medium">Stake Preview</p>
-              <div className="space-y-1.5 text-xs">
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Entry buy price</span>
-                  <span className="font-medium">${buyPrice.toFixed(6)}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Tokens locked for you (70%)</span>
-                  <span className="font-bold text-yellow-300">{stakePreview.user} M</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Admin tokens (20%)</span>
-                  <span className="text-muted-foreground">{stakePreview.admin} M</span>
-                </div>
-                <div className="flex justify-between pt-1 border-t border-white/[0.05]">
-                  <span className="text-muted-foreground">4x sell cap price</span>
-                  <span className="font-bold text-emerald-400">${stakePreview.cap4x}</span>
-                </div>
-                <div className="flex justify-between">
-                  <span className="text-muted-foreground">Max return at 4x cap</span>
-                  <span className="font-bold text-amber-400">${stakePreview.maxReturn} USDT</span>
-                </div>
-              </div>
-            </div>
-          )}
-
-          <button
-            onClick={() => stakeMut.mutate(stakeAmount)}
-            disabled={stakeMut.isPending || !stakeAmount || parseFloat(stakeAmount) <= 0 || parseFloat(stakeAmount) > usdtBalance}
-            className="w-full glow-button text-white font-bold py-3.5 px-6 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50"
-            style={{ fontFamily: "var(--font-display)" }}
-            data-testid="button-stake"
-          >
-            {stakeMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <Lock className="w-4 h-4" />}
-            {stakeMut.isPending ? "Processing..." : "Activate Paid Staking"}
-          </button>
-
-          {usdtBalance === 0 && (
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
-              <AlertCircle className="w-4 h-4 text-amber-400 shrink-0" />
-              <p className="text-xs text-amber-400">You need a USDT balance to stake. Contact admin to deposit USDT.</p>
-            </div>
+        {/* Info banner */}
+        <div className={`p-3 rounded-xl border text-[11px] leading-relaxed ${
+          activeTab === "flexible"
+            ? "bg-amber-500/5 border-amber-500/15 text-amber-300/80"
+            : "bg-violet-500/5 border-violet-500/15 text-violet-300/80"
+        }`}>
+          {activeTab === "flexible" ? (
+            <span><strong>Flexible Staking:</strong> Unstake anytime. On unstake: 5% of your MVT tokens go to your direct sponsor. The remaining 95% is sold for USDT and sent to your wallet.</span>
+          ) : (
+            <span><strong>Locked Staking:</strong> Unstake anytime. On unstake: 10% of your MVT tokens are distributed across 5 sponsor levels (5%+2%+1%+1%+1%). The remaining 90% is sold for USDT and sent to your wallet.</span>
           )}
         </div>
-      )}
 
-      {/* Buy & Hold (no lock, 2x cap) */}
-      <div className="glass-card rounded-2xl p-5 space-y-4" data-testid="card-buy-hold">
-        <div className="flex items-center gap-2">
-          <div className="h-9 w-9 rounded-xl bg-amber-500/15 flex items-center justify-center">
-            <ShoppingBag className="h-4 w-4 text-amber-400" />
-          </div>
-          <div>
-            <p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Buy &amp; Hold M-Tokens</p>
-            <p className="text-[10px] text-muted-foreground">No lock period · tokens go straight to your balance · sell at up to 2x entry price</p>
-          </div>
-        </div>
-
-        <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4">
-          <p className="text-xs text-muted-foreground mb-2">USDT Amount</p>
-          <div className="flex items-center gap-2">
+        {/* USDT Input */}
+        <div className="space-y-1.5">
+          <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Amount to Stake (USDT)</label>
+          <div className="flex items-center gap-2 rounded-xl bg-white/[0.03] border border-white/[0.06] px-3 py-2.5">
+            <DollarSign className="h-4 w-4 text-emerald-400 shrink-0" />
             <input
               type="number"
-              value={buyHoldAmount}
-              onChange={(e) => setBuyHoldAmount(e.target.value)}
-              placeholder="0.00"
-              className="min-w-0 flex-1 bg-transparent text-xl font-bold text-foreground outline-none placeholder:text-muted-foreground/30"
-              style={{ fontFamily: "var(--font-display)" }}
-              data-testid="input-buy-hold-amount"
+              min="50"
+              step="1"
+              value={usdtInput}
+              onChange={e => setUsdtInput(e.target.value)}
+              placeholder="Minimum $50"
+              className="flex-1 bg-transparent text-sm font-bold outline-none placeholder:text-muted-foreground/30"
+              data-testid="input-usdt-amount"
             />
             <button
-              onClick={() => setBuyHoldAmount(usdtBalance.toFixed(2))}
-              className="text-[10px] text-yellow-300 hover:text-yellow-200 font-semibold uppercase tracking-wider px-2 py-1 rounded-md bg-yellow-600/10 hover:bg-yellow-600/15 transition-colors shrink-0"
-              data-testid="button-max-buy-hold"
+              onClick={() => setUsdtInput(Math.floor(walletBalNum).toString())}
+              className="text-[10px] text-yellow-300 font-semibold uppercase tracking-wider px-2 py-1 rounded-md bg-yellow-600/10 hover:bg-yellow-600/15 transition-colors shrink-0"
+              data-testid="button-max-stake"
             >
               MAX
             </button>
-            <div className="flex items-center gap-1 px-2 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 shrink-0">
-              <DollarSign className="w-3.5 h-3.5 text-emerald-400" />
-              <span className="text-xs font-bold text-emerald-400 hidden sm:inline">USDT</span>
-            </div>
           </div>
-          <p className="text-[10px] text-muted-foreground mt-2">Balance: ${usdtBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}</p>
+          {usdtAmt > 0 && usdtAmt < 50 && (
+            <p className="text-[11px] text-red-400 flex items-center gap-1">
+              <AlertCircle className="h-3 w-3" /> Minimum stake is $50 USDT
+            </p>
+          )}
         </div>
 
-        {buyHoldPreview && (
-          <div className="space-y-2 p-3 rounded-xl bg-amber-500/5 border border-amber-500/15">
-            <p className="text-[10px] text-amber-400 uppercase tracking-wider font-medium">Buy Preview</p>
-            <div className="space-y-1.5 text-xs">
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">Tokens you receive (100%)</span>
-                <span className="font-bold text-amber-400">{buyHoldPreview.tokens} M</span>
+        {/* Preview breakdown */}
+        {usdtAmt >= 50 && (
+          <div className="space-y-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]"
+            data-testid="card-stake-preview">
+            <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Breakdown Preview</p>
+
+            <div className="space-y-1.5">
+              <p className="text-[10px] text-muted-foreground mb-1.5">Level Income (paid instantly in USDT to uplines)</p>
+              {LEVEL_RATES.map((rate, i) => (
+                <div key={i} className="flex items-center justify-between text-xs">
+                  <span className="text-muted-foreground">L{i + 1} Upline ({rate}%)</span>
+                  <span className="font-medium text-emerald-400">${fmt(levelIncome[i], 4)} USDT</span>
+                </div>
+              ))}
+              <div className="h-px bg-white/[0.06] my-1.5" />
+              <div className="flex items-center justify-between text-xs font-semibold">
+                <span className="text-muted-foreground">Total Level Income</span>
+                <span className="text-emerald-400">${fmt(usdtAmt * totalLevelPct / 100, 4)} USDT ({totalLevelPct}%)</span>
               </div>
-              <div className="flex justify-between">
-                <span className="text-muted-foreground">2x sell cap price</span>
-                <span className="font-bold text-emerald-400">${buyHoldPreview.cap2x}</span>
+            </div>
+
+            <div className="h-px bg-white/[0.06]" />
+
+            <div className="space-y-1.5">
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">For Token Purchase (85%)</span>
+                <span className="font-medium">${fmt(forTokens, 4)} USDT</span>
               </div>
-              <div className="flex justify-between pt-1 border-t border-white/[0.05]">
-                <span className="text-muted-foreground">Max return at 2x cap</span>
-                <span className="font-bold text-amber-300">${buyHoldPreview.maxReturn} USDT</span>
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-muted-foreground">Estimated MVT at ${buyPrice.toFixed(6)}</span>
+                <span className="font-bold text-yellow-300">~{fmt(estimatedMvt, 2)} MVT</span>
               </div>
             </div>
           </div>
         )}
 
-        <button
-          onClick={() => buyHoldMut.mutate(buyHoldAmount)}
-          disabled={buyHoldMut.isPending || !buyHoldAmount || parseFloat(buyHoldAmount) <= 0 || parseFloat(buyHoldAmount) > usdtBalance}
-          className="w-full py-3.5 px-6 rounded-xl border border-amber-500/30 bg-amber-500/5 text-amber-400 font-bold text-sm transition-all hover:bg-amber-500/10 flex items-center justify-center gap-2 disabled:opacity-50"
-          style={{ fontFamily: "var(--font-display)" }}
-          data-testid="button-buy-hold"
-        >
-          {buyHoldMut.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <ShoppingBag className="w-4 h-4" />}
-          {buyHoldMut.isPending ? "Processing..." : "Buy & Hold M-Tokens"}
-        </button>
+        {/* Action Buttons */}
+        <div className="space-y-2.5">
+          {needsApproval && usdtAmt >= 50 ? (
+            <button
+              onClick={handleApprove}
+              disabled={approvingUsdt}
+              className="w-full py-3.5 px-6 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 bg-blue-500/20 border border-blue-500/30 text-blue-300 hover:bg-blue-500/25"
+              data-testid="button-approve-usdt"
+            >
+              {approvingUsdt ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+              {approvingUsdt ? "Approving USDT..." : "Approve USDT First"}
+            </button>
+          ) : (
+            <button
+              onClick={handleStake}
+              disabled={staking || usdtAmt < 50 || usdtAmt > walletBalNum}
+              className={`w-full py-3.5 px-6 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 ${
+                activeTab === "flexible"
+                  ? "glow-button text-white"
+                  : "bg-gradient-to-r from-violet-600/80 to-purple-600/80 hover:from-violet-500/80 hover:to-purple-500/80 text-white border border-violet-500/30"
+              }`}
+              data-testid="button-stake"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              {staking ? (
+                <><Loader2 className="h-4 w-4 animate-spin" /> Staking...</>
+              ) : (
+                <>{activeTab === "flexible" ? <Zap className="h-4 w-4" /> : <Lock className="h-4 w-4" />}
+                  Stake ${usdtAmt > 0 ? fmt(usdtAmt) : "—"} USDT ({activeTab === "flexible" ? "Flexible" : "Locked"})</>
+              )}
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* Transaction History */}
-      {data && data.tokenTransactions?.length > 0 && (
-        <div className="glass-card rounded-2xl p-5 space-y-3" data-testid="card-transactions">
-          <div className="flex items-center gap-2">
-            <BarChart3 className="w-4 h-4 text-amber-300" />
-            <p className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>Transaction History</p>
+      {/* Active Positions */}
+      <div className="glass-card rounded-2xl slide-in" style={{ animationDelay: "0.15s" }}
+        data-testid="card-positions">
+        <div className="flex items-center justify-between p-5 border-b border-white/[0.06]">
+          <div className="flex items-center gap-3">
+            <div className="h-10 w-10 rounded-xl bg-yellow-600/15 flex items-center justify-center">
+              <Lock className="h-5 w-5 text-yellow-300" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }}>
+                Active Stakes
+              </h2>
+              <p className="text-[10px] text-muted-foreground">{positions.length} position{positions.length !== 1 ? "s" : ""}</p>
+            </div>
           </div>
-          <div className="space-y-1.5">
-            {data.tokenTransactions.slice(0, 15).map((tx) => (
-              <div key={tx.id} className="flex items-center justify-between p-2.5 rounded-lg bg-white/[0.02] border border-white/[0.04]" data-testid={`row-token-tx-${tx.id}`}>
-                <div>
-                  <p className="text-[10px] font-medium capitalize text-yellow-200">{tx.txType.replace(/_/g, " ")}</p>
-                  <p className="text-[9px] text-muted-foreground">{new Date(tx.createdAt).toLocaleDateString()}</p>
-                </div>
-                <div className="text-right">
-                  {parseFloat(tx.tokenAmount) > 0 && <p className="text-[10px] font-bold text-amber-400">{parseFloat(tx.tokenAmount).toFixed(4)} M</p>}
-                  {tx.usdtAmount && parseFloat(tx.usdtAmount) > 0 && <p className="text-[10px] font-bold text-emerald-400">${parseFloat(tx.usdtAmount).toFixed(4)}</p>}
-                </div>
-              </div>
-            ))}
-          </div>
+          <button
+            onClick={loadPositions}
+            className="text-muted-foreground hover:text-foreground transition-colors"
+            data-testid="button-refresh-positions"
+          >
+            <RefreshCw className="h-3.5 w-3.5" />
+          </button>
         </div>
-      )}
 
-      {/* How It Works */}
-      <div className="premium-card rounded-2xl p-5 space-y-3">
-        <p className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>How It Works</p>
-        <div className="space-y-2.5">
-          {[
-            { icon: DollarSign, color: "text-emerald-400", title: "Admin Deposits USDT", desc: "Contact admin to have USDT credited to your account." },
-            { icon: Lock, color: "text-yellow-300", title: "Stake: 10-Month Lock, 4x Cap", desc: "70% of tokens are locked in your plan for 10 months. After unlock, sell at up to 4x your entry price. Excess above 4x stays in company liquidity." },
-            { icon: ShoppingBag, color: "text-amber-400", title: "Buy & Hold: No Lock, 2x Cap", desc: "100% of tokens go directly to your balance immediately. Sell at any time at up to 2x your entry price." },
-            { icon: TrendingUp, color: "text-orange-400", title: "Price Appreciation Only", desc: "No daily rewards. M-Token price grows as more USDT enters the liquidity pool from staking and buys." },
-            { icon: Flame, color: "text-red-400", title: "Burns Reduce Supply", desc: "Every token sold is burned from circulating supply, increasing the price per remaining token." },
-          ].map((item) => (
-            <div key={item.title} className="flex items-start gap-3">
-              <div className="w-7 h-7 rounded-lg bg-white/[0.03] border border-white/[0.06] flex items-center justify-center shrink-0">
-                <item.icon className={`w-3.5 h-3.5 ${item.color}`} />
+        {loadingPositions ? (
+          <div className="flex items-center justify-center py-12">
+            <Loader2 className="h-6 w-6 animate-spin text-yellow-300" />
+          </div>
+        ) : positions.length === 0 ? (
+          <div className="text-center py-12">
+            <div className="h-12 w-12 mx-auto rounded-xl bg-white/[0.03] flex items-center justify-center mb-3">
+              <Coins className="h-6 w-6 text-muted-foreground/30" />
+            </div>
+            <p className="text-sm text-muted-foreground" data-testid="text-no-positions">No active stake positions</p>
+            <p className="text-xs text-muted-foreground/60 mt-1">Stake USDT above to get started</p>
+          </div>
+        ) : (
+          <div className="divide-y divide-white/[0.04]">
+            {positions.map((pos) => {
+              const mvtAmt = parseFloat(formatTokenAmount(pos.mvtAmount, tokenDecimals));
+              const usdtInv = parseFloat(formatTokenAmount(pos.usdtInvested, tokenDecimals));
+              const preview = getUnstakePreview(pos);
+              const isUnstaking = unstakingIndex === pos.index;
+
+              return (
+                <div key={pos.index} className="p-5 space-y-4" data-testid={`card-position-${pos.index}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className={`h-10 w-10 rounded-xl flex items-center justify-center shrink-0 ${
+                        pos.isLocked ? "bg-violet-500/15" : "bg-amber-500/15"
+                      }`}>
+                        {pos.isLocked ? (
+                          <Lock className="h-4 w-4 text-violet-300" />
+                        ) : (
+                          <Zap className="h-4 w-4 text-amber-300" />
+                        )}
+                      </div>
+                      <div>
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}
+                            data-testid={`text-mvt-amount-${pos.index}`}>
+                            {fmt(mvtAmt, 2)} MVT
+                          </span>
+                          <Badge className={`text-[10px] ${
+                            pos.isLocked
+                              ? "bg-violet-500/10 text-violet-300 border-violet-500/20"
+                              : "bg-amber-500/10 text-amber-300 border-amber-500/20"
+                          }`}>
+                            {pos.isLocked ? "Locked" : "Flexible"}
+                          </Badge>
+                        </div>
+                        <p className="text-[11px] text-muted-foreground">
+                          ${fmt(usdtInv, 2)} invested · {fmtDate(pos.stakedAt)}
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Unstake preview */}
+                  <div className={`p-3 rounded-xl border text-[11px] space-y-1.5 ${
+                    pos.isLocked
+                      ? "bg-violet-500/5 border-violet-500/15"
+                      : "bg-amber-500/5 border-amber-500/15"
+                  }`}>
+                    <p className="text-muted-foreground font-medium uppercase tracking-wider text-[10px] mb-2">
+                      Unstake Preview
+                    </p>
+                    {pos.isLocked ? (
+                      <>
+                        {LOCKED_UNSTAKE_LEVELS.map((r, i) => (
+                          <div key={i} className="flex items-center justify-between">
+                            <span className="text-muted-foreground">L{i + 1} Upline ({r}%)</span>
+                            <span className="font-medium text-violet-300">{fmt((preview as any).distrib[i], 2)} MVT</span>
+                          </div>
+                        ))}
+                        <div className="h-px bg-white/[0.06] my-1" />
+                        <div className="flex items-center justify-between font-semibold">
+                          <span className="text-muted-foreground">You receive (90% sold)</span>
+                          <span className="text-emerald-400">~${fmt((preview as any).usdtOut, 4)} USDT</span>
+                        </div>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex items-center justify-between">
+                          <span className="text-muted-foreground">Sponsor (5%)</span>
+                          <span className="font-medium text-amber-300">{fmt((preview as any).sponsorTokens, 2)} MVT</span>
+                        </div>
+                        <div className="h-px bg-white/[0.06] my-1" />
+                        <div className="flex items-center justify-between font-semibold">
+                          <span className="text-muted-foreground">You receive (95% sold)</span>
+                          <span className="text-emerald-400">~${fmt((preview as any).usdtOut, 4)} USDT</span>
+                        </div>
+                      </>
+                    )}
+                  </div>
+
+                  <button
+                    onClick={() => handleUnstake(pos)}
+                    disabled={isUnstaking}
+                    className="w-full py-2.5 px-4 rounded-xl font-semibold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 bg-white/[0.04] border border-white/[0.08] hover:bg-white/[0.07] text-foreground"
+                    data-testid={`button-unstake-${pos.index}`}
+                  >
+                    {isUnstaking ? (
+                      <><Loader2 className="h-4 w-4 animate-spin" /> Unstaking...</>
+                    ) : (
+                      <><Unlock className="h-4 w-4" /> Unstake Position</>
+                    )}
+                  </button>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
+      {/* Level Income Info */}
+      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.2s" }}
+        data-testid="card-level-income-info">
+        <div className="flex items-center gap-2 mb-4">
+          <Info className="h-4 w-4 text-blue-400" />
+          <span className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>Level Income on Stake</span>
+        </div>
+        <div className="space-y-2">
+          {LEVEL_RATES.map((rate, i) => (
+            <div key={i} className="flex items-center justify-between px-3 py-2 rounded-lg bg-white/[0.02] border border-white/[0.04]"
+              data-testid={`row-level-rate-${i}`}>
+              <div className="flex items-center gap-2.5">
+                <div className="h-6 w-6 rounded-md bg-emerald-500/10 flex items-center justify-center">
+                  <span className="text-[10px] font-bold text-emerald-400">L{i + 1}</span>
+                </div>
+                <span className="text-xs text-muted-foreground">Level {i + 1} Upline</span>
               </div>
-              <div>
-                <p className="text-xs font-medium">{item.title}</p>
-                <p className="text-[10px] text-muted-foreground">{item.desc}</p>
+              <div className="text-right">
+                <span className="text-xs font-bold text-emerald-400">{rate}% USDT</span>
               </div>
             </div>
           ))}
+          <div className="flex items-center justify-between px-3 py-2 rounded-lg bg-emerald-500/5 border border-emerald-500/10 mt-1">
+            <span className="text-xs font-semibold text-muted-foreground">Total distributed</span>
+            <span className="text-xs font-bold text-emerald-400">{totalLevelPct}% of stake</span>
+          </div>
         </div>
       </div>
-
     </div>
   );
 }

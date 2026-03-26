@@ -322,7 +322,14 @@ function App() {
                       />
                     </Route>
                     <Route path="/paid-staking">
-                      <PaidStakingPage account={web3.account!} />
+                      <PaidStakingPage
+                        account={web3.account!}
+                        stakeUsdt={web3.stakeUsdt}
+                        unstakePosition={web3.unstakePosition}
+                        getActiveStakesOnChain={web3.getActiveStakesOnChain}
+                        approveToken={web3.approveToken}
+                        tokenDecimals={web3.tokenDecimals}
+                      />
                     </Route>
                     <Route path="/sell-tokens">
                       <SellTokensPage

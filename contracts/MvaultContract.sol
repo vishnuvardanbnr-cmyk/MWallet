@@ -14,6 +14,7 @@ interface IMvaultToken {
     function getBuyPrice() external view returns (uint256);
     function getSellPrice() external view returns (uint256);
     function balanceOf(address account) external view returns (uint256);
+    function transfer(address to, uint256 amount) external returns (bool);
 }
 
 // ─────────────────────────────────────────────
@@ -143,6 +144,19 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     mapping(address => uint256) public boardEntryCount;
     mapping(address => uint256) public totalBoardRewardsEarned;
 
+    // ── Staking ───────────────────────────────────────────────────────────────
+    uint256 public constant MIN_STAKE_USDT = 50 * 1e18; // $50 minimum
+
+    struct StakePosition {
+        uint256 mvtAmount;    // MVT tokens currently staked (held by this contract)
+        uint256 usdtInvested; // original USDT deposited
+        uint256 stakedAt;     // timestamp
+        bool    isLocked;     // false = flexible, true = locked
+        bool    active;       // false once unstaked
+    }
+
+    mapping(address => StakePosition[]) private _stakes;
+
     // ── Events ────────────────────────────────────────────────────────────────
     event Registered(address indexed user, address indexed sponsor, address indexed binaryParent, bool placeLeft);
     event Activated(address indexed user, uint256 mvtMinted, uint256 grossMvt, uint256 levelAmt, uint256 binaryAmt, uint256 adminAmt);
@@ -164,6 +178,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     event BoardEntered(address indexed user, uint256 boardLevel, uint256 usdtDeducted);
     event BoardRewardCredited(address indexed user, uint256 usdtAmount, uint256 boardLevel);
     event BoardHandlerUpdated(address indexed newHandler);
+    event Staked(address indexed user, uint256 stakeIndex, uint256 usdtAmount, uint256 mvtMinted, bool isLocked);
+    event Unstaked(address indexed user, uint256 stakeIndex, uint256 mvtReturned, uint256 usdtReceived);
+    event StakeLevelIncomePaid(address indexed to, address indexed from, uint8 level, uint256 usdtAmount);
 
     // ── Errors ────────────────────────────────────────────────────────────────
     error AlreadyRegistered();
@@ -785,6 +802,119 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // STAKING
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Stake USDT. 15% distributed as level income (in USDT) to 5 uplines.
+     *         Remaining 85% buys MVT at current price. MVT held by this contract.
+     * @param usdtAmount  Amount of USDT to stake (must be >= MIN_STAKE_USDT).
+     * @param isLocked    false = flexible, true = locked.
+     */
+    function stake(uint256 usdtAmount, bool isLocked) external nonReentrant {
+        require(usdtAmount >= MIN_STAKE_USDT, "Below $50 minimum");
+        require(users[msg.sender].isRegistered, "Not registered");
+        require(users[msg.sender].isActive,     "Not activated");
+
+        // Pull USDT from the user
+        bool ok = usdtToken.transferFrom(msg.sender, address(this), usdtAmount);
+        require(ok, "USDT transfer failed");
+
+        // Distribute 15% level income in USDT to 5 uplines
+        uint8[5] memory rates = [10, 2, 1, 1, 1]; // 10+2+1+1+1 = 15%
+        address cur = users[msg.sender].sponsor;
+        uint256 levelDistributed = 0;
+        for (uint8 i = 0; i < 5; i++) {
+            uint256 share = (usdtAmount * rates[i]) / 100;
+            if (share == 0) { cur = users[cur].sponsor; continue; }
+            if (cur == address(0)) { adminPool += share; }
+            else if (!users[cur].isActive) { adminPool += share; }
+            else {
+                users[cur].usdtBalance += share;
+                levelDistributed += share;
+                emit StakeLevelIncomePaid(cur, msg.sender, i + 1, share);
+            }
+            cur = users[cur].sponsor;
+        }
+        uint256 adminShare = (usdtAmount * 15 / 100) - levelDistributed;
+        if (adminShare > 0) adminPool += adminShare;
+
+        // Buy MVT with remaining 85%
+        uint256 forTokens = usdtAmount - (usdtAmount * 15 / 100);
+        usdtToken.approve(address(mvaultToken), forTokens);
+        uint256 balBefore = mvaultToken.balanceOf(address(this));
+        mvaultToken.addLiquidityAndMint(address(this), forTokens);
+        uint256 mvtMinted = mvaultToken.balanceOf(address(this)) - balBefore;
+        require(mvtMinted > 0, "No MVT minted");
+
+        // Record stake
+        uint256 stakeIndex = _stakes[msg.sender].length;
+        _stakes[msg.sender].push(StakePosition({
+            mvtAmount:    mvtMinted,
+            usdtInvested: usdtAmount,
+            stakedAt:     block.timestamp,
+            isLocked:     isLocked,
+            active:       true
+        }));
+
+        emit Staked(msg.sender, stakeIndex, usdtAmount, mvtMinted, isLocked);
+    }
+
+    /**
+     * @notice Unstake a position.
+     *         Flexible: 5% tokens → direct sponsor; 95% sold for USDT → user.
+     *         Locked:   5%/2%/1%/1%/1% tokens → 5 uplines; 90% sold for USDT → user.
+     *         NO BTC pool deduction.
+     */
+    function unstake(uint256 stakeIndex) external nonReentrant {
+        require(stakeIndex < _stakes[msg.sender].length, "Invalid index");
+        StakePosition storage pos = _stakes[msg.sender][stakeIndex];
+        require(pos.active, "Already unstaked");
+
+        pos.active = false;
+        uint256 totalMvt = pos.mvtAmount;
+        bool isLocked = pos.isLocked;
+
+        uint256 toSell = totalMvt;
+
+        if (!isLocked) {
+            // Flexible: 5% to direct sponsor
+            uint256 sponsorShare = (totalMvt * 5) / 100;
+            address sponsor = users[msg.sender].sponsor;
+            if (sponsor != address(0) && users[sponsor].isActive) {
+                bool t = mvaultToken.transfer(sponsor, sponsorShare);
+                if (!t) { /* silently keep */ } else { toSell -= sponsorShare; }
+            }
+        } else {
+            // Locked: 5%+2%+1%+1%+1% = 10% tokens to 5 uplines
+            uint8[5] memory rates = [5, 2, 1, 1, 1];
+            address cur = users[msg.sender].sponsor;
+            for (uint8 i = 0; i < 5; i++) {
+                uint256 share = (totalMvt * rates[i]) / 100;
+                if (share == 0) { cur = users[cur].sponsor; continue; }
+                if (cur != address(0) && users[cur].isActive) {
+                    bool t = mvaultToken.transfer(cur, share);
+                    if (t) toSell -= share;
+                }
+                cur = users[cur].sponsor;
+            }
+        }
+
+        // Sell remaining tokens — proceeds come to this contract
+        uint256 usdtBefore = usdtToken.balanceOf(address(this));
+        mvaultToken.sell(toSell);
+        uint256 usdtReceived = usdtToken.balanceOf(address(this)) - usdtBefore;
+
+        // Transfer USDT to user (no BTC pool deduction)
+        if (usdtReceived > 0) {
+            bool sent = usdtToken.transfer(msg.sender, usdtReceived);
+            require(sent, "USDT transfer failed");
+        }
+
+        emit Unstaked(msg.sender, stakeIndex, totalMvt, usdtReceived);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // VIEW FUNCTIONS
     // ─────────────────────────────────────────────────────────────────────────
 
@@ -932,6 +1062,66 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     ) {
         User storage u = users[_user];
         return (u.displayName, u.email, u.phone, u.country, u.profileSet);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // STAKING VIEW FUNCTIONS
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Returns the number of stake positions for a user.
+     */
+    function getStakeCount(address user) external view returns (uint256) {
+        return _stakes[user].length;
+    }
+
+    /**
+     * @notice Returns details of a specific stake position.
+     */
+    function getStake(address user, uint256 index) external view returns (
+        uint256 mvtAmount,
+        uint256 usdtInvested,
+        uint256 stakedAt,
+        bool    isLocked,
+        bool    active
+    ) {
+        require(index < _stakes[user].length, "Invalid index");
+        StakePosition storage p = _stakes[user][index];
+        return (p.mvtAmount, p.usdtInvested, p.stakedAt, p.isLocked, p.active);
+    }
+
+    /**
+     * @notice Returns all active stake positions for a user.
+     */
+    function getActiveStakes(address user) external view returns (
+        uint256[] memory indices,
+        uint256[] memory mvtAmounts,
+        uint256[] memory usdtInvested,
+        uint256[] memory stakedAts,
+        bool[]    memory isLocked
+    ) {
+        uint256 total = _stakes[user].length;
+        uint256 count = 0;
+        for (uint256 i = 0; i < total; i++) {
+            if (_stakes[user][i].active) count++;
+        }
+        indices     = new uint256[](count);
+        mvtAmounts  = new uint256[](count);
+        usdtInvested = new uint256[](count);
+        stakedAts   = new uint256[](count);
+        isLocked    = new bool[](count);
+        uint256 j = 0;
+        for (uint256 i = 0; i < total; i++) {
+            if (_stakes[user][i].active) {
+                StakePosition storage p = _stakes[user][i];
+                indices[j]     = i;
+                mvtAmounts[j]  = p.mvtAmount;
+                usdtInvested[j] = p.usdtInvested;
+                stakedAts[j]   = p.stakedAt;
+                isLocked[j]    = p.isLocked;
+                j++;
+            }
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

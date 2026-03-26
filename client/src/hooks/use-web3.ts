@@ -500,6 +500,46 @@ export function useWeb3() {
     return () => ethereum.removeListener("accountsChanged", handleAccountsChanged);
   }, [fetchUserData]);
 
+  // ── Staking ─────────────────────────────────────────────────────────────────
+
+  const stakeUsdt = useCallback(async (usdtAmount: string, isLocked: boolean) => {
+    const signer = await getSigner();
+    const contract = getMvaultContract(signer);
+    const amountBn = ethers.parseUnits(usdtAmount, 18);
+    const tx = await contract.stake(amountBn, isLocked);
+    await tx.wait();
+    await fetchUserData();
+  }, [getSigner, fetchUserData]);
+
+  const unstakePosition = useCallback(async (stakeIndex: number) => {
+    const signer = await getSigner();
+    const contract = getMvaultContract(signer);
+    const tx = await contract.unstake(stakeIndex);
+    await tx.wait();
+    await fetchUserData();
+  }, [getSigner, fetchUserData]);
+
+  const getActiveStakesOnChain = useCallback(async (user: string) => {
+    const provider = getProvider();
+    const contract = getMvaultContract(provider);
+    try {
+      const result = await contract.getActiveStakes(user);
+      const positions = [];
+      for (let i = 0; i < result.indices.length; i++) {
+        positions.push({
+          index: Number(result.indices[i]),
+          mvtAmount: result.mvtAmounts[i] as bigint,
+          usdtInvested: result.usdtInvested[i] as bigint,
+          stakedAt: Number(result.stakedAts[i]),
+          isLocked: result.isLocked[i] as boolean,
+        });
+      }
+      return positions;
+    } catch {
+      return [];
+    }
+  }, []);
+
   return {
     account, loading, initialLoaded, isRegistered, userInfo,
     incomeInfo, binaryInfo, slabInfo: null as SlabInfo | null,
@@ -511,6 +551,7 @@ export function useWeb3() {
     reactivatePackage, repurchase,
     getDirectReferrals, getTokenBalance,
     getTransactionsFromContract, getBinaryFlushedEvents, fetchUserData,
+    stakeUsdt, unstakePosition, getActiveStakesOnChain,
     formatAmount: (val: bigint) => formatTokenAmount(val, tokenDecimals),
   };
 }

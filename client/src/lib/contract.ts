@@ -87,6 +87,16 @@ export const MVAULT_ABI = [
   "event PowerLegIncomePaid(address indexed user, uint256 powerLegPoints, uint256 amount)",
   "event BoardEntered(address indexed user, uint256 boardLevel, uint256 usdtDeducted)",
   "event BoardRewardCredited(address indexed user, uint256 usdtAmount, uint256 boardLevel)",
+  // Staking
+  "function stake(uint256 usdtAmount, bool isLocked) external",
+  "function unstake(uint256 stakeIndex) external",
+  "function getStakeCount(address user) view returns (uint256)",
+  "function getStake(address user, uint256 index) view returns (uint256 mvtAmount, uint256 usdtInvested, uint256 stakedAt, bool isLocked, bool active)",
+  "function getActiveStakes(address user) view returns (uint256[] indices, uint256[] mvtAmounts, uint256[] usdtInvested, uint256[] stakedAts, bool[] isLocked)",
+  "function MIN_STAKE_USDT() view returns (uint256)",
+  "event Staked(address indexed user, uint256 stakeIndex, uint256 usdtAmount, uint256 mvtMinted, bool isLocked)",
+  "event Unstaked(address indexed user, uint256 stakeIndex, uint256 mvtReturned, uint256 usdtReceived)",
+  "event StakeLevelIncomePaid(address indexed to, address indexed from, uint8 level, uint256 usdtAmount)",
 ];
 
 // ── MvaultToken ABI ───────────────────────────────────────────────────────────
