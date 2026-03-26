@@ -1,8 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Users, GitBranch, Loader2, ChevronLeft, ChevronRight,
   User, Copy, Check, ArrowDownLeft, ArrowDownRight, Layers,
-  AlertCircle, Search, ArrowLeft, Home,
+  AlertCircle, Search, ArrowLeft, Home, UserPlus, BarChart2,
 } from "lucide-react";
 import { SiWhatsapp } from "react-icons/si";
 import { Badge } from "@/components/ui/badge";
@@ -11,10 +11,12 @@ import { shortenAddress, getMvaultContract } from "@/lib/contract";
 import { useToast } from "@/hooks/use-toast";
 import type { UserInfo } from "@/hooks/use-web3";
 import { ethers } from "ethers";
+import { useLocation } from "wouter";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 const ITEMS_PER_PAGE = 10;
-const MAX_LEVEL_NODES = 200; // safety cap for BFS
+const MAX_LEVEL_NODES = 200;
+const MAX_LEVELS = 10;
 
 interface TeamProps {
   userInfo: UserInfo;
@@ -25,16 +27,31 @@ interface TeamProps {
 
 type Tab = "binary" | "levels" | "directs";
 
+interface MemberMeta {
+  userId: string;
+  name: string;
+}
+
+interface BinaryNodeInfo {
+  address: string;
+  leftChild: string;
+  rightChild: string;
+  displayName: string;
+  leftSubUsers: bigint;
+  rightSubUsers: bigint;
+}
+
 interface TreeNodeProps {
   address: string;
   label: string;
   color: string;
   isLeft: boolean;
+  meta?: MemberMeta;
   onDrillDown?: (addr: string) => void;
   loading?: boolean;
 }
 
-function TreeNode({ address, label, color, onDrillDown, loading }: TreeNodeProps) {
+function TreeNode({ address, label, color, meta, onDrillDown, loading }: TreeNodeProps) {
   const isEmpty = !address || address === ZERO_ADDRESS;
   return (
     <button
@@ -57,6 +74,12 @@ function TreeNode({ address, label, color, onDrillDown, loading }: TreeNodeProps
       <p className="text-xs font-medium text-muted-foreground mb-0.5">{label}</p>
       {isEmpty ? (
         <p className="text-xs text-muted-foreground/50">Empty slot</p>
+      ) : meta ? (
+        <>
+          <p className="text-xs font-semibold text-foreground truncate">{meta.name || shortenAddress(address)}</p>
+          <p className="text-[9px] text-muted-foreground/60">ID #{meta.userId}</p>
+          <p className="text-[9px] text-muted-foreground/50 mt-0.5 group-hover:text-amber-400/60 transition-colors">tap to expand</p>
+        </>
       ) : (
         <>
           <p className="text-xs font-mono gradient-text">{shortenAddress(address)}</p>
@@ -67,17 +90,9 @@ function TreeNode({ address, label, color, onDrillDown, loading }: TreeNodeProps
   );
 }
 
-interface BinaryNodeInfo {
-  address: string;
-  leftChild: string;
-  rightChild: string;
-  displayName: string;
-  leftSubUsers: bigint;
-  rightSubUsers: bigint;
-}
-
 export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, account }: TeamProps) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   // ── tabs ────────────────────────────────────────────────────────────────────
   const [tab, setTab] = useState<Tab>("binary");
@@ -97,8 +112,141 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
   const [levelLoading,   setLevelLoading]   = useState(false);
   const [levelLoaded,    setLevelLoaded]    = useState<number | null>(null);
   const [levelLevelPage, setLevelLevelPage] = useState(1);
-
   const LEVEL_PER_PAGE = 20;
+
+  // ── member meta cache ───────────────────────────────────────────────────────
+  const memberMetaCache = useRef<Map<string, MemberMeta>>(new Map());
+  const [metaVersion, setMetaVersion] = useState(0); // bump to force re-render
+
+  const fetchMembersMeta = useCallback(async (addresses: string[]) => {
+    const toFetch = addresses.filter(a => a && a !== ZERO_ADDRESS && !memberMetaCache.current.has(a));
+    if (toFetch.length === 0) return;
+    try {
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const contract = getMvaultContract(provider);
+      await Promise.all(toFetch.map(async (addr) => {
+        try {
+          const [info, profile] = await Promise.all([
+            contract.getUserInfo(addr),
+            contract.getProfile(addr),
+          ]);
+          memberMetaCache.current.set(addr, {
+            userId: String(info[0] ?? "?"),
+            name: profile[0] || profile.displayName || "",
+          });
+        } catch {
+          memberMetaCache.current.set(addr, { userId: "?", name: "" });
+        }
+      }));
+      setMetaVersion(v => v + 1);
+    } catch {}
+  }, []);
+
+  // ── Binary drill-down ───────────────────────────────────────────────────────
+  const [viewStack, setViewStack] = useState<BinaryNodeInfo[]>([]);
+  const [drillLoading, setDrillLoading] = useState<"left" | "right" | null>(null);
+
+  const loadNodeInfo = useCallback(async (addr: string): Promise<BinaryNodeInfo | null> => {
+    try {
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const contract = getMvaultContract(provider);
+      const info = await contract.getUserInfo(addr);
+      return {
+        address: addr,
+        leftChild: info[6] ?? ZERO_ADDRESS,
+        rightChild: info[7] ?? ZERO_ADDRESS,
+        displayName: info.displayName ?? "",
+        leftSubUsers: info[8] ?? 0n,
+        rightSubUsers: info[9] ?? 0n,
+      };
+    } catch { return null; }
+  }, []);
+
+  // Initialise binary view with the logged-in user's info
+  useEffect(() => {
+    if (tab !== "binary" || viewStack.length > 0) return;
+    const root: BinaryNodeInfo = {
+      address: account,
+      leftChild: userInfo.leftChild,
+      rightChild: userInfo.rightChild,
+      displayName: "",
+      leftSubUsers: userInfo.leftSubUsers,
+      rightSubUsers: userInfo.rightSubUsers,
+    };
+    setViewStack([root]);
+  }, [tab, account, userInfo, viewStack.length]);
+
+  // Fetch meta for current binary node's children
+  useEffect(() => {
+    if (!viewStack.length) return;
+    const node = viewStack[viewStack.length - 1];
+    fetchMembersMeta([node.leftChild, node.rightChild]);
+  }, [viewStack, fetchMembersMeta]);
+
+  const handleDrillDown = useCallback(async (addr: string, side: "left" | "right") => {
+    setDrillLoading(side);
+    const nodeInfo = await loadNodeInfo(addr);
+    setDrillLoading(null);
+    if (nodeInfo) setViewStack(prev => [...prev, nodeInfo]);
+  }, [loadNodeInfo]);
+
+  const handleBack = useCallback(() => {
+    setViewStack(prev => prev.slice(0, -1));
+  }, []);
+
+  const currentNode = viewStack[viewStack.length - 1] ?? null;
+  const isAtRoot = viewStack.length <= 1;
+
+  // ── Fetch meta when level members change ─────────────────────────────────────
+  useEffect(() => {
+    if (levelMembers.length > 0) fetchMembersMeta(levelMembers);
+  }, [levelMembers, fetchMembersMeta]);
+
+  // ── Fetch meta when referrals change ────────────────────────────────────────
+  useEffect(() => {
+    if (referrals.length > 0) fetchMembersMeta(referrals);
+  }, [referrals, fetchMembersMeta]);
+
+  // ── BFS level traversal ─────────────────────────────────────────────────────
+  const loadLevelMembers = async () => {
+    if (!account) return;
+    setLevelLoading(true);
+    setLevelMembers([]);
+    setLevelLevelPage(1);
+    try {
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const contract = getMvaultContract(provider);
+
+      let currentDepth: string[] = [account];
+      for (let d = 0; d < selectedLevel; d++) {
+        if (currentDepth.length === 0) break;
+        if (currentDepth.length > MAX_LEVEL_NODES) {
+          toast({ title: "Level too large", description: `Too many nodes (>${MAX_LEVEL_NODES}). Showing partial results.`, variant: "destructive" });
+          break;
+        }
+        const childResults = await Promise.all(
+          currentDepth.map(async (addr) => {
+            try {
+              const info = await contract.getUserInfo(addr);
+              const left:  string = info[6];
+              const right: string = info[7];
+              const children: string[] = [];
+              if (left  && left  !== ZERO_ADDRESS) children.push(left);
+              if (right && right !== ZERO_ADDRESS) children.push(right);
+              return children;
+            } catch { return []; }
+          })
+        );
+        currentDepth = childResults.flat().slice(0, MAX_LEVEL_NODES);
+      }
+      setLevelMembers(currentDepth);
+      setLevelLoaded(selectedLevel);
+    } catch (e: any) {
+      toast({ title: "Error loading level", description: e?.message ?? "Please try again.", variant: "destructive" });
+    } finally {
+      setLevelLoading(false);
+    }
+  };
 
   const loadReferrals = useCallback(async () => {
     setLoadingDirec(true);
@@ -132,109 +280,14 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
   };
 
-  // ── Binary drill-down ───────────────────────────────────────────────────────
-  const [viewStack, setViewStack] = useState<BinaryNodeInfo[]>([]);
-  const [drillLoading, setDrillLoading] = useState<"left" | "right" | null>(null);
-
-  const loadNodeInfo = useCallback(async (addr: string): Promise<BinaryNodeInfo | null> => {
-    try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const contract = getMvaultContract(provider);
-      const info = await contract.getUserInfo(addr);
-      return {
-        address: addr,
-        leftChild: info[6] ?? ZERO_ADDRESS,
-        rightChild: info[7] ?? ZERO_ADDRESS,
-        displayName: info.displayName ?? "",
-        leftSubUsers: info.leftSubUsers ?? 0n,
-        rightSubUsers: info.rightSubUsers ?? 0n,
-      };
-    } catch { return null; }
-  }, []);
-
-  // Initialise binary view with the logged-in user's info
-  useEffect(() => {
-    if (tab !== "binary" || viewStack.length > 0) return;
-    const root: BinaryNodeInfo = {
-      address: account,
-      leftChild: userInfo.leftChild,
-      rightChild: userInfo.rightChild,
-      displayName: "",
-      leftSubUsers: userInfo.leftSubUsers,
-      rightSubUsers: userInfo.rightSubUsers,
-    };
-    setViewStack([root]);
-  }, [tab, account, userInfo, viewStack.length]);
-
-  const handleDrillDown = useCallback(async (addr: string, side: "left" | "right") => {
-    setDrillLoading(side);
-    const nodeInfo = await loadNodeInfo(addr);
-    setDrillLoading(null);
-    if (nodeInfo) setViewStack(prev => [...prev, nodeInfo]);
-  }, [loadNodeInfo]);
-
-  const handleBack = useCallback(() => {
-    setViewStack(prev => prev.slice(0, -1));
-  }, []);
-
-  const currentNode = viewStack[viewStack.length - 1] ?? null;
-  const isAtRoot = viewStack.length <= 1;
-
-  // ── BFS level traversal ─────────────────────────────────────────────────────
-  const loadLevelMembers = async () => {
-    if (!account) return;
-    setLevelLoading(true);
-    setLevelMembers([]);
-    setLevelLevelPage(1);
-    try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const contract = getMvaultContract(provider);
-
-      // BFS: queue holds addresses at current depth
-      let currentDepth: string[] = [account];
-
-      for (let d = 0; d < selectedLevel; d++) {
-        if (currentDepth.length === 0) break;
-        if (currentDepth.length > MAX_LEVEL_NODES) {
-          toast({ title: "Level too large", description: `Too many nodes (>${MAX_LEVEL_NODES}). Showing partial results.`, variant: "destructive" });
-          break;
-        }
-
-        // Fetch all children in parallel
-        const childResults = await Promise.all(
-          currentDepth.map(async (addr) => {
-            try {
-              const info = await contract.getUserInfo(addr);
-              const left:  string = info[6]; // leftChild
-              const right: string = info[7]; // rightChild
-              const children: string[] = [];
-              if (left  && left  !== ZERO_ADDRESS) children.push(left);
-              if (right && right !== ZERO_ADDRESS) children.push(right);
-              return children;
-            } catch {
-              return [];
-            }
-          })
-        );
-
-        currentDepth = childResults.flat().slice(0, MAX_LEVEL_NODES);
-      }
-
-      setLevelMembers(currentDepth);
-      setLevelLoaded(selectedLevel);
-    } catch (e: any) {
-      toast({ title: "Error loading level", description: e?.message ?? "Please try again.", variant: "destructive" });
-    } finally {
-      setLevelLoading(false);
-    }
-  };
-
   const totalPages   = Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
   const levelPages   = Math.max(1, Math.ceil(levelMembers.length / LEVEL_PER_PAGE));
   const levelSlice   = levelMembers.slice((levelLevelPage - 1) * LEVEL_PER_PAGE, levelLevelPage * LEVEL_PER_PAGE);
   const leftCount    = Number(userInfo.leftSubUsers);
   const rightCount   = Number(userInfo.rightSubUsers);
   const directCount  = Number(userInfo.directCount);
+
+  const getMeta = (addr: string) => memberMetaCache.current.get(addr);
 
   return (
     <div className="p-4 sm:p-6 space-y-6 relative z-10">
@@ -264,6 +317,34 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
           <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Right Team</p>
           <p className="text-xl font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-right-count">{rightCount}</p>
         </div>
+      </div>
+
+      {/* Quick Actions */}
+      <div className="grid grid-cols-2 gap-3 slide-in" style={{ animationDelay: "0.045s" }}>
+        <button
+          onClick={() => setLocation("/deep-placement")}
+          className="glass-card rounded-xl p-4 text-left hover:bg-white/[0.04] transition-all group"
+          data-testid="button-quick-deep-placement"
+        >
+          <UserPlus className="h-5 w-5 text-amber-400 mb-2 group-hover:scale-110 transition-transform" />
+          <p className="text-sm font-semibold">Deep Placement</p>
+          <p className="text-[10px] text-muted-foreground">Place a member in a specific tree position</p>
+          <div className="flex items-center gap-1 mt-2 text-[10px] text-amber-400/70">
+            <span>Open</span><ChevronRight className="h-3 w-3" />
+          </div>
+        </button>
+        <button
+          onClick={() => setLocation("/binary")}
+          className="glass-card rounded-xl p-4 text-left hover:bg-white/[0.04] transition-all group"
+          data-testid="button-quick-binary-details"
+        >
+          <BarChart2 className="h-5 w-5 text-blue-400 mb-2 group-hover:scale-110 transition-transform" />
+          <p className="text-sm font-semibold">Binary Income</p>
+          <p className="text-[10px] text-muted-foreground">View your binary pool & pair details</p>
+          <div className="flex items-center gap-1 mt-2 text-[10px] text-blue-400/70">
+            <span>Open</span><ChevronRight className="h-3 w-3" />
+          </div>
+        </button>
       </div>
 
       {/* Referral Links */}
@@ -317,7 +398,6 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
           {/* Header with back nav */}
           <div className="flex items-center gap-3 px-5 py-3.5 border-b border-white/[0.05]">
             <div className="flex items-center gap-1 flex-1 overflow-hidden">
-              {/* Breadcrumb */}
               <button
                 onClick={() => setViewStack(prev => prev.slice(0, 1))}
                 className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-amber-400 transition-colors shrink-0"
@@ -333,7 +413,7 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
                     className={`text-[10px] truncate max-w-[80px] transition-colors ${idx === viewStack.length - 2 ? "text-amber-400 font-semibold" : "text-muted-foreground hover:text-foreground"}`}
                     data-testid={`button-breadcrumb-${idx}`}
                   >
-                    {node.displayName || shortenAddress(node.address)}
+                    {getMeta(node.address)?.name || getMeta(node.address)?.userId && `#${getMeta(node.address)?.userId}` || shortenAddress(node.address)}
                   </button>
                 </div>
               ))}
@@ -352,7 +432,7 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
           <div className="p-5">
             <div className="flex flex-col items-center gap-4">
               {/* Current node */}
-              <div className={`rounded-xl px-5 py-3 text-center w-full max-w-[200px] ${
+              <div className={`rounded-xl px-5 py-3 text-center w-full max-w-[220px] ${
                 isAtRoot
                   ? "bg-gradient-to-br from-amber-500/20 to-yellow-400/10 border border-amber-500/30"
                   : "bg-gradient-to-br from-violet-500/20 to-blue-400/10 border border-violet-500/30"
@@ -362,10 +442,21 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
                 }`}>
                   <User className={`h-4 w-4 ${isAtRoot ? "text-yellow-300" : "text-violet-300"}`} />
                 </div>
-                <p className={`text-xs font-semibold ${isAtRoot ? "text-yellow-300" : "text-violet-300"}`}>
-                  {isAtRoot ? "You" : (currentNode.displayName || "Member")}
-                </p>
-                <p className="text-[9px] font-mono text-muted-foreground mt-0.5">{shortenAddress(currentNode.address)}</p>
+                {isAtRoot ? (
+                  <>
+                    <p className="text-xs font-semibold text-yellow-300">You</p>
+                    <p className="text-[9px] font-mono text-muted-foreground mt-0.5">{shortenAddress(currentNode.address)}</p>
+                  </>
+                ) : (
+                  <>
+                    <p className="text-xs font-semibold text-violet-300">
+                      {getMeta(currentNode.address)?.name || shortenAddress(currentNode.address)}
+                    </p>
+                    {getMeta(currentNode.address)?.userId && (
+                      <p className="text-[9px] text-violet-300/60">ID #{getMeta(currentNode.address)?.userId}</p>
+                    )}
+                  </>
+                )}
                 <div className="flex items-center justify-center gap-3 mt-1.5">
                   <span className="text-[9px] text-blue-400/70">{String(currentNode.leftSubUsers || 0n)} left</span>
                   <span className="text-muted-foreground/30">·</span>
@@ -373,7 +464,7 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
                 </div>
               </div>
 
-              {/* Connector lines */}
+              {/* Connector */}
               <div className="flex items-start w-full max-w-[300px] relative">
                 <div className="absolute left-1/4 right-1/4 top-0 h-px bg-white/[0.08]" />
                 <div className="absolute left-1/4 top-0 w-px h-3 bg-white/[0.08]" />
@@ -387,6 +478,7 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
                   label="Left Child"
                   color="border-blue-500/30"
                   isLeft={true}
+                  meta={getMeta(currentNode.leftChild)}
                   loading={drillLoading === "left"}
                   onDrillDown={(addr) => handleDrillDown(addr, "left")}
                 />
@@ -395,6 +487,7 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
                   label="Right Child"
                   color="border-purple-500/30"
                   isLeft={false}
+                  meta={getMeta(currentNode.rightChild)}
                   loading={drillLoading === "right"}
                   onDrillDown={(addr) => handleDrillDown(addr, "right")}
                 />
@@ -417,14 +510,14 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
       {tab === "levels" && (
         <div className="space-y-4 slide-in">
           <div className="glass-card rounded-2xl p-5" data-testid="card-level-selector">
-            <h2 className="text-sm font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>
+            <h2 className="text-sm font-bold mb-1" style={{ fontFamily: "var(--font-display)" }}>
               <span className="gradient-text">Level View</span>
             </h2>
-            <p className="text-xs text-muted-foreground mb-4">Select a level to see all team members at that depth in your binary tree.</p>
+            <p className="text-xs text-muted-foreground mb-4">Select a level to see all team members at that depth.</p>
 
-            {/* Level pills */}
+            {/* Level pills — only 10 levels */}
             <div className="flex flex-wrap gap-1.5 mb-4">
-              {Array.from({ length: 15 }, (_, i) => i + 1).map((lvl) => (
+              {Array.from({ length: MAX_LEVELS }, (_, i) => i + 1).map((lvl) => (
                 <button key={lvl} onClick={() => { setSelectedLevel(lvl); setLevelLoaded(null); }}
                   className={`h-8 w-8 rounded-lg text-xs font-bold transition-all ${
                     selectedLevel === lvl
@@ -440,7 +533,7 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
             {selectedLevel > 8 && (
               <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-500/8 border border-amber-500/15 mb-4">
                 <AlertCircle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
-                <p className="text-[10px] text-amber-400/90">Level {selectedLevel} may have up to {Math.pow(2, selectedLevel).toLocaleString()} potential slots. Loading may take a moment.</p>
+                <p className="text-[10px] text-amber-400/90">Level {selectedLevel} may have many slots — loading may take a moment.</p>
               </div>
             )}
 
@@ -454,7 +547,7 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
             </button>
           </div>
 
-          {/* Results */}
+          {/* Level results */}
           {levelLoaded !== null && !levelLoading && (
             <div className="glass-card rounded-2xl overflow-hidden" data-testid="card-level-results">
               <div className="p-4 border-b border-white/[0.06] flex items-center justify-between">
@@ -482,15 +575,20 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
                   <div className="divide-y divide-white/[0.04]">
                     {levelSlice.map((addr, idx) => {
                       const globalIdx = (levelLevelPage - 1) * LEVEL_PER_PAGE + idx + 1;
+                      const meta = getMeta(addr);
                       return (
                         <div key={addr} className="flex items-center justify-between px-5 py-3" data-testid={`row-level-member-${globalIdx}`}>
                           <div className="flex items-center gap-3">
-                            <div className="h-7 w-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+                            <div className="h-7 w-7 rounded-lg bg-amber-500/10 border border-amber-500/20 flex items-center justify-center shrink-0">
                               <User className="h-3.5 w-3.5 text-amber-400" />
                             </div>
                             <div>
-                              <p className="text-xs font-mono" data-testid={`text-level-address-${globalIdx}`}>{addr}</p>
-                              <p className="text-[9px] text-muted-foreground">Level {levelLoaded} · Position #{globalIdx}</p>
+                              <p className="text-xs font-semibold" data-testid={`text-level-name-${globalIdx}`}>
+                                {meta?.name || shortenAddress(addr)}
+                              </p>
+                              <p className="text-[9px] text-muted-foreground">
+                                {meta?.userId ? `ID #${meta.userId} · ` : ""}{`Level ${levelLoaded} · #${globalIdx}`}
+                              </p>
                             </div>
                           </div>
                           <Badge variant="outline" className="text-[9px] border-amber-500/20 text-amber-400/70 shrink-0">
@@ -556,22 +654,33 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
             </div>
           ) : (
             <div className="divide-y divide-white/[0.04]">
-              {referrals.map((addr, idx) => (
-                <div key={addr} className="flex items-center justify-between px-5 py-3" data-testid={`row-referral-${idx}`}>
-                  <div className="flex items-center gap-3">
-                    <div className="h-7 w-7 rounded-lg bg-white/[0.04] flex items-center justify-center">
-                      <User className="h-3.5 w-3.5 text-muted-foreground" />
+              {referrals.map((addr, idx) => {
+                const meta = getMeta(addr);
+                return (
+                  <div key={addr} className="flex items-center justify-between px-5 py-3" data-testid={`row-referral-${idx}`}>
+                    <div className="flex items-center gap-3">
+                      <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-amber-500/15 to-yellow-400/5 border border-amber-500/20 flex items-center justify-center shrink-0">
+                        {meta?.name ? (
+                          <span className="text-[10px] font-bold text-amber-400">{meta.name[0].toUpperCase()}</span>
+                        ) : (
+                          <User className="h-3.5 w-3.5 text-amber-400/60" />
+                        )}
+                      </div>
+                      <div>
+                        <p className="text-xs font-semibold" data-testid={`text-referral-name-${idx}`}>
+                          {meta?.name || shortenAddress(addr)}
+                        </p>
+                        <p className="text-[9px] text-muted-foreground">
+                          {meta?.userId ? `ID #${meta.userId} · ` : ""}Direct referral
+                        </p>
+                      </div>
                     </div>
-                    <div>
-                      <p className="text-xs font-mono" data-testid={`text-referral-address-${idx}`}>{addr}</p>
-                      <p className="text-[9px] text-muted-foreground">Direct referral</p>
-                    </div>
+                    <Badge variant="outline" className="text-[9px] border-emerald-500/30 text-emerald-400">
+                      #{idx + 1 + (currentPage - 1) * ITEMS_PER_PAGE}
+                    </Badge>
                   </div>
-                  <Badge variant="outline" className="text-[9px] border-emerald-500/30 text-emerald-400">
-                    #{idx + 1 + (currentPage - 1) * ITEMS_PER_PAGE}
-                  </Badge>
-                </div>
-              ))}
+                );
+              })}
             </div>
           )}
 
