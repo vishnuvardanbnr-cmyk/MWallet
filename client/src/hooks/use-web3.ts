@@ -305,42 +305,18 @@ export function useWeb3() {
     setProfileOnChain({ displayName, email, phone, country, profileSet: true });
   }, [account, getSigner]);
 
-  // ── Direct referrals (via chunked event queries) ────────────────────────────
-  // BSC testnet RPC only supports ~5000 blocks per eth_getLogs call, so we
-  // scan backwards in 4999-block chunks until we collect all Registered events
-  // where sponsor == account, or we exhaust MAX_SCAN_BLOCKS.
-
+  // ── Direct referrals (on-chain read via getDirectReferralsPaginated) ─────────
   const getDirectReferrals = useCallback(async (offset: number, limit: number) => {
     if (!account) return { referrals: [], total: 0 };
     try {
       const provider = getProvider();
       const contract = getMvaultContract(provider);
-      const filter = contract.filters.Registered(null, account);
-
-      const CHUNK     = 4999;
-      const MAX_SCAN  = 500_000; // ~17 days of BSC blocks (3 s/block)
-
-      const current = await provider.getBlockNumber();
-      const minBlock = Math.max(0, current - MAX_SCAN);
-
-      let allEvents: any[] = [];
-      let toBlock   = current;
-
-      while (toBlock >= minBlock) {
-        const fromBlock = Math.max(minBlock, toBlock - CHUNK);
-        try {
-          const chunk = await contract.queryFilter(filter, fromBlock, toBlock);
-          allEvents = [...chunk, ...allEvents];
-        } catch {
-          // skip this chunk on RPC error
-        }
-        if (fromBlock <= minBlock) break;
-        toBlock = fromBlock - 1;
-      }
-
-      const all  = allEvents.map((e: any) => e.args?.[0] as string).filter(Boolean);
-      const page = all.slice(offset, offset + limit);
-      return { referrals: page, total: all.length };
+      // Direct on-chain read — no event scanning, no block-range limits
+      const [referrals, totalBn] = await contract.getDirectReferralsPaginated(account, BigInt(offset), BigInt(limit));
+      return {
+        referrals: (referrals as string[]).filter(Boolean),
+        total: Number(totalBn),
+      };
     } catch (err) {
       console.error("getDirectReferrals error:", err);
       return { referrals: [], total: 0 };
