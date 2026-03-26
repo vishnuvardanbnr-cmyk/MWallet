@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { ArrowLeftRight, Loader2, ArrowDownToLine, ArrowUpRight, RefreshCw, Package, Coins, Wallet, ChevronLeft, ChevronRight, Users, GitBranch, Layers, Trophy, Star } from "lucide-react";
+import { ArrowLeftRight, Loader2, ArrowDownToLine, ArrowUpRight, RefreshCw, Package, Coins, Wallet, ChevronLeft, ChevronRight, Users, GitBranch, Layers, Trophy, Star, Zap, TrendingDown, Repeat2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 
@@ -46,33 +46,35 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
 
   const getTxIcon = (type: string) => {
     switch (type) {
-      case "Activation": return Package;
-      case "Upgrade": return ArrowUpRight;
-      case "Reactivation": return RefreshCw;
-      case "Withdrawal": return ArrowDownToLine;
-      case "Direct Sponsor": return Users;
-      case "Binary Matching": return GitBranch;
-      case "Matching Override": return Layers;
-      case "Withdrawal Match": return RefreshCw;
-      case "Board Entry": return Star;
-      case "Board Reward": return Trophy;
-      default: return Coins;
+      case "Activation":        return Package;
+      case "Sell MVT":          return TrendingDown;
+      case "Withdrawal":        return ArrowDownToLine;
+      case "BTC Pool Withdraw": return ArrowDownToLine;
+      case "BTC Pool Credited": return Coins;
+      case "Level Income":      return Users;
+      case "Binary Income":     return GitBranch;
+      case "Power Leg Income":  return Zap;
+      case "Rebirth":           return Repeat2;
+      case "Board Entry":       return Star;
+      case "Board Reward":      return Trophy;
+      default:                  return Coins;
     }
   };
 
   const getTxColor = (type: string) => {
     switch (type) {
-      case "Activation": return { text: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/10" };
-      case "Upgrade": return { text: "text-yellow-300", bg: "bg-yellow-600/10", border: "border-yellow-600/10" };
-      case "Reactivation": return { text: "text-amber-300", bg: "bg-amber-600/10", border: "border-amber-600/10" };
-      case "Withdrawal": return { text: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10" };
-      case "Direct Sponsor": return { text: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/10" };
-      case "Binary Matching": return { text: "text-yellow-300", bg: "bg-yellow-600/10", border: "border-yellow-600/10" };
-      case "Matching Override": return { text: "text-amber-300", bg: "bg-amber-600/10", border: "border-amber-600/10" };
-      case "Withdrawal Match": return { text: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10" };
-      case "Board Entry": return { text: "text-amber-400", bg: "bg-amber-500/10", border: "border-amber-500/10" };
-      case "Board Reward": return { text: "text-yellow-300", bg: "bg-yellow-600/10", border: "border-yellow-600/10" };
-      default: return { text: "text-muted-foreground", bg: "bg-white/[0.05]", border: "border-white/[0.05]" };
+      case "Activation":        return { text: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/10" };
+      case "Sell MVT":          return { text: "text-rose-400",    bg: "bg-rose-500/10",    border: "border-rose-500/10" };
+      case "Withdrawal":        return { text: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10" };
+      case "BTC Pool Withdraw": return { text: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10" };
+      case "BTC Pool Credited": return { text: "text-amber-300",   bg: "bg-amber-600/10",   border: "border-amber-600/10" };
+      case "Level Income":      return { text: "text-yellow-300",  bg: "bg-yellow-600/10",  border: "border-yellow-600/10" };
+      case "Binary Income":     return { text: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/10" };
+      case "Power Leg Income":  return { text: "text-violet-400",  bg: "bg-violet-500/10",  border: "border-violet-500/10" };
+      case "Rebirth":           return { text: "text-sky-400",     bg: "bg-sky-500/10",     border: "border-sky-500/10" };
+      case "Board Entry":       return { text: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/10" };
+      case "Board Reward":      return { text: "text-yellow-300",  bg: "bg-yellow-600/10",  border: "border-yellow-600/10" };
+      default:                  return { text: "text-muted-foreground", bg: "bg-white/[0.05]", border: "border-white/[0.05]" };
     }
   };
 
@@ -83,8 +85,8 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
   };
 
   const incomeTxs = allTxs.filter(tx => tx.isIncome);
-  const activityTxs = allTxs.filter(tx => !tx.isIncome && tx.type !== "Withdrawal");
-  const withdrawalTxs = allTxs.filter(tx => tx.type === "Withdrawal");
+  const withdrawalTxs = allTxs.filter(tx => tx.type === "Withdrawal" || tx.type === "BTC Pool Withdraw");
+  const activityTxs = allTxs.filter(tx => !tx.isIncome && tx.type !== "Withdrawal" && tx.type !== "BTC Pool Withdraw");
   const displayTxs = activeTab === "all" ? allTxs : activeTab === "income" ? incomeTxs : activeTab === "withdrawal" ? withdrawalTxs : activityTxs;
   const totalPages = Math.max(1, Math.ceil(displayTxs.length / ITEMS_PER_PAGE));
   const paginatedTxs = displayTxs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);

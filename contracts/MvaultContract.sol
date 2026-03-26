@@ -149,7 +149,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     event LevelIncomePaid(address indexed to, address indexed from, uint8 level, uint256 amount);
     event LevelIncomeSkipped(address indexed upline, uint8 level, uint256 amount);
     event BinaryIncomeDistributed(uint256 totalPool, uint256 binary70, uint256 powerLeg30, uint256 totalPairs);
+    event BinaryIncomePaid(address indexed user, uint256 newPairs, uint256 amount);
     event PowerLegDistributed(uint256 totalPowerLeg30, uint256 totalPowerLegs);
+    event PowerLegIncomePaid(address indexed user, uint256 powerLegPoints, uint256 amount);
     event MvtSold(address indexed user, uint256 mvtAmount, uint256 usdtNet, uint256 usdtToBtcPool, uint256 usdtToIncome, uint256 usdtToRebirth);
     event BtcPoolCredited(address indexed user, uint256 amount);
     event BtcPoolWithdrawn(address indexed user, uint256 amount);
@@ -695,6 +697,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
             users[u].totalReceived   += share;
             users[u].powerLegPoints  += newPairs * 10;
             users[u].matchedPairs     = pairs;
+            emit BinaryIncomePaid(u, newPairs, share);
         }
 
         _binaryDistributed = true;
@@ -732,9 +735,11 @@ contract MvaultContract is Ownable, ReentrancyGuard {
             for (uint256 i = offset; i < end; i++) {
                 address u = allUsers[i];
                 if (users[u].powerLegPoints == 0) continue;
-                uint256 share = (reserve * users[u].powerLegPoints) / totalPowerLegs;
+                uint256 pts   = users[u].powerLegPoints;
+                uint256 share = (reserve * pts) / totalPowerLegs;
                 users[u].mvtBalance    += share;
                 users[u].totalReceived += share;
+                emit PowerLegIncomePaid(u, pts, share);
             }
         } else {
             adminPool += reserve;

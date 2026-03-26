@@ -339,16 +339,33 @@ export function useWeb3() {
       let startBlock = 0;
       try {
         const current = await provider.getBlockNumber();
-        startBlock = Math.max(0, current - 100000);
+        startBlock = Math.max(0, current - 200000);
       } catch { }
 
-      const [activatedEvts, soldEvts, usdtEvts, btcEvts, levelEvts, rebirthEvts] = await Promise.all([
+      const [
+        activatedEvts,
+        soldEvts,
+        usdtEvts,
+        btcWithdrawEvts,
+        btcCreditedEvts,
+        levelEvts,
+        rebirthEvts,
+        binaryEvts,
+        powerLegEvts,
+        boardEnteredEvts,
+        boardRewardEvts,
+      ] = await Promise.all([
         contract.queryFilter(contract.filters.Activated(account), startBlock).catch(() => []),
         contract.queryFilter(contract.filters.MvtSold(account), startBlock).catch(() => []),
         contract.queryFilter(contract.filters.UsdtWithdrawn(account), startBlock).catch(() => []),
         contract.queryFilter(contract.filters.BtcPoolWithdrawn(account), startBlock).catch(() => []),
+        contract.queryFilter(contract.filters.BtcPoolCredited(account), startBlock).catch(() => []),
         contract.queryFilter(contract.filters.LevelIncomePaid(account), startBlock).catch(() => []),
         contract.queryFilter(contract.filters.Reborn(account), startBlock).catch(() => []),
+        contract.queryFilter(contract.filters.BinaryIncomePaid(account), startBlock).catch(() => []),
+        contract.queryFilter(contract.filters.PowerLegIncomePaid(account), startBlock).catch(() => []),
+        contract.queryFilter(contract.filters.BoardEntered(account), startBlock).catch(() => []),
+        contract.queryFilter(contract.filters.BoardRewardCredited(account), startBlock).catch(() => []),
       ]);
 
       type RawEvt = { blockNumber: number; args?: any };
@@ -366,26 +383,51 @@ export function useWeb3() {
       };
 
       for (const e of (activatedEvts as RawEvt[])) {
-        all.push({ type: "Activation", amount: e.args?.[1] ?? 0n, detail: "$130 package activated", timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
+        all.push({ type: "Activation", amount: 130_000000n, detail: "$130 package activated", timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
       }
       for (const e of (soldEvts as RawEvt[])) {
-        all.push({ type: "Sell MVT", amount: e.args?.[2] ?? 0n, detail: `${formatTokenAmount(e.args?.[1] ?? 0n, 18)} MVT sold`, timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
+        const mvtAmt = e.args?.[1] ?? 0n;
+        const netUsdt = e.args?.[2] ?? 0n;
+        all.push({ type: "Sell MVT", amount: netUsdt, detail: `${Number(formatTokenAmount(mvtAmt, 18)).toFixed(2)} MVT sold`, timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
       }
       for (const e of (usdtEvts as RawEvt[])) {
-        all.push({ type: "Withdrawal", amount: e.args?.[1] ?? 0n, detail: "USDT withdrawn", timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
+        all.push({ type: "Withdrawal", amount: e.args?.[1] ?? 0n, detail: "USDT withdrawn to wallet", timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
       }
-      for (const e of (btcEvts as RawEvt[])) {
+      for (const e of (btcWithdrawEvts as RawEvt[])) {
         all.push({ type: "BTC Pool Withdraw", amount: e.args?.[1] ?? 0n, detail: "BTC pool withdrawn", timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
+      }
+      for (const e of (btcCreditedEvts as RawEvt[])) {
+        all.push({ type: "BTC Pool Credited", amount: e.args?.[1] ?? 0n, detail: "10% credited to BTC pool", timestamp: await getTs(e.blockNumber), isIncome: true, blockNumber: e.blockNumber });
       }
       for (const e of (levelEvts as RawEvt[])) {
         const lvl = Number(e.args?.[2] ?? 0);
-        all.push({ type: "Level Income", amount: e.args?.[3] ?? 0n, detail: `Level ${lvl} income`, timestamp: await getTs(e.blockNumber), isIncome: true, blockNumber: e.blockNumber });
+        const from = e.args?.[1] as string ?? "";
+        const shortFrom = from && from !== "0x0000000000000000000000000000000000000000" ? `${from.slice(0, 6)}...${from.slice(-4)}` : "";
+        all.push({ type: "Level Income", amount: e.args?.[3] ?? 0n, detail: `Level ${lvl}${shortFrom ? ` from ${shortFrom}` : ""}`, timestamp: await getTs(e.blockNumber), isIncome: true, blockNumber: e.blockNumber });
       }
       for (const e of (rebirthEvts as RawEvt[])) {
-        all.push({ type: "Rebirth", amount: 0n, detail: `Sub-account created`, timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
+        const sub = e.args?.[1] as string ?? "";
+        const shortSub = sub ? `${sub.slice(0, 6)}...${sub.slice(-4)}` : "";
+        all.push({ type: "Rebirth", amount: 0n, detail: `Sub-account: ${shortSub}`, timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
+      }
+      for (const e of (binaryEvts as RawEvt[])) {
+        const pairs = Number(e.args?.[1] ?? 0);
+        all.push({ type: "Binary Income", amount: e.args?.[2] ?? 0n, detail: `${pairs} new pair${pairs !== 1 ? "s" : ""} matched`, timestamp: await getTs(e.blockNumber), isIncome: true, blockNumber: e.blockNumber });
+      }
+      for (const e of (powerLegEvts as RawEvt[])) {
+        const pts = Number(e.args?.[1] ?? 0);
+        all.push({ type: "Power Leg Income", amount: e.args?.[2] ?? 0n, detail: `${pts} power leg points`, timestamp: await getTs(e.blockNumber), isIncome: true, blockNumber: e.blockNumber });
+      }
+      for (const e of (boardEnteredEvts as RawEvt[])) {
+        const lvl = Number(e.args?.[1] ?? 1);
+        all.push({ type: "Board Entry", amount: e.args?.[2] ?? 0n, detail: `Entered Pool ${lvl}`, timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
+      }
+      for (const e of (boardRewardEvts as RawEvt[])) {
+        const lvl = Number(e.args?.[2] ?? 1);
+        all.push({ type: "Board Reward", amount: e.args?.[1] ?? 0n, detail: `Pool ${lvl} completed`, timestamp: await getTs(e.blockNumber), isIncome: true, blockNumber: e.blockNumber });
       }
 
-      all.sort((a, b) => b.timestamp - a.timestamp);
+      all.sort((a, b) => b.blockNumber - a.blockNumber || b.timestamp - a.timestamp);
       const total = all.length;
       const page = all.slice(offset, offset + limit);
       return { transactions: page, total };

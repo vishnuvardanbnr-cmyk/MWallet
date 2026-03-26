@@ -83,6 +83,10 @@ export const MVAULT_ABI = [
   "event UsdtWithdrawn(address indexed user, uint256 amount)",
   "event Reborn(address indexed mainAccount, address indexed subAccount, uint256 rebirthIndex)",
   "event BinaryIncomeDistributed(uint256 totalPool, uint256 binary70, uint256 powerLeg30, uint256 totalPairs)",
+  "event BinaryIncomePaid(address indexed user, uint256 newPairs, uint256 amount)",
+  "event PowerLegIncomePaid(address indexed user, uint256 powerLegPoints, uint256 amount)",
+  "event BoardEntered(address indexed user, uint256 boardLevel, uint256 usdtDeducted)",
+  "event BoardRewardCredited(address indexed user, uint256 usdtAmount, uint256 boardLevel)",
 ];
 
 // ── MvaultToken ABI ───────────────────────────────────────────────────────────
