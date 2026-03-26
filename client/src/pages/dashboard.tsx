@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect } from "react";
-import { DollarSign, TrendingUp, TrendingDown, Coins, RefreshCw, Copy, User, Users, Wallet, ArrowRight, GitBranch, Zap, Shield, Bitcoin, RotateCcw, Info, ChevronRight, Check, ExternalLink } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, Coins, RefreshCw, Copy, User, Users, Wallet, Zap, Shield, Bitcoin, RotateCcw, Info, ChevronRight, Check, ExternalLink } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatTokenAmount, shortenAddress, getMvaultContract } from "@/lib/contract";
 import type { UserInfo, MvtPrice, BinaryPairs, ProfileOnChain } from "@/hooks/use-web3";
@@ -405,46 +405,6 @@ export default function Dashboard({
         </div>
       )}
 
-      {/* Binary Tree Summary */}
-      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.08s" }} data-testid="card-binary-summary">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2.5">
-            <div className="h-9 w-9 rounded-xl bg-blue-500/15 flex items-center justify-center">
-              <GitBranch className="h-4.5 w-4.5 text-blue-400" />
-            </div>
-            <div>
-              <p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Binary Network</p>
-              <p className="text-[10px] text-muted-foreground">{leftCount + rightCount} total team members</p>
-            </div>
-          </div>
-          <button onClick={() => setLocation("/binary")} className="text-[10px] text-amber-400 hover:text-amber-300 flex items-center gap-1" data-testid="link-binary-details">
-            Details <ChevronRight className="h-3 w-3" />
-          </button>
-        </div>
-
-        <div className="grid grid-cols-3 gap-3">
-          <div className="text-center p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]" data-testid="card-left-team">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Left Team</p>
-            <p className="text-lg font-bold text-blue-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-left-count">{leftCount}</p>
-          </div>
-          <div className="text-center p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Matched</p>
-            <p className="text-lg font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-matched-pairs">{Number(userInfo.matchedPairs)}</p>
-          </div>
-          <div className="text-center p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]" data-testid="card-right-team">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Right Team</p>
-            <p className="text-lg font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-right-count">{rightCount}</p>
-          </div>
-        </div>
-
-        {newPairs > 0 && (
-          <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-            <Zap className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
-            <p className="text-xs text-emerald-400">{newPairs} new pair{newPairs !== 1 ? "s" : ""} pending binary distribution</p>
-          </div>
-        )}
-      </div>
-
       {/* Team Quick Stats */}
       <div className="grid grid-cols-3 gap-3 slide-in" style={{ animationDelay: "0.09s" }}>
         <div className="glass-card rounded-xl p-3 text-center" data-testid="card-direct-count">
@@ -461,52 +421,6 @@ export default function Dashboard({
           <TrendingUp className="h-4 w-4 mx-auto text-yellow-300 mb-1.5" />
           <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Power Leg Pts</p>
           <p className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-power-leg-points">{Number(userInfo.powerLegPoints)}</p>
-        </div>
-      </div>
-
-      {/* Binary Tree Visual */}
-      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.10s" }} data-testid="card-binary-tree">
-        <h2 className="text-sm font-bold mb-4" style={{ fontFamily: "var(--font-display)" }}>
-          <span className="gradient-text">My Binary Position</span>
-        </h2>
-        <div className="flex flex-col items-center gap-3">
-          {/* Me */}
-          <div className="rounded-xl px-5 py-3 bg-gradient-to-br from-amber-500/20 to-yellow-400/10 border border-amber-500/30 text-center" data-testid="card-self-node">
-            <div className="h-8 w-8 mx-auto rounded-lg bg-amber-500/20 flex items-center justify-center mb-1.5">
-              <User className="h-4 w-4 text-yellow-300" />
-            </div>
-            <p className="text-xs font-semibold text-yellow-300">You</p>
-            <p className="text-[9px] font-mono text-muted-foreground">{shortenAddress(account)}</p>
-          </div>
-          {/* Children */}
-          <div className="grid grid-cols-2 gap-4 w-full max-w-xs">
-            {[
-              { label: "Left", address: userInfo.leftChild, count: leftCount, color: "border-blue-500/30 text-blue-400 bg-blue-500/10" },
-              { label: "Right", address: userInfo.rightChild, count: rightCount, color: "border-purple-500/30 text-purple-400 bg-purple-500/10" },
-            ].map(({ label, address, count, color }) => {
-              const isEmpty = !address || address === ZERO_ADDRESS;
-              return (
-                <div
-                  key={label}
-                  className={`rounded-xl p-3 text-center border ${isEmpty ? "border-dashed border-white/[0.08] bg-white/[0.02]" : color}`}
-                  data-testid={`card-${label.toLowerCase()}-child`}
-                >
-                  <div className="h-7 w-7 mx-auto rounded-lg flex items-center justify-center mb-1.5 bg-white/[0.05]">
-                    <User className={`h-3.5 w-3.5 ${isEmpty ? "text-muted-foreground/30" : color.split(" ")[1]}`} />
-                  </div>
-                  <p className="text-[10px] text-muted-foreground">{label}</p>
-                  {isEmpty ? (
-                    <p className="text-[9px] text-muted-foreground/40 mt-0.5">Empty</p>
-                  ) : (
-                    <>
-                      <p className="text-[9px] font-mono mt-0.5" data-testid={`text-${label.toLowerCase()}-address`}>{shortenAddress(address)}</p>
-                      <p className="text-[9px] text-muted-foreground">{count} members</p>
-                    </>
-                  )}
-                </div>
-              );
-            })}
-          </div>
         </div>
       </div>
 

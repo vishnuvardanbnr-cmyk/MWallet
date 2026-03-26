@@ -8,9 +8,6 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { getMvaultContract, getTokenContract, MVAULT_CONTRACT_ADDRESS, formatTokenAmount } from "@/lib/contract";
 import { ethers } from "ethers";
-import { useQuery } from "@tanstack/react-query";
-
-interface TokenPrice { buyPrice: string; sellPrice: string; }
 
 interface StakePosition {
   index: number;
@@ -62,12 +59,23 @@ export default function PaidStakingPage({
   const [walletUsdt, setWalletUsdt]       = useState<bigint>(0n);
   const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
 
-  const { data: price } = useQuery<TokenPrice>({
-    queryKey: ["/api/token/price"],
-    refetchInterval: 30000,
-  });
-  const buyPrice  = parseFloat(price?.buyPrice  ?? "0.0036");
-  const sellPrice = parseFloat(price?.sellPrice ?? "0.00324");
+  const [buyPrice,  setBuyPrice]  = useState(0);
+  const [sellPrice, setSellPrice] = useState(0);
+
+  useEffect(() => {
+    const fetchPrice = async () => {
+      try {
+        const provider = new ethers.BrowserProvider((window as any).ethereum);
+        const contract = getMvaultContract(provider);
+        const [bp, sp] = await contract.getMvtPrice();
+        setBuyPrice(parseFloat(ethers.formatUnits(bp, 18)));
+        setSellPrice(parseFloat(ethers.formatUnits(sp, 18)));
+      } catch {}
+    };
+    fetchPrice();
+    const interval = setInterval(fetchPrice, 30000);
+    return () => clearInterval(interval);
+  }, [account]);
 
   const loadPositions = useCallback(async () => {
     if (!getActiveStakesOnChain || !account) return;
