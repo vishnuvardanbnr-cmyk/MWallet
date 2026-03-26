@@ -90,12 +90,17 @@ export const MVAULT_ABI = [
   // Staking
   "function stake(uint256 usdtAmount, bool isLocked) external",
   "function unstake(uint256 stakeIndex) external",
+  "function convertToLocked(uint256 stakeIndex) external",
   "function getStakeCount(address user) view returns (uint256)",
-  "function getStake(address user, uint256 index) view returns (uint256 mvtAmount, uint256 usdtInvested, uint256 stakedAt, bool isLocked, bool active)",
-  "function getActiveStakes(address user) view returns (uint256[] indices, uint256[] mvtAmounts, uint256[] usdtInvested, uint256[] stakedAts, bool[] isLocked)",
+  "function getStake(address user, uint256 index) view returns (uint256 mvtAmount, uint256 usdtInvested, uint256 stakedAt, uint256 lockedSince, bool active)",
+  "function getActiveStakes(address user) view returns (uint256[] indices, uint256[] mvtAmounts, uint256[] usdtInvestedArr, uint256[] stakedAts, uint256[] lockedSinces)",
   "function MIN_STAKE_USDT() view returns (uint256)",
+  "function LOCK_DURATION() view returns (uint256)",
+  "function FLEX_CAP_MULT() view returns (uint256)",
+  "function getLockDuration() view returns (uint256)",
   "event Staked(address indexed user, uint256 stakeIndex, uint256 usdtAmount, uint256 mvtMinted, bool isLocked)",
-  "event Unstaked(address indexed user, uint256 stakeIndex, uint256 mvtReturned, uint256 usdtReceived)",
+  "event Unstaked(address indexed user, uint256 stakeIndex, uint256 mvtReturned, uint256 usdtReceived, uint256 adminCapCut)",
+  "event ConvertedToLocked(address indexed user, uint256 stakeIndex, uint256 lockedSince)",
   "event StakeLevelIncomePaid(address indexed to, address indexed from, uint8 level, uint256 usdtAmount)",
 ];
 

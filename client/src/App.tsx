@@ -326,6 +326,7 @@ function App() {
                         account={web3.account!}
                         stakeUsdt={web3.stakeUsdt}
                         unstakePosition={web3.unstakePosition}
+                        convertStakeToLocked={web3.convertStakeToLocked}
                         getActiveStakesOnChain={web3.getActiveStakesOnChain}
                         approveToken={web3.approveToken}
                         tokenDecimals={web3.tokenDecimals}

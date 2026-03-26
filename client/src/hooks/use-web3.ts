@@ -519,6 +519,13 @@ export function useWeb3() {
     await fetchUserData();
   }, [getSigner, fetchUserData]);
 
+  const convertStakeToLocked = useCallback(async (stakeIndex: number) => {
+    const signer = await getSigner();
+    const contract = getMvaultContract(signer);
+    const tx = await contract.convertToLocked(stakeIndex);
+    await tx.wait();
+  }, [getSigner]);
+
   const getActiveStakesOnChain = useCallback(async (user: string) => {
     const provider = getProvider();
     const contract = getMvaultContract(provider);
@@ -529,9 +536,9 @@ export function useWeb3() {
         positions.push({
           index: Number(result.indices[i]),
           mvtAmount: result.mvtAmounts[i] as bigint,
-          usdtInvested: result.usdtInvested[i] as bigint,
+          usdtInvested: result.usdtInvestedArr[i] as bigint,
           stakedAt: Number(result.stakedAts[i]),
-          isLocked: result.isLocked[i] as boolean,
+          lockedSince: Number(result.lockedSinces[i]),
         });
       }
       return positions;
@@ -551,7 +558,7 @@ export function useWeb3() {
     reactivatePackage, repurchase,
     getDirectReferrals, getTokenBalance,
     getTransactionsFromContract, getBinaryFlushedEvents, fetchUserData,
-    stakeUsdt, unstakePosition, getActiveStakesOnChain,
+    stakeUsdt, unstakePosition, convertStakeToLocked, getActiveStakesOnChain,
     formatAmount: (val: bigint) => formatTokenAmount(val, tokenDecimals),
   };
 }
