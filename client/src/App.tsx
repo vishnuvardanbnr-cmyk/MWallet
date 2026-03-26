@@ -337,8 +337,7 @@ function App() {
                       <RegisterForPage
                         account={web3.account!}
                         registerAndActivateFor={web3.registerAndActivateFor}
-                        approveToken={web3.approveToken}
-                        walletUsdtBalance={web3.userInfo?.usdtBalance}
+                        virtualUsdtBalance={web3.userInfo?.usdtBalance}
                         tokenDecimals={web3.tokenDecimals}
                       />
                     </Route>

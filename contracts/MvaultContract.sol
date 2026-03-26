@@ -377,19 +377,21 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     /**
      * @notice Register a NEW wallet address and immediately activate it.
      *         Caller (msg.sender) becomes the direct sponsor of `newUser`.
-     *         Caller pays $130 USDT from their own wallet.
-     *         Caller must be registered and active. `newUser` must not yet be registered.
+     *         $130 USDT is deducted from the caller's in-contract virtual usdtBalance.
+     *         No external wallet approval needed — uses earned income already in the contract.
+     *         Caller must be registered, active, and have >= $130 virtual USDT. `newUser` must not yet be registered.
      */
     function registerAndActivateFor(
         address newUser,
         address binaryParent,
         bool    placeLeft
     ) external nonReentrant {
-        if (newUser == address(0))             revert("Invalid address");
-        if (newUser == msg.sender)             revert("Cannot register yourself");
-        if (!users[msg.sender].isRegistered)   revert NotRegistered();
-        if (!users[msg.sender].isActive)       revert("Caller not active");
-        if (users[newUser].isRegistered)       revert AlreadyRegistered();
+        if (newUser == address(0))                        revert("Invalid address");
+        if (newUser == msg.sender)                        revert("Cannot register yourself");
+        if (!users[msg.sender].isRegistered)              revert NotRegistered();
+        if (!users[msg.sender].isActive)                  revert("Caller not active");
+        if (users[newUser].isRegistered)                  revert AlreadyRegistered();
+        if (users[msg.sender].usdtBalance < PACKAGE_PRICE) revert InsufficientUsdtBalance();
 
         // Determine binary parent (default = caller)
         address parent = (binaryParent != address(0) && users[binaryParent].isRegistered)
@@ -399,9 +401,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (placeLeft  && users[parent].leftChild  != address(0)) revert PositionTaken();
         if (!placeLeft && users[parent].rightChild != address(0)) revert PositionTaken();
 
-        // Pull $130 USDT from caller
-        bool ok = usdtToken.transferFrom(msg.sender, address(this), PACKAGE_PRICE);
-        if (!ok) revert TransferFailed();
+        // Deduct $130 from caller's virtual USDT balance (USDT already held by this contract)
+        users[msg.sender].usdtBalance -= PACKAGE_PRICE;
 
         // Register newUser with caller as sponsor
         _createUser(newUser, msg.sender, parent, placeLeft, address(0));
