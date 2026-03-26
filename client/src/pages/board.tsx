@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Coins, Loader2, Lock, Unlock, ChevronRight, Users, Trophy, Zap, CheckCircle2, Grid2X2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { BOARD_PRICES_USD, getContract, formatTokenAmount } from "@/lib/contract";
+import { BOARD_PRICES_USD, getMvaultContract, formatTokenAmount } from "@/lib/contract";
 
 interface BoardProps {
   btcPoolBalance: bigint;
@@ -50,7 +50,7 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
     try {
       const { ethers } = await import("ethers");
       const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const contract = getContract(provider);
+      const contract = getMvaultContract(provider);
       const userAddr = account.toLowerCase();
 
       const tiers: BoardTier[] = [];

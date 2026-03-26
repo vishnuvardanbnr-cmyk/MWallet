@@ -62,6 +62,14 @@ export const MVAULT_ABI = [
   "function mvaultToken() view returns (address)",
   "function PACKAGE_PRICE() view returns (uint256)",
   "function INCOME_LIMIT() view returns (uint256)",
+  // Board pool
+  "function enterBoardPool() external",
+  "function canEnterBoard(address user) view returns (bool)",
+  "function getBoardPrice(uint256 level) view returns (uint256)",
+  "function getBoardQueueLength(uint256 level) view returns (uint256)",
+  "function getBoardCurrentIndex(uint256 level) view returns (uint256)",
+  "function getBoardMatrixInfo(uint256 level, uint256 index) view returns (address owner, uint256 filledCount, bool completed)",
+  "function getUserBoardStats(address user) view returns (uint256[] poolLevels, uint256[] matrixIndices, uint256[] filledCounts, bool[] completeds)",
   // Admin distribution
   "function distributeBinaryIncome(uint256 offset, uint256 limit) external",
   "function distributePowerLeg(uint256 offset, uint256 limit) external",

@@ -4,7 +4,7 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { LayoutDashboard, DollarSign, Wallet, Users, ArrowLeftRight, UserCircle, HelpCircle, LogOut, Copy, GitBranch, ShoppingBag, ArrowDownUp, Coins, TrendingDown, RefreshCw } from "lucide-react";
+import { LayoutDashboard, DollarSign, Wallet, Users, ArrowLeftRight, UserCircle, HelpCircle, LogOut, Copy, GitBranch, ShoppingBag, ArrowDownUp, Coins, TrendingDown, RefreshCw, Grid2X2 } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { shortenAddress } from "@/lib/contract";
@@ -16,6 +16,7 @@ const menuItems = [
   { title: "Wallet", url: "/wallet", icon: Wallet },
   { title: "Team", url: "/team", icon: Users },
   { title: "Deep Placement", url: "/deep-placement", icon: GitBranch },
+  { title: "BTC Pool", url: "/board", icon: Grid2X2 },
   { title: "BTC Swap", url: "/swap", icon: ArrowDownUp },
   { title: "Sell MVT", url: "/sell-tokens", icon: TrendingDown },
   { title: "Paid Staking", url: "/paid-staking", icon: Coins },
