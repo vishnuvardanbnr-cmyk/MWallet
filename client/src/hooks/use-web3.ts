@@ -337,128 +337,50 @@ export function useWeb3() {
       const provider = getProvider();
       const contract = getMvaultContract(provider);
 
-      // BSC public RPC nodes cap queryFilter at ~5 000 blocks per call.
-      // Chunk the last 100 000 blocks (≈ 3–4 days on BSC) into 5 000-block slices.
-      let currentBlock = 0;
-      try { currentBlock = await provider.getBlockNumber(); } catch { }
-      const CHUNK = 5000;
-      const LOOK_BACK = 100000; // ~3-4 days on BSC
-      const fromBlock = Math.max(0, currentBlock - LOOK_BACK);
+      // Single on-chain read — no event querying, no block range limits.
+      const [records, totalBn] = await contract.getTransactions(account, BigInt(offset), BigInt(limit));
+      const total = Number(totalBn);
 
-      // Build chunk ranges: [from, to] pairs
-      const ranges: [number, number][] = [];
-      for (let f = fromBlock; f <= currentBlock; f += CHUNK) {
-        ranges.push([f, Math.min(f + CHUNK - 1, currentBlock)]);
-      }
-
-      // Query one filter across all chunks, merge results
-      const queryChunked = async (filter: any): Promise<any[]> => {
-        const results: any[] = [];
-        for (const [f, t] of ranges) {
-          try {
-            const evts = await contract.queryFilter(filter, f, t);
-            results.push(...evts);
-          } catch { /* skip chunk on error */ }
-        }
-        return results;
+      // txType → display metadata
+      // 0=Activation 1=LevelIncome 2=LevelMissed 3=BinaryIncome 4=PowerLeg
+      // 5=SellMVT 6=BtcCredited 7=UsdtWithdraw 8=BtcWithdraw 9=Rebirth
+      // 10=BoardEntry 11=BoardReward
+      const TX_META: Record<number, { type: string; isIncome: boolean; detail: (r: any) => string }> = {
+        0:  { type: "Activation",          isIncome: false, detail: ()  => "$130 package activated" },
+        1:  { type: "Level Income",         isIncome: true,  detail: (r) => {
+               const lvl = Number(r.level);
+               const addr = r.addr as string;
+               const short = addr && addr !== "0x0000000000000000000000000000000000000000" ? `${addr.slice(0,6)}...${addr.slice(-4)}` : "";
+               return `Level ${lvl}${short ? ` from ${short}` : ""}`;
+             }},
+        2:  { type: "Level Income Missed",  isIncome: false, detail: (r) => `Level ${Number(r.level)} — need more directs` },
+        3:  { type: "Binary Income",        isIncome: true,  detail: ()  => "Binary pairs matched" },
+        4:  { type: "Power Leg Income",     isIncome: true,  detail: ()  => "Power leg distribution" },
+        5:  { type: "Sell MVT",             isIncome: false, detail: ()  => "MVT sold for USDT" },
+        6:  { type: "BTC Pool Credited",    isIncome: true,  detail: ()  => "10% credited to BTC pool" },
+        7:  { type: "Withdrawal",           isIncome: false, detail: ()  => "USDT withdrawn to wallet" },
+        8:  { type: "BTC Pool Withdraw",    isIncome: false, detail: ()  => "BTC pool withdrawn" },
+        9:  { type: "Rebirth",              isIncome: false, detail: (r) => {
+               const addr = r.addr as string;
+               return addr && addr !== "0x0000000000000000000000000000000000000000" ? `Sub-account: ${addr.slice(0,6)}...${addr.slice(-4)}` : "Sub-account reborn";
+             }},
+        10: { type: "Board Entry",          isIncome: false, detail: (r) => `Entered Pool ${Number(r.level)}` },
+        11: { type: "Board Reward",         isIncome: true,  detail: (r) => `Pool ${Number(r.level)} completed` },
       };
 
-      const [
-        activatedEvts,
-        soldEvts,
-        usdtEvts,
-        btcWithdrawEvts,
-        btcCreditedEvts,
-        levelEvts,
-        levelSkippedEvts,
-        rebirthEvts,
-        binaryEvts,
-        powerLegEvts,
-        boardEnteredEvts,
-        boardRewardEvts,
-      ] = await Promise.all([
-        queryChunked(contract.filters.Activated(account)),
-        queryChunked(contract.filters.MvtSold(account)),
-        queryChunked(contract.filters.UsdtWithdrawn(account)),
-        queryChunked(contract.filters.BtcPoolWithdrawn(account)),
-        queryChunked(contract.filters.BtcPoolCredited(account)),
-        queryChunked(contract.filters.LevelIncomePaid(account)),
-        queryChunked(contract.filters.LevelIncomeSkipped(account)),
-        queryChunked(contract.filters.Reborn(account)),
-        queryChunked(contract.filters.BinaryIncomePaid(account)),
-        queryChunked(contract.filters.PowerLegIncomePaid(account)),
-        queryChunked(contract.filters.BoardEntered(account)),
-        queryChunked(contract.filters.BoardRewardCredited(account)),
-      ]);
+      const transactions = (records as any[]).map((r) => {
+        const txType = Number(r.txType);
+        const meta = TX_META[txType] ?? { type: "Unknown", isIncome: false, detail: () => "" };
+        return {
+          type:      meta.type,
+          amount:    BigInt(r.amount),
+          detail:    meta.detail(r),
+          timestamp: Number(r.ts),
+          isIncome:  meta.isIncome,
+        };
+      });
 
-      type RawEvt = { blockNumber: number; args?: any };
-      const all: Array<{ type: string; amount: bigint; detail: string; timestamp: number; isIncome: boolean; blockNumber: number }> = [];
-
-      const blocks = new Map<number, number>();
-      const getTs = async (bn: number) => {
-        if (blocks.has(bn)) return blocks.get(bn)!;
-        try {
-          const b = await provider.getBlock(bn);
-          const ts = (b as any)?.timestamp ?? 0;
-          blocks.set(bn, ts);
-          return ts;
-        } catch { return 0; }
-      };
-
-      for (const e of (activatedEvts as RawEvt[])) {
-        all.push({ type: "Activation", amount: 130_000000n, detail: "$130 package activated", timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
-      }
-      for (const e of (soldEvts as RawEvt[])) {
-        const mvtAmt = e.args?.[1] ?? 0n;
-        const netUsdt = e.args?.[2] ?? 0n;
-        all.push({ type: "Sell MVT", amount: netUsdt, detail: `${Number(formatTokenAmount(mvtAmt, 18)).toFixed(2)} MVT sold`, timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
-      }
-      for (const e of (usdtEvts as RawEvt[])) {
-        all.push({ type: "Withdrawal", amount: e.args?.[1] ?? 0n, detail: "USDT withdrawn to wallet", timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
-      }
-      for (const e of (btcWithdrawEvts as RawEvt[])) {
-        all.push({ type: "BTC Pool Withdraw", amount: e.args?.[1] ?? 0n, detail: "BTC pool withdrawn", timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
-      }
-      for (const e of (btcCreditedEvts as RawEvt[])) {
-        all.push({ type: "BTC Pool Credited", amount: e.args?.[1] ?? 0n, detail: "10% credited to BTC pool", timestamp: await getTs(e.blockNumber), isIncome: true, blockNumber: e.blockNumber });
-      }
-      for (const e of (levelEvts as RawEvt[])) {
-        const lvl = Number(e.args?.[2] ?? 0);
-        const from = e.args?.[1] as string ?? "";
-        const shortFrom = from && from !== "0x0000000000000000000000000000000000000000" ? `${from.slice(0, 6)}...${from.slice(-4)}` : "";
-        all.push({ type: "Level Income", amount: e.args?.[3] ?? 0n, detail: `Level ${lvl}${shortFrom ? ` from ${shortFrom}` : ""}`, timestamp: await getTs(e.blockNumber), isIncome: true, blockNumber: e.blockNumber });
-      }
-      for (const e of (levelSkippedEvts as RawEvt[])) {
-        const lvl = Number(e.args?.[1] ?? 0);
-        const amt = e.args?.[2] ?? 0n;
-        all.push({ type: "Level Income Missed", amount: amt, detail: `Level ${lvl} — need more directs`, timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
-      }
-      for (const e of (rebirthEvts as RawEvt[])) {
-        const sub = e.args?.[1] as string ?? "";
-        const shortSub = sub ? `${sub.slice(0, 6)}...${sub.slice(-4)}` : "";
-        all.push({ type: "Rebirth", amount: 0n, detail: `Sub-account: ${shortSub}`, timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
-      }
-      for (const e of (binaryEvts as RawEvt[])) {
-        const pairs = Number(e.args?.[1] ?? 0);
-        all.push({ type: "Binary Income", amount: e.args?.[2] ?? 0n, detail: `${pairs} new pair${pairs !== 1 ? "s" : ""} matched`, timestamp: await getTs(e.blockNumber), isIncome: true, blockNumber: e.blockNumber });
-      }
-      for (const e of (powerLegEvts as RawEvt[])) {
-        const pts = Number(e.args?.[1] ?? 0);
-        all.push({ type: "Power Leg Income", amount: e.args?.[2] ?? 0n, detail: `${pts} power leg points`, timestamp: await getTs(e.blockNumber), isIncome: true, blockNumber: e.blockNumber });
-      }
-      for (const e of (boardEnteredEvts as RawEvt[])) {
-        const lvl = Number(e.args?.[1] ?? 1);
-        all.push({ type: "Board Entry", amount: e.args?.[2] ?? 0n, detail: `Entered Pool ${lvl}`, timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
-      }
-      for (const e of (boardRewardEvts as RawEvt[])) {
-        const lvl = Number(e.args?.[2] ?? 1);
-        all.push({ type: "Board Reward", amount: e.args?.[1] ?? 0n, detail: `Pool ${lvl} completed`, timestamp: await getTs(e.blockNumber), isIncome: true, blockNumber: e.blockNumber });
-      }
-
-      all.sort((a, b) => b.blockNumber - a.blockNumber || b.timestamp - a.timestamp);
-      const total = all.length;
-      const page = all.slice(offset, offset + limit);
-      return { transactions: page, total };
+      return { transactions, total };
     } catch (err) {
       console.error("getTransactionsFromContract error:", err);
       return { transactions: [], total: 0 };

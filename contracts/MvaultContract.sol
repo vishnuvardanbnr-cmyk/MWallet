@@ -159,6 +159,41 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
     mapping(address => StakePosition[]) private _stakes;
 
+    // ── Transaction History (on-chain) ────────────────────────────────────────
+    // txType constants
+    uint8 internal constant TX_ACTIVATION     = 0;
+    uint8 internal constant TX_LEVEL_INCOME   = 1;
+    uint8 internal constant TX_LEVEL_MISSED   = 2;
+    uint8 internal constant TX_BINARY_INCOME  = 3;
+    uint8 internal constant TX_POWERLEG       = 4;
+    uint8 internal constant TX_SELL_MVT       = 5;
+    uint8 internal constant TX_BTC_CREDITED   = 6;
+    uint8 internal constant TX_USDT_WITHDRAW  = 7;
+    uint8 internal constant TX_BTC_WITHDRAW   = 8;
+    uint8 internal constant TX_REBIRTH        = 9;
+    uint8 internal constant TX_BOARD_ENTRY    = 10;
+    uint8 internal constant TX_BOARD_REWARD   = 11;
+
+    struct TxRecord {
+        uint8   txType;    // one of TX_* constants above
+        uint32  ts;        // block.timestamp (safe until year 2106)
+        uint256 amount;    // in token's native units
+        uint8   level;     // level number (0 = N/A)
+        address addr;      // counterpart address (from/to), address(0) if N/A
+    }
+
+    mapping(address => TxRecord[]) private _txRecords;
+
+    function _recordTx(address user, uint8 txType, uint256 amount, uint8 level, address addr) internal {
+        _txRecords[user].push(TxRecord({
+            txType: txType,
+            ts:     uint32(block.timestamp),
+            amount: amount,
+            level:  level,
+            addr:   addr
+        }));
+    }
+
     // ── Events ────────────────────────────────────────────────────────────────
     event Registered(address indexed user, address indexed sponsor, address indexed binaryParent, bool placeLeft);
     event Activated(address indexed user, uint256 mvtMinted, uint256 grossMvt, uint256 levelAmt, uint256 binaryAmt, uint256 adminAmt);
@@ -258,6 +293,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         boardHandler.enterBoard(msg.sender, 1);
 
         emit BoardEntered(msg.sender, 1, price);
+        _recordTx(msg.sender, TX_BOARD_ENTRY, price, 1, address(0));
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -279,6 +315,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         totalBoardRewardsEarned[_user] += _usdtAmount;
 
         emit BoardRewardCredited(_user, _usdtAmount, _boardLevel);
+        _recordTx(_user, TX_BOARD_REWARD, _usdtAmount, uint8(_boardLevel), address(0));
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -452,6 +489,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         _distributeLevelIncome(user, grossMvt, levelAmt);
 
         emit Activated(user, minted, grossMvt, levelAmt, binaryAmt, adminAmt);
+        _recordTx(user, TX_ACTIVATION, PACKAGE_PRICE, 0, address(0));
     }
 
     /**
@@ -478,9 +516,11 @@ contract MvaultContract is Ownable, ReentrancyGuard {
                 users[cur].mvtBalance    += share;
                 users[cur].totalReceived += share;
                 emit LevelIncomePaid(cur, from, lvl, share);
+                _recordTx(cur, TX_LEVEL_INCOME, share, lvl, from);
             } else {
                 adminPool += share;
                 emit LevelIncomeSkipped(cur, lvl, share);
+                _recordTx(cur, TX_LEVEL_MISSED, share, lvl, address(0));
             }
 
             cur = users[cur].sponsor;
@@ -546,6 +586,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         u.btcPoolBalance += btcCharge;
         u.totalBtcEarned += btcCharge;
         emit BtcPoolCredited(msg.sender, btcCharge);
+        _recordTx(msg.sender, TX_BTC_CREDITED, btcCharge, 0, address(0));
 
         // ── Route remaining 90% through income limit → rebirth pool ──────────
         uint256 toIncome  = 0;
@@ -564,6 +605,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         u.rebirthPool += toRebirth;
 
         emit MvtSold(msg.sender, amount, netUsdt, btcCharge, toIncome, toRebirth);
+        _recordTx(msg.sender, TX_SELL_MVT, netUsdt, 0, address(0));
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -583,6 +625,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (!ok) revert TransferFailed();
 
         emit UsdtWithdrawn(msg.sender, amount);
+        _recordTx(msg.sender, TX_USDT_WITHDRAW, amount, 0, address(0));
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -604,6 +647,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (!ok) revert TransferFailed();
 
         emit BtcPoolWithdrawn(msg.sender, amount);
+        _recordTx(msg.sender, TX_BTC_WITHDRAW, amount, 0, address(0));
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -661,6 +705,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         u.rebirthCount++;
 
         emit Reborn(msg.sender, subAccount, u.rebirthCount);
+        _recordTx(msg.sender, TX_REBIRTH, 0, 0, subAccount);
     }
 
     /**
@@ -767,6 +812,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
             users[u].powerLegPoints  += newPairs * 10;
             users[u].matchedPairs     = pairs;
             emit BinaryIncomePaid(u, newPairs, share);
+            _recordTx(u, TX_BINARY_INCOME, share, 0, address(0));
         }
 
         _binaryDistributed = true;
@@ -809,6 +855,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
                 users[u].mvtBalance    += share;
                 users[u].totalReceived += share;
                 emit PowerLegIncomePaid(u, pts, share);
+                _recordTx(u, TX_POWERLEG, share, 0, address(0));
             }
         } else {
             adminPool += reserve;
@@ -1123,6 +1170,37 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
     function getMvtContractBalance() external view returns (uint256) {
         return mvaultToken.balanceOf(address(this));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // TRANSACTION HISTORY
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Return stored transaction records for `user`, newest-first.
+     * @param user    Wallet address to query.
+     * @param offset  Number of newest records to skip (0 = start from latest).
+     * @param limit   Max records to return.
+     * @return records Array of TxRecord structs.
+     * @return total   Total number of records stored for this user.
+     */
+    function getTransactions(
+        address user,
+        uint256 offset,
+        uint256 limit
+    ) external view returns (TxRecord[] memory records, uint256 total) {
+        TxRecord[] storage all = _txRecords[user];
+        total = all.length;
+        if (total == 0 || offset >= total) return (new TxRecord[](0), total);
+
+        // newest-first: start from the last element and walk backwards
+        uint256 available = total - offset;
+        uint256 count     = limit < available ? limit : available;
+
+        records = new TxRecord[](count);
+        for (uint256 i = 0; i < count; i++) {
+            records[i] = all[total - 1 - offset - i];
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
