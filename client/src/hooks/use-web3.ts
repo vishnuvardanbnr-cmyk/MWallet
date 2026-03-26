@@ -336,11 +336,32 @@ export function useWeb3() {
     try {
       const provider = getProvider();
       const contract = getMvaultContract(provider);
-      let startBlock = 0;
-      try {
-        const current = await provider.getBlockNumber();
-        startBlock = Math.max(0, current - 200000);
-      } catch { }
+
+      // BSC public RPC nodes cap queryFilter at ~5 000 blocks per call.
+      // Chunk the last 100 000 blocks (≈ 3–4 days on BSC) into 5 000-block slices.
+      let currentBlock = 0;
+      try { currentBlock = await provider.getBlockNumber(); } catch { }
+      const CHUNK = 5000;
+      const LOOK_BACK = 100000; // ~3-4 days on BSC
+      const fromBlock = Math.max(0, currentBlock - LOOK_BACK);
+
+      // Build chunk ranges: [from, to] pairs
+      const ranges: [number, number][] = [];
+      for (let f = fromBlock; f <= currentBlock; f += CHUNK) {
+        ranges.push([f, Math.min(f + CHUNK - 1, currentBlock)]);
+      }
+
+      // Query one filter across all chunks, merge results
+      const queryChunked = async (filter: any): Promise<any[]> => {
+        const results: any[] = [];
+        for (const [f, t] of ranges) {
+          try {
+            const evts = await contract.queryFilter(filter, f, t);
+            results.push(...evts);
+          } catch { /* skip chunk on error */ }
+        }
+        return results;
+      };
 
       const [
         activatedEvts,
@@ -356,18 +377,18 @@ export function useWeb3() {
         boardEnteredEvts,
         boardRewardEvts,
       ] = await Promise.all([
-        contract.queryFilter(contract.filters.Activated(account), startBlock).catch(() => []),
-        contract.queryFilter(contract.filters.MvtSold(account), startBlock).catch(() => []),
-        contract.queryFilter(contract.filters.UsdtWithdrawn(account), startBlock).catch(() => []),
-        contract.queryFilter(contract.filters.BtcPoolWithdrawn(account), startBlock).catch(() => []),
-        contract.queryFilter(contract.filters.BtcPoolCredited(account), startBlock).catch(() => []),
-        contract.queryFilter(contract.filters.LevelIncomePaid(account), startBlock).catch(() => []),
-        contract.queryFilter(contract.filters.LevelIncomeSkipped(account), startBlock).catch(() => []),
-        contract.queryFilter(contract.filters.Reborn(account), startBlock).catch(() => []),
-        contract.queryFilter(contract.filters.BinaryIncomePaid(account), startBlock).catch(() => []),
-        contract.queryFilter(contract.filters.PowerLegIncomePaid(account), startBlock).catch(() => []),
-        contract.queryFilter(contract.filters.BoardEntered(account), startBlock).catch(() => []),
-        contract.queryFilter(contract.filters.BoardRewardCredited(account), startBlock).catch(() => []),
+        queryChunked(contract.filters.Activated(account)),
+        queryChunked(contract.filters.MvtSold(account)),
+        queryChunked(contract.filters.UsdtWithdrawn(account)),
+        queryChunked(contract.filters.BtcPoolWithdrawn(account)),
+        queryChunked(contract.filters.BtcPoolCredited(account)),
+        queryChunked(contract.filters.LevelIncomePaid(account)),
+        queryChunked(contract.filters.LevelIncomeSkipped(account)),
+        queryChunked(contract.filters.Reborn(account)),
+        queryChunked(contract.filters.BinaryIncomePaid(account)),
+        queryChunked(contract.filters.PowerLegIncomePaid(account)),
+        queryChunked(contract.filters.BoardEntered(account)),
+        queryChunked(contract.filters.BoardRewardCredited(account)),
       ]);
 
       type RawEvt = { blockNumber: number; args?: any };
