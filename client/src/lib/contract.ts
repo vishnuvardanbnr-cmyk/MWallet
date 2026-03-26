@@ -21,9 +21,9 @@ export const NETWORK = isMainnet ? BSC_MAINNET : BSC_TESTNET;
 
 // ── New MvaultContract + MvaultToken ──────────────────────────────────────────
 export const MVAULT_CONTRACT_ADDRESS =
-  import.meta.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x39479f495c83E9FC0FB6206ADe884b3eCAEFAFf3";
+  import.meta.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x15D45598d54f8b0Fe7729D64BFeE7A7331d9D025";
 export const MVT_TOKEN_ADDRESS =
-  import.meta.env.VITE_MVT_TOKEN_ADDRESS || "0xa986C2aa3FC2A799856CdC8CC08d0bB1CfE523b1";
+  import.meta.env.VITE_MVT_TOKEN_ADDRESS || "0x9561350DC412441B7cD94Fd69106360B363f8239";
 // USDT token address (same for both old and new contracts)
 export const TOKEN_ADDRESS =
   import.meta.env.VITE_PAYMENT_TOKEN_ADDRESS || "0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3";
@@ -149,7 +149,7 @@ export const MLM_ABI = [
 ];
 
 export const BOARD_HANDLER_ADDRESS =
-  import.meta.env.VITE_BOARD_HANDLER_ADDRESS || "0xA72bfeAbE813C17Be448C54440Cb80F1b75cBc4c";
+  import.meta.env.VITE_BOARD_HANDLER_ADDRESS || "0x786f8Cf98b7a141a7584321CC71702F3F03CD7ea";
 export const DEPOSIT_VAULT_ADDRESS =
   import.meta.env.VITE_DEPOSIT_VAULT_ADDRESS || "0xD307FB39d7d42B59AC46e28D71ef72019E9D5e38";
 export const PANCAKE_ROUTER_ADDRESS =

@@ -507,7 +507,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
     /** @dev Minimum directs needed to qualify at each level. */
     function _directReq(uint8 lvl) internal pure returns (uint256) {
-        if (lvl <= 4)  return 2;  // L1–L4: 2 direct sponsors
+        if (lvl == 1)  return 0;  // L1: no requirement — always paid to active sponsor
+        if (lvl <= 4)  return 2;  // L2–L4: 2 direct sponsors
         return 5;                 // L5–L10: 5 direct sponsors
     }
 

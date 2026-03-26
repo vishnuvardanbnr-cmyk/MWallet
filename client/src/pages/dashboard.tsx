@@ -425,7 +425,7 @@ export default function Dashboard({
         </div>
       </div>
 
-      {/* Level Income Qualification Alert */}
+      {/* Level Income Qualification Alert — L2-L4 need 2 directs, L5-L10 need 5 */}
       {userInfo.isActive && directCount < 2 && (
         <div className="glass-card rounded-2xl p-4 border border-orange-500/20 slide-in" style={{ animationDelay: "0.10s" }} data-testid="card-income-alert">
           <div className="flex items-start gap-3">
@@ -434,13 +434,14 @@ export default function Dashboard({
             </div>
             <div className="flex-1">
               <p className="text-sm font-semibold text-orange-300" style={{ fontFamily: "var(--font-display)" }}>
-                Level Income Locked
+                Levels 2–10 Income Locked
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                You need <strong className="text-orange-300">{2 - directCount} more direct referral{2 - directCount !== 1 ? "s" : ""}</strong> to unlock level income. Until then, income from your referrals' activations is sent to the admin pool.
+                Level 1 income is always paid to you. To unlock <strong className="text-orange-300">levels 2–4</strong> you need{" "}
+                <strong className="text-orange-300">{2 - directCount} more direct referral{2 - directCount !== 1 ? "s" : ""}</strong>. Until then, deeper-level income goes to the admin pool.
               </p>
               <button onClick={() => setLocation("/income")} className="mt-2 text-[10px] text-orange-400 hover:text-orange-300 flex items-center gap-1" data-testid="link-income-details">
-                See qualification requirements <ChevronRight className="h-3 w-3" />
+                See all qualification requirements <ChevronRight className="h-3 w-3" />
               </button>
             </div>
           </div>

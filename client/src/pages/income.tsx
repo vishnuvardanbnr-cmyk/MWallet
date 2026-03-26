@@ -12,7 +12,7 @@ interface IncomeProps {
 }
 
 const LEVEL_RATES: { level: number; pct: string; value: string; dirReq: number }[] = [
-  { level: 1,  pct: "20%",  value: "$26.00", dirReq: 2 },
+  { level: 1,  pct: "20%",  value: "$26.00", dirReq: 0 },
   { level: 2,  pct: "5%",   value: "$6.50",  dirReq: 2 },
   { level: 3,  pct: "2%",   value: "$2.60",  dirReq: 2 },
   { level: 4,  pct: "1%",   value: "$1.30",  dirReq: 2 },
@@ -203,19 +203,22 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
         <div className="divide-y divide-white/[0.04]">
           {LEVEL_RATES.map(({ level, pct, value, dirReq }) => {
             const qualified = directCount >= dirReq;
+            const noReq = dirReq === 0;
             return (
               <div key={level} className="flex items-center justify-between px-5 py-2.5" data-testid={`row-level-${level}`}>
                 <div className="flex items-center gap-3">
-                  <div className="w-7 h-7 rounded-lg bg-white/[0.04] flex items-center justify-center">
-                    <span className="text-[11px] font-bold text-muted-foreground">L{level}</span>
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${noReq ? "bg-emerald-500/10" : "bg-white/[0.04]"}`}>
+                    <span className={`text-[11px] font-bold ${noReq ? "text-emerald-400" : "text-muted-foreground"}`}>L{level}</span>
                   </div>
                   <div>
                     <p className="text-xs font-semibold">{pct} of gross MVT <span className="text-muted-foreground font-normal">≈ {value}</span></p>
-                    <p className="text-[10px] text-muted-foreground">{dirReq} direct{dirReq !== 1 ? "s" : ""} required</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      {noReq ? "No requirement — always paid to active sponsor" : `${dirReq} direct${dirReq !== 1 ? "s" : ""} required`}
+                    </p>
                   </div>
                 </div>
-                <Badge variant="outline" className={`text-[9px] ${qualified ? "border-emerald-500/30 text-emerald-400" : "border-muted-foreground/20 text-muted-foreground/50"}`}>
-                  {qualified ? "Qualified" : "Locked"}
+                <Badge variant="outline" className={`text-[9px] ${noReq || qualified ? "border-emerald-500/30 text-emerald-400" : "border-muted-foreground/20 text-muted-foreground/50"}`}>
+                  {noReq ? "Always Open" : qualified ? "Qualified" : "Locked"}
                 </Badge>
               </div>
             );
