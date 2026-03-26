@@ -2,6 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import { ArrowLeftRight, Loader2, ArrowDownToLine, ArrowUpRight, RefreshCw, Package, Coins, Wallet, ChevronLeft, ChevronRight, Users, GitBranch, Layers, Trophy, Star, Zap, TrendingDown, Repeat2, Ban } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { ethers } from "ethers";
 
 interface ContractTx {
   type: string;
@@ -9,6 +10,7 @@ interface ContractTx {
   detail: string;
   timestamp: number;
   isIncome: boolean;
+  currency: "USDT" | "MVT";
 }
 
 interface TransactionsProps {
@@ -86,6 +88,19 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
     return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + " " + date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
   };
 
+  // Format amount based on currency type with clean decimal places
+  const formatTxAmount = (amount: bigint, currency: "USDT" | "MVT") => {
+    const raw = parseFloat(ethers.formatUnits(amount, 18));
+    if (currency === "USDT") {
+      return { symbol: "$", value: raw.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), suffix: "" };
+    }
+    // MVT: show up to 4 decimals, trim trailing zeros
+    const formatted = raw >= 1
+      ? raw.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
+      : raw.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
+    return { symbol: "", value: formatted, suffix: " MVT" };
+  };
+
   const incomeTxs = allTxs.filter(tx => tx.isIncome);
   const withdrawalTxs = allTxs.filter(tx => tx.type === "Withdrawal" || tx.type === "BTC Pool Withdraw");
   const activityTxs = allTxs.filter(tx => !tx.isIncome && tx.type !== "Withdrawal" && tx.type !== "BTC Pool Withdraw");
@@ -160,15 +175,29 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
                   <div className="flex items-center gap-3">
                     {tx.type === "Level Income Missed" ? (
                       <div className="text-right">
-                        <span className="font-bold text-sm text-orange-400/70 line-through" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-tx-amount-${globalIndex}`}>
-                          ${formatAmount(tx.amount)}
-                        </span>
-                        <p className="text-[9px] text-orange-400/60">Missed — sent to admin</p>
+                        {(() => {
+                          const { symbol, value, suffix } = formatTxAmount(tx.amount, tx.currency ?? "MVT");
+                          return (
+                            <>
+                              <span className="font-bold text-sm text-orange-400/70 line-through" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-tx-amount-${globalIndex}`}>
+                                {symbol}{value}{suffix}
+                              </span>
+                              <p className="text-[9px] text-orange-400/60">Missed — sent to admin</p>
+                            </>
+                          );
+                        })()}
                       </div>
                     ) : (
-                      <span className={`font-bold text-sm ${tx.isIncome || tx.type === "Withdrawal" ? "text-emerald-400" : ""}`} style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-tx-amount-${globalIndex}`}>
-                        {tx.isIncome || tx.type === "Withdrawal" ? "+" : "-"}${formatAmount(tx.amount)}
-                      </span>
+                      (() => {
+                        const { symbol, value, suffix } = formatTxAmount(tx.amount, tx.currency ?? "USDT");
+                        const sign = tx.isIncome || tx.type === "Withdrawal" ? "+" : "-";
+                        const color = tx.isIncome || tx.type === "Withdrawal" ? "text-emerald-400" : tx.currency === "MVT" ? "text-amber-300" : "";
+                        return (
+                          <span className={`font-bold text-sm ${color}`} style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-tx-amount-${globalIndex}`}>
+                            {sign}{symbol}{value}{suffix}
+                          </span>
+                        );
+                      })()
                     )}
                   </div>
                 </div>

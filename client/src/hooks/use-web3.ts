@@ -363,38 +363,40 @@ export function useWeb3() {
       // 0=Activation 1=LevelIncome 2=LevelMissed 3=BinaryIncome 4=PowerLeg
       // 5=SellMVT 6=BtcCredited 7=UsdtWithdraw 8=BtcWithdraw 9=Rebirth
       // 10=BoardEntry 11=BoardReward
-      const TX_META: Record<number, { type: string; isIncome: boolean; detail: (r: any) => string }> = {
-        0:  { type: "Activation",          isIncome: false, detail: ()  => "$130 package activated" },
-        1:  { type: "Level Income",         isIncome: true,  detail: (r) => {
+      // currency: "MVT" for token rewards, "USDT" for dollar amounts
+      const TX_META: Record<number, { type: string; isIncome: boolean; currency: "USDT" | "MVT"; detail: (r: any) => string }> = {
+        0:  { type: "Activation",          isIncome: false, currency: "USDT", detail: ()  => "$130 package activated" },
+        1:  { type: "Level Income",         isIncome: true,  currency: "MVT",  detail: (r) => {
                const lvl = Number(r.level);
                const addr = r.addr as string;
                const short = addr && addr !== "0x0000000000000000000000000000000000000000" ? `${addr.slice(0,6)}...${addr.slice(-4)}` : "";
                return `Level ${lvl}${short ? ` from ${short}` : ""}`;
              }},
-        2:  { type: "Level Income Missed",  isIncome: false, detail: (r) => `Level ${Number(r.level)} — need more directs` },
-        3:  { type: "Binary Income",        isIncome: true,  detail: ()  => "Binary pairs matched" },
-        4:  { type: "Power Leg Income",     isIncome: true,  detail: ()  => "Power leg distribution" },
-        5:  { type: "Sell MVT",             isIncome: false, detail: ()  => "MVT sold for USDT" },
-        6:  { type: "BTC Pool Credited",    isIncome: true,  detail: ()  => "10% credited to BTC pool" },
-        7:  { type: "Withdrawal",           isIncome: false, detail: ()  => "USDT withdrawn to wallet" },
-        8:  { type: "BTC Pool Withdraw",    isIncome: false, detail: ()  => "BTC pool withdrawn" },
-        9:  { type: "Rebirth",              isIncome: false, detail: (r) => {
+        2:  { type: "Level Income Missed",  isIncome: false, currency: "MVT",  detail: (r) => `Level ${Number(r.level)} — need more directs` },
+        3:  { type: "Binary Income",        isIncome: true,  currency: "MVT",  detail: ()  => "Binary pairs matched" },
+        4:  { type: "Power Leg Income",     isIncome: true,  currency: "MVT",  detail: ()  => "Power leg distribution" },
+        5:  { type: "Sell MVT",             isIncome: false, currency: "USDT", detail: ()  => "MVT sold for USDT" },
+        6:  { type: "BTC Pool Credited",    isIncome: true,  currency: "USDT", detail: ()  => "10% credited to BTC pool" },
+        7:  { type: "Withdrawal",           isIncome: false, currency: "USDT", detail: ()  => "USDT withdrawn to wallet" },
+        8:  { type: "BTC Pool Withdraw",    isIncome: false, currency: "USDT", detail: ()  => "BTC pool withdrawn" },
+        9:  { type: "Rebirth",              isIncome: false, currency: "USDT", detail: (r) => {
                const addr = r.addr as string;
                return addr && addr !== "0x0000000000000000000000000000000000000000" ? `Sub-account: ${addr.slice(0,6)}...${addr.slice(-4)}` : "Sub-account reborn";
              }},
-        10: { type: "Board Entry",          isIncome: false, detail: (r) => `Entered Pool ${Number(r.level)}` },
-        11: { type: "Board Reward",         isIncome: true,  detail: (r) => `Pool ${Number(r.level)} completed` },
+        10: { type: "Board Entry",          isIncome: false, currency: "USDT", detail: (r) => `Entered Pool ${Number(r.level)}` },
+        11: { type: "Board Reward",         isIncome: true,  currency: "USDT", detail: (r) => `Pool ${Number(r.level)} completed` },
       };
 
       const transactions = (records as any[]).map((r) => {
         const txType = Number(r.txType);
-        const meta = TX_META[txType] ?? { type: "Unknown", isIncome: false, detail: () => "" };
+        const meta = TX_META[txType] ?? { type: "Unknown", isIncome: false, currency: "USDT" as const, detail: () => "" };
         return {
           type:      meta.type,
           amount:    BigInt(r.amount),
           detail:    meta.detail(r),
           timestamp: Number(r.ts),
           isIncome:  meta.isIncome,
+          currency:  meta.currency,
         };
       });
 
