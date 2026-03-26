@@ -28,6 +28,7 @@ import DeepPlacementPage from "@/pages/deep-placement";
 import StorePage from "@/pages/store";
 import SwapPage from "@/pages/swap";
 import PaidStakingPage from "@/pages/paid-staking";
+import RegisterForPage from "@/pages/register-for";
 import SellTokensPage from "@/pages/sell-tokens";
 
 function ScrollToTop() {
@@ -329,6 +330,15 @@ function App() {
                         convertStakeToLocked={web3.convertStakeToLocked}
                         getActiveStakesOnChain={web3.getActiveStakesOnChain}
                         approveToken={web3.approveToken}
+                        tokenDecimals={web3.tokenDecimals}
+                      />
+                    </Route>
+                    <Route path="/register-for">
+                      <RegisterForPage
+                        account={web3.account!}
+                        registerAndActivateFor={web3.registerAndActivateFor}
+                        approveToken={web3.approveToken}
+                        walletUsdtBalance={web3.userInfo?.usdtBalance}
                         tokenDecimals={web3.tokenDecimals}
                       />
                     </Route>

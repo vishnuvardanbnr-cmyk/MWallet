@@ -175,6 +175,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     event Reborn(address indexed mainAccount, address indexed subAccount, uint256 rebirthIndex);
     event ProfileUpdated(address indexed user);
     event MvaultTokenUpdated(address newToken);
+    event RegisteredAndActivatedFor(address indexed payer, address indexed newUser, address indexed sponsor, bool placeLeft);
     event AdminWithdraw(address indexed to, uint256 amount);
     event ReserveWithdraw(address indexed to, uint256 amount);
     event BoardEntered(address indexed user, uint256 boardLevel, uint256 usdtDeducted);
@@ -371,6 +372,52 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (!ok) revert TransferFailed();
 
         _doActivate(msg.sender);
+    }
+
+    /**
+     * @notice Register a NEW wallet address and immediately activate it.
+     *         Caller (msg.sender) becomes the direct sponsor of `newUser`.
+     *         Caller pays $130 USDT from their own wallet.
+     *         Caller must be registered and active. `newUser` must not yet be registered.
+     */
+    function registerAndActivateFor(
+        address newUser,
+        address binaryParent,
+        bool    placeLeft
+    ) external nonReentrant {
+        if (newUser == address(0))             revert("Invalid address");
+        if (newUser == msg.sender)             revert("Cannot register yourself");
+        if (!users[msg.sender].isRegistered)   revert NotRegistered();
+        if (!users[msg.sender].isActive)       revert("Caller not active");
+        if (users[newUser].isRegistered)       revert AlreadyRegistered();
+
+        // Determine binary parent (default = caller)
+        address parent = (binaryParent != address(0) && users[binaryParent].isRegistered)
+            ? binaryParent
+            : msg.sender;
+
+        if (placeLeft  && users[parent].leftChild  != address(0)) revert PositionTaken();
+        if (!placeLeft && users[parent].rightChild != address(0)) revert PositionTaken();
+
+        // Pull $130 USDT from caller
+        bool ok = usdtToken.transferFrom(msg.sender, address(this), PACKAGE_PRICE);
+        if (!ok) revert TransferFailed();
+
+        // Register newUser with caller as sponsor
+        _createUser(newUser, msg.sender, parent, placeLeft, address(0));
+
+        if (placeLeft) users[parent].leftChild  = newUser;
+        else           users[parent].rightChild = newUser;
+
+        users[msg.sender].directCount++;
+        _updateAncestorCounts(newUser);
+
+        emit Registered(newUser, msg.sender, parent, placeLeft);
+
+        // Activate newUser (USDT already in contract)
+        _doActivate(newUser);
+
+        emit RegisteredAndActivatedFor(msg.sender, newUser, msg.sender, placeLeft);
     }
 
     /**

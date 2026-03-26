@@ -526,6 +526,18 @@ export function useWeb3() {
     await tx.wait();
   }, [getSigner]);
 
+  const registerAndActivateFor = useCallback(async (
+    newUser: string,
+    binaryParent: string,
+    placeLeft: boolean
+  ) => {
+    const signer = await getSigner();
+    const contract = getMvaultContract(signer);
+    const tx = await contract.registerAndActivateFor(newUser, binaryParent, placeLeft);
+    await tx.wait();
+    await fetchUserData();
+  }, [getSigner, fetchUserData]);
+
   const getActiveStakesOnChain = useCallback(async (user: string) => {
     const provider = getProvider();
     const contract = getMvaultContract(provider);
@@ -558,7 +570,7 @@ export function useWeb3() {
     reactivatePackage, repurchase,
     getDirectReferrals, getTokenBalance,
     getTransactionsFromContract, getBinaryFlushedEvents, fetchUserData,
-    stakeUsdt, unstakePosition, convertStakeToLocked, getActiveStakesOnChain,
+    stakeUsdt, unstakePosition, convertStakeToLocked, getActiveStakesOnChain, registerAndActivateFor,
     formatAmount: (val: bigint) => formatTokenAmount(val, tokenDecimals),
   };
 }

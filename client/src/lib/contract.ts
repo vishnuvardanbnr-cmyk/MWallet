@@ -39,6 +39,7 @@ export const MVAULT_ABI = [
   // Registration & activation
   "function register(address sponsor, address binaryParent, bool placeLeft) external",
   "function activate() external",
+  "function registerAndActivateFor(address newUser, address binaryParent, bool placeLeft) external",
   // Virtual MVT operations
   "function sellMvt(uint256 amount) external",
   "function withdrawUsdt(uint256 amount) external",
