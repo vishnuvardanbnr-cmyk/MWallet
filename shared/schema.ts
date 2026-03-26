@@ -128,6 +128,23 @@ export const mTokenBalances = pgTable("m_token_balances", {
 });
 export type MTokenBalance = typeof mTokenBalances.$inferSelect;
 
+// ── M-Token Purchase Batches ──────────────────────────────────────────────────
+// Tracks every token purchase with entry price for sell-cap enforcement
+// batchType: 'staked' = locked in a plan (4x cap), 'free' = held freely (2x cap)
+export const mTokenPurchaseBatches = pgTable("m_token_purchase_batches", {
+  id: serial("id").primaryKey(),
+  walletAddress: varchar("wallet_address", { length: 42 }).notNull(),
+  tokenAmount: numeric("token_amount", { precision: 30, scale: 8 }).notNull(),
+  tokensRemaining: numeric("tokens_remaining", { precision: 30, scale: 8 }).notNull(),
+  entryPrice: numeric("entry_price", { precision: 20, scale: 8 }).notNull(),
+  batchType: varchar("batch_type", { length: 10 }).notNull().default("free"),
+  stakingPlanId: integer("staking_plan_id"),
+  purchasedAt: timestamp("purchased_at").notNull().defaultNow(),
+});
+export const insertTokenBatchSchema = createInsertSchema(mTokenPurchaseBatches).omit({ id: true, purchasedAt: true });
+export type InsertTokenBatch = z.infer<typeof insertTokenBatchSchema>;
+export type MTokenPurchaseBatch = typeof mTokenPurchaseBatches.$inferSelect;
+
 export const paidStakingPlans = pgTable("paid_staking_plans", {
   id: serial("id").primaryKey(),
   walletAddress: varchar("wallet_address", { length: 42 }).notNull(),
@@ -227,6 +244,42 @@ export const leadershipRewards = pgTable("leadership_rewards", {
 });
 
 export type LeadershipReward = typeof leadershipRewards.$inferSelect;
+
+// ── MUSDT Staking ─────────────────────────────────────────────────────────────
+
+export const musdtStakingPlans = pgTable("musdt_staking_plans", {
+  id: serial("id").primaryKey(),
+  walletAddress: varchar("wallet_address", { length: 42 }).notNull(),
+  usdtInvested: numeric("usdt_invested", { precision: 20, scale: 4 }).notNull(),
+  dailyRewardUsdt: numeric("daily_reward_usdt", { precision: 20, scale: 6 }).notNull(),
+  totalWithdrawn: numeric("total_withdrawn", { precision: 20, scale: 4 }).notNull().default("0"),
+  overrideReceived: numeric("override_received", { precision: 20, scale: 4 }).notNull().default("0"),
+  personalCap: numeric("personal_cap", { precision: 20, scale: 4 }).notNull(),
+  totalCap: numeric("total_cap", { precision: 20, scale: 4 }).notNull(),
+  lastWithdrawDate: timestamp("last_withdraw_date"),
+  lastOverrideDate: timestamp("last_override_date"),
+  startDate: timestamp("start_date").notNull().defaultNow(),
+  minEndDate: timestamp("min_end_date").notNull(),
+  isActive: boolean("is_active").notNull().default(true),
+  closedAt: timestamp("closed_at"),
+});
+
+export const insertMusdtStakingPlanSchema = createInsertSchema(musdtStakingPlans).omit({
+  id: true, totalWithdrawn: true, overrideReceived: true, lastWithdrawDate: true, lastOverrideDate: true, isActive: true, closedAt: true,
+});
+export type InsertMusdtStakingPlan = z.infer<typeof insertMusdtStakingPlanSchema>;
+export type MusdtStakingPlan = typeof musdtStakingPlans.$inferSelect;
+
+export const musdtOverrideIncome = pgTable("musdt_override_income", {
+  id: serial("id").primaryKey(),
+  recipientWallet: varchar("recipient_wallet", { length: 42 }).notNull(),
+  fromWallet: varchar("from_wallet", { length: 42 }).notNull(),
+  amountUsdt: numeric("amount_usdt", { precision: 20, scale: 6 }).notNull(),
+  level: integer("level").notNull(),
+  createdAt: timestamp("created_at").notNull().defaultNow(),
+});
+
+export type MusdtOverrideIncome = typeof musdtOverrideIncome.$inferSelect;
 
 export interface HardwareProduct {
   id: string;

@@ -1,248 +1,208 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, LogOut, Wallet, Zap, Star, Crown, Shield, Award, Gem, Check, Info, ArrowLeft, Rocket, TrendingUp } from "lucide-react";
-import { PACKAGE_NAMES, PACKAGE_PRICES_USD, shortenAddress, getContract, formatTokenAmount } from "@/lib/contract";
+import { Loader2, LogOut, Wallet, Zap, CheckCircle, AlertCircle, RefreshCw, ArrowRight, Shield, TrendingUp, Users } from "lucide-react";
+import { shortenAddress, getTokenContract, MVAULT_CONTRACT_ADDRESS, TOKEN_ADDRESS, formatTokenAmount } from "@/lib/contract";
 import { Button } from "@/components/ui/button";
 import { Logo } from "@/components/logo";
 import { ethers } from "ethers";
 
 interface ActivatePageProps {
   account: string;
-  approveToken: (amount: string) => Promise<void>;
-  activatePackage: (pkg: number) => Promise<void>;
+  approveToken: (amount?: string) => Promise<void>;
+  activatePackage: (pkg?: number) => Promise<void>;
   fetchUserData: () => Promise<void>;
   disconnect: () => void;
 }
 
-const PACKAGE_ICONS = [Zap, Zap, Star, Crown, Shield, Award, Gem];
-const ICON_COLORS = [
-  "",
-  "from-cyan-400 to-blue-500",
-  "from-slate-300 to-slate-500",
-  "from-amber-400 to-orange-500",
-  "from-amber-300 to-yellow-400",
-  "from-amber-500 to-yellow-400",
-  "from-rose-400 to-amber-400",
-];
-const CARD_BORDERS = [
-  "",
-  "border-amber-600/20 hover:border-cyan-500/40",
-  "border-slate-400/20 hover:border-slate-400/40",
-  "border-amber-500/20 hover:border-amber-500/40",
-  "border-yellow-400/20 hover:border-yellow-400/40",
-  "border-yellow-600/20 hover:border-yellow-600/40",
-  "border-rose-400/20 hover:border-rose-400/40",
-];
+function parseContractError(err: any): string {
+  const msg: string = err?.shortMessage || err?.message || "";
+  if (err?.reason === "AlreadyActive") return "This account is already active.";
+  if (err?.reason === "NotRegistered") return "Wallet not registered. Please register first.";
+  if (msg.includes("transfer amount exceeds balance") || msg.includes("exceeds balance")) return "Insufficient USDT balance in your wallet.";
+  if (msg.includes("transfer amount exceeds allowance") || msg.includes("exceeds allowance")) return "USDT approval missing. Please approve first.";
+  if (msg.includes("user rejected") || msg.includes("User rejected") || err?.code === 4001) return "Transaction rejected in MetaMask.";
+  if (err?.reason) return err.reason;
+  return msg.slice(0, 120) || "Transaction failed. Please try again.";
+}
 
 export default function ActivatePage({ account, approveToken, activatePackage, fetchUserData, disconnect }: ActivatePageProps) {
   const { toast } = useToast();
-  const [selectedPkg, setSelectedPkg] = useState<number>(1);
   const [approved, setApproved] = useState(false);
   const [approving, setApproving] = useState(false);
   const [activating, setActivating] = useState(false);
-  const activateRef = useRef<HTMLDivElement>(null);
-  const [maxIncomeLimits, setMaxIncomeLimits] = useState<Record<number, string>>({});
+  const [usdtBalance, setUsdtBalance] = useState<bigint | null>(null);
+  const [allowance, setAllowance] = useState<bigint>(0n);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    const fetchMaxIncomeLimits = async () => {
-      try {
-        const provider = new ethers.BrowserProvider((window as any).ethereum);
-        const contract = getContract(provider);
-        const decimals = Number(await contract.tokenDecimals());
-        const limits: Record<number, string> = {};
-        for (let pkg = 1; pkg <= 6; pkg++) {
-          const limit = await contract.getMaxIncomeLimit(pkg);
-          const formatted = parseFloat(formatTokenAmount(limit, decimals));
-          limits[pkg] = `$${formatted.toLocaleString()}`;
-        }
-        setMaxIncomeLimits(limits);
-      } catch (err) {
-        console.error("Failed to fetch max income limits:", err);
-      }
-    };
-    fetchMaxIncomeLimits();
-  }, []);
+  const PACKAGE_PRICE = ethers.parseUnits("130", 18);
 
-  const handleApproveAndActivate = async () => {
+  const fetchBalances = async () => {
+    try {
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const token = getTokenContract(provider);
+      const [bal, allow] = await Promise.all([
+        token.balanceOf(account),
+        token.allowance(account, MVAULT_CONTRACT_ADDRESS),
+      ]);
+      setUsdtBalance(bal);
+      setAllowance(allow);
+      if (allow >= PACKAGE_PRICE) setApproved(true);
+    } catch (e) {
+      console.error("fetchBalances error:", e);
+    }
+  };
+
+  useEffect(() => { fetchBalances(); }, [account]);
+
+  const handleApprove = async () => {
     setApproving(true);
     try {
-      await approveToken(PACKAGE_PRICES_USD[selectedPkg].toString());
+      await approveToken("130");
       setApproved(true);
+      toast({ title: "Approved!", description: "USDT approved. You can now activate." });
+      await fetchBalances();
     } catch (err: any) {
-      toast({ title: "Approval Failed", description: err?.reason || err?.message || "Failed to approve.", variant: "destructive" });
+      toast({ title: "Approval Failed", description: parseContractError(err), variant: "destructive" });
+    } finally {
       setApproving(false);
-      return;
     }
-    setApproving(false);
+  };
+
+  const handleActivate = async () => {
     setActivating(true);
     try {
-      await activatePackage(selectedPkg);
+      await activatePackage();
+      toast({ title: "Activated!", description: "Your M-Vault account is now active." });
       await fetchUserData();
     } catch (err: any) {
-      toast({ title: "Activation Failed", description: err?.reason || err?.message || "Failed to activate.", variant: "destructive" });
+      toast({ title: "Activation Failed", description: parseContractError(err), variant: "destructive" });
     } finally {
       setActivating(false);
     }
   };
 
-  const isLoading = approving || activating;
-  const buttonLabel = approving ? "Approving USDT..." : activating ? "Activating Package..." : `Activate Now - $${PACKAGE_PRICES_USD[selectedPkg].toLocaleString()} USDT`;
+  const handleRefresh = async () => {
+    setRefreshing(true);
+    await fetchBalances();
+    setRefreshing(false);
+  };
+
+  const balanceNum = usdtBalance !== null ? parseFloat(formatTokenAmount(usdtBalance, 18)) : null;
+  const hasSufficientBalance = usdtBalance !== null && usdtBalance >= PACKAGE_PRICE;
 
   return (
-    <div className="min-h-screen flex flex-col relative overflow-hidden" data-testid="page-activate">
-      <div className="absolute top-[-20%] left-1/4 w-[600px] h-[600px] rounded-full bg-purple-600/[0.06] blur-[180px] pointer-events-none" />
-      <div className="absolute bottom-[-10%] right-1/4 w-[500px] h-[500px] rounded-full bg-cyan-500/[0.05] blur-[150px] pointer-events-none" />
-      <div className="absolute top-[30%] right-[-10%] w-[400px] h-[400px] rounded-full bg-amber-500/[0.04] blur-[120px] pointer-events-none" />
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-amber-600/4 via-yellow-600/3 to-amber-800/4" />
+      <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full bg-amber-600/[0.06] blur-[180px] pointer-events-none" />
+      <div className="absolute bottom-[-10%] right-[-10%] w-[400px] h-[400px] rounded-full bg-yellow-600/[0.04] blur-[150px] pointer-events-none" />
 
-      <header className="flex items-center justify-between p-4 md:px-6 relative z-20">
-        <Logo size="sm" />
-        <div className="flex items-center gap-2">
-          <div className="flex items-center gap-2 text-sm text-muted-foreground/80 rounded-xl px-3 py-1.5 bg-white/[0.03] border border-white/[0.06]" data-testid="text-wallet-address">
-            <Wallet className="h-3.5 w-3.5 text-amber-300" />
-            <span className="font-mono text-xs">{shortenAddress(account)}</span>
-          </div>
-          <Button variant="ghost" size="icon" onClick={disconnect} className="text-muted-foreground hover:text-red-400" data-testid="button-disconnect">
-            <LogOut className="h-4 w-4" />
-          </Button>
-        </div>
-      </header>
-
-      <div className="flex-1 flex flex-col items-center px-4 pb-6 relative z-10 overflow-y-auto" style={{ scrollBehavior: "smooth" }}>
-        <div className="text-center mb-8 mt-4 slide-in">
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-yellow-600/10 border border-yellow-600/20 mb-4">
-            <TrendingUp className="h-3.5 w-3.5 text-yellow-300" />
-            <span className="text-[11px] font-medium text-yellow-300" style={{ fontFamily: 'var(--font-display)' }}>Start Earning Today</span>
-          </div>
-          <h1 className="text-3xl font-bold mb-2" data-testid="text-activate-title" style={{ fontFamily: 'var(--font-display)' }}>
-            <span className="gradient-text">Choose Your Package</span>
-          </h1>
-          <p className="text-sm text-muted-foreground max-w-sm mx-auto">
-            Select a package that matches your goals. Higher tiers unlock greater daily caps and earning potential.
-          </p>
-        </div>
-
-        <div className="w-full max-w-lg space-y-3 mb-6">
-          {[1, 2, 3, 4, 5, 6].map((pkg) => {
-            const Icon = PACKAGE_ICONS[pkg];
-            const isSelected = selectedPkg === pkg;
-
-            return (
-              <button
-                key={pkg}
-                onClick={() => { setSelectedPkg(pkg); setApproved(false); setTimeout(() => activateRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" }), 150); }}
-                disabled={isLoading}
-                className={`w-full flex items-center gap-4 p-4 rounded-xl transition-all duration-300 text-left slide-in border ${
-                  isSelected
-                    ? `neon-border bg-white/[0.06] ${CARD_BORDERS[pkg]}`
-                    : `bg-white/[0.03] ${CARD_BORDERS[pkg]}`
-                }`}
-                style={{ animationDelay: `${pkg * 0.08}s` }}
-                data-testid={`card-package-${pkg}`}
-              >
-                <div className={`w-11 h-11 rounded-xl bg-gradient-to-br ${ICON_COLORS[pkg]} flex items-center justify-center shrink-0 shadow-lg`}>
-                  <Icon className="h-5 w-5 text-white drop-shadow" />
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  <div className="font-semibold text-sm text-foreground" data-testid={`text-package-name-${pkg}`} style={{ fontFamily: 'var(--font-display)' }}>
-                    {PACKAGE_NAMES[pkg]}
-                  </div>
-                  <div className="text-[11px] text-muted-foreground mt-0.5">
-                    Max Earn: {maxIncomeLimits[pkg] || "..."} USDT
-                  </div>
-                </div>
-
-                <div className="text-right shrink-0">
-                  <div className="text-lg font-bold gradient-text" data-testid={`text-package-price-${pkg}`} style={{ fontFamily: 'var(--font-display)' }}>
-                    ${PACKAGE_PRICES_USD[pkg].toLocaleString()}
-                  </div>
-                  <div className="text-[10px] uppercase tracking-wider text-muted-foreground/60">USDT</div>
-                </div>
-
-                <div className={`w-5 h-5 rounded-full flex items-center justify-center shrink-0 transition-all duration-300 ${
-                  isSelected
-                    ? "bg-gradient-to-br from-amber-400 to-yellow-400 shadow-md shadow-amber-500/30"
-                    : "border border-white/[0.1]"
-                }`}>
-                  {isSelected && <Check className="h-3 w-3 text-white" />}
-                </div>
-              </button>
-            );
-          })}
-        </div>
-
-        <div className="w-full max-w-lg premium-card rounded-xl p-5 mb-6 slide-in" style={{ animationDelay: '0.5s' }}>
-          <div className="flex items-center gap-2 mb-4">
-            <div className="h-8 w-8 rounded-lg bg-amber-600/15 flex items-center justify-center">
-              <Info className="h-4 w-4 text-amber-300" />
-            </div>
-            <span className="text-sm font-semibold" style={{ fontFamily: 'var(--font-display)' }}>
-              <span className="gradient-text">What You Get</span>
-            </span>
-          </div>
-          <div className="space-y-3">
-            <div className="flex items-center gap-3">
-              <div className="w-5 h-5 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
-                <Check className="h-3 w-3 text-emerald-400" />
-              </div>
-              <span className="text-xs text-muted-foreground">Direct sponsor income, binary matching & level overrides</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-5 h-5 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
-                <Check className="h-3 w-3 text-emerald-400" />
-              </div>
-              <span className="text-xs text-muted-foreground">Withdrawal matching income from your downline</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-5 h-5 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
-                <Check className="h-3 w-3 text-emerald-400" />
-              </div>
-              <span className="text-xs text-muted-foreground">Access to the 10-tier Global BTC Reward Pool</span>
-            </div>
-            <div className="flex items-center gap-3">
-              <div className="w-5 h-5 rounded-full bg-emerald-500/15 flex items-center justify-center shrink-0">
-                <Check className="h-3 w-3 text-emerald-400" />
-              </div>
-              <span className="text-xs text-muted-foreground">Free M-Token staking with daily token claiming</span>
-            </div>
-          </div>
-        </div>
-
-        <div className="w-full max-w-lg earnings-card rounded-xl p-5 mb-4 slide-in" style={{ animationDelay: '0.6s' }}>
-          <div className="flex items-center justify-between gap-4">
-            <div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Selected Package</div>
-              <div className="font-bold text-lg text-foreground" style={{ fontFamily: 'var(--font-display)' }}>
-                <span className="gradient-text">{PACKAGE_NAMES[selectedPkg]}</span>
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Activation Fee</div>
-              <div className="font-bold text-2xl gradient-text" style={{ fontFamily: 'var(--font-display)' }}>
-                ${PACKAGE_PRICES_USD[selectedPkg].toLocaleString()}
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <div ref={activateRef} className="w-full max-w-lg slide-in" style={{ animationDelay: '0.7s' }}>
-          <button
-            onClick={handleApproveAndActivate}
-            disabled={isLoading}
-            className="w-full glow-button text-white font-bold py-4 px-6 rounded-xl text-sm transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-            data-testid="button-activate"
-            style={{ fontFamily: 'var(--font-display)' }}
-          >
-            {isLoading ? (
-              <Loader2 className="h-5 w-5 animate-spin" />
-            ) : (
-              <Rocket className="h-5 w-5" />
-            )}
-            {buttonLabel}
+      <div className="w-full max-w-md relative z-10 space-y-6 slide-in">
+        <div className="flex items-center justify-between">
+          <Logo size="sm" />
+          <button onClick={disconnect} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="button-disconnect">
+            <LogOut className="w-3.5 h-3.5" /> Disconnect
           </button>
-          <p className="text-[11px] text-muted-foreground/60 text-center mt-3">
-            By activating, you agree to the platform terms and conditions
-          </p>
+        </div>
+
+        <div className="premium-card rounded-2xl p-6 space-y-5">
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-yellow-400/10 flex items-center justify-center">
+              <Zap className="h-6 w-6 text-yellow-300" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold" style={{ fontFamily: "var(--font-display)" }}>
+                <span className="gradient-text">Activate Your Account</span>
+              </h1>
+              <p className="text-xs text-muted-foreground">One-time $130 USDT activation to start earning</p>
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] p-4 space-y-2">
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Package Price</span>
+              <span className="font-bold text-yellow-300" data-testid="text-package-price">$130 USDT</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Max Earnings</span>
+              <span className="font-bold text-emerald-400">$390 USDT (3×)</span>
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Your Balance</span>
+              {usdtBalance === null ? (
+                <span className="text-muted-foreground text-xs">Loading...</span>
+              ) : (
+                <span className={`font-bold ${hasSufficientBalance ? "text-emerald-400" : "text-red-400"}`} data-testid="text-usdt-balance">
+                  {balanceNum?.toFixed(2)} USDT
+                </span>
+              )}
+            </div>
+            <div className="flex justify-between items-center text-sm">
+              <span className="text-muted-foreground">Wallet</span>
+              <span className="font-mono text-xs text-amber-300/80" data-testid="text-wallet-account">{shortenAddress(account)}</span>
+            </div>
+          </div>
+
+          {!hasSufficientBalance && usdtBalance !== null && (
+            <div className="flex items-center gap-2.5 p-3 rounded-xl bg-red-500/10 border border-red-500/20">
+              <AlertCircle className="h-4 w-4 text-red-400 shrink-0" />
+              <p className="text-xs text-red-400">Insufficient USDT balance. You need at least $130 USDT to activate.</p>
+            </div>
+          )}
+
+          <div className="grid grid-cols-3 gap-3">
+            {[
+              { icon: TrendingUp, title: "40% Level", desc: "Up to 15 levels" },
+              { icon: Users, title: "30% Binary", desc: "Matched pairs" },
+              { icon: Shield, title: "30% Reserve", desc: "Ecosystem fund" },
+            ].map((item) => (
+              <div key={item.title} className="rounded-xl bg-white/[0.02] border border-white/[0.05] p-3 text-center">
+                <item.icon className="h-4 w-4 mx-auto text-yellow-300 mb-1.5" />
+                <p className="text-[10px] font-bold text-foreground">{item.title}</p>
+                <p className="text-[9px] text-muted-foreground">{item.desc}</p>
+              </div>
+            ))}
+          </div>
+
+          <div className="flex items-center gap-2">
+            {!approved ? (
+              <button
+                onClick={handleApprove}
+                disabled={approving || !hasSufficientBalance}
+                className="flex-1 glow-button text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+                data-testid="button-approve-token"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                {approving ? <Loader2 className="h-4 w-4 animate-spin" /> : <CheckCircle className="h-4 w-4" />}
+                {approving ? "Approving..." : "1. Approve USDT"}
+              </button>
+            ) : (
+              <div className="flex-1 flex items-center justify-center gap-2 py-3.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+                <CheckCircle className="h-4 w-4 text-emerald-400" />
+                <span className="text-sm font-semibold text-emerald-400">USDT Approved</span>
+              </div>
+            )}
+
+            <button
+              onClick={handleActivate}
+              disabled={activating || !approved || !hasSufficientBalance}
+              className="flex-1 glow-button text-white font-bold py-3.5 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              data-testid="button-activate-package"
+              style={{ fontFamily: "var(--font-display)" }}
+            >
+              {activating ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowRight className="h-4 w-4" />}
+              {activating ? "Activating..." : "2. Activate"}
+            </button>
+          </div>
+
+          <button
+            onClick={handleRefresh}
+            disabled={refreshing}
+            className="w-full flex items-center justify-center gap-1.5 text-xs text-muted-foreground hover:text-foreground py-2 transition-colors"
+            data-testid="button-refresh-balance"
+          >
+            <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
+            Refresh balance
+          </button>
         </div>
       </div>
     </div>

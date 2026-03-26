@@ -18,10 +18,81 @@ export const BSC_TESTNET = {
 
 const isMainnet = import.meta.env.VITE_BSC_NETWORK === "mainnet";
 export const NETWORK = isMainnet ? BSC_MAINNET : BSC_TESTNET;
-export const CONTRACT_ADDRESS = import.meta.env.VITE_CONTRACT_ADDRESS || "0x284dcb5C8F2407c135713a093A4fB42Ef2b1bCBF";
-export const TOKEN_ADDRESS = import.meta.env.VITE_PAYMENT_TOKEN_ADDRESS || "0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3";
+
+// ── New MvaultContract + MvaultToken ──────────────────────────────────────────
+export const MVAULT_CONTRACT_ADDRESS =
+  import.meta.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x0000000000000000000000000000000000000000";
+export const MVT_TOKEN_ADDRESS =
+  import.meta.env.VITE_MVT_TOKEN_ADDRESS || "0x0000000000000000000000000000000000000000";
+// USDT token address (same for both old and new contracts)
+export const TOKEN_ADDRESS =
+  import.meta.env.VITE_PAYMENT_TOKEN_ADDRESS || "0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3";
+
+// ── Legacy (old) contract — kept for board/swap pages ────────────────────────
+export const CONTRACT_ADDRESS =
+  import.meta.env.VITE_CONTRACT_ADDRESS || "0x6Ff2b61d1882e7a122b09a109F78F5b2E5ef174e";
+
 export const DEPOSIT_ADMIN_WALLET = "0x127323b3053a901620f8d461c88fc6a7d9c7de2e";
 
+// ── MvaultContract ABI ────────────────────────────────────────────────────────
+export const MVAULT_ABI = [
+  // Registration & activation
+  "function register(address sponsor, address binaryParent, bool placeLeft) external",
+  "function activate() external",
+  // Virtual MVT operations
+  "function sellMvt(uint256 amount) external",
+  "function withdrawUsdt(uint256 amount) external",
+  "function withdrawBtcPool(uint256 amount) external",
+  // Rebirth
+  "function rebirth(address subAccount, bool placeLeft) external",
+  // Profile
+  "function setProfile(string _displayName, string _email, string _phone, string _country) external",
+  "function getProfile(address _user) view returns (string displayName, string email, string phone, string country, bool profileSet)",
+  // Views
+  "function getUserInfo(address u) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubUsers, uint256 rightSubUsers, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 btcPoolBalance, uint256 powerLegPoints, uint256 matchedPairs, address mainAccount, uint256 rebirthCount, uint256 joinedAt)",
+  "function getBtcPoolInfo(address u) view returns (uint256 btcPoolBalance, uint256 totalBtcEarned)",
+  "function canRebirth(address user) view returns (bool eligible, uint256 poolBalance)",
+  "function getCurrentBinaryPairs(address u) view returns (uint256 currentPairs, uint256 newPairs)",
+  "function getMvtPrice() view returns (uint256 buyPrice, uint256 sellPrice)",
+  "function totalUsers() view returns (uint256)",
+  "function getAllUsersCount() view returns (uint256)",
+  "function getPoolBalances() view returns (uint256 binary, uint256 reserve, uint256 admin)",
+  "function getMvtContractBalance() view returns (uint256)",
+  "function usdtToken() view returns (address)",
+  "function mvaultToken() view returns (address)",
+  "function PACKAGE_PRICE() view returns (uint256)",
+  "function INCOME_LIMIT() view returns (uint256)",
+  // Admin distribution
+  "function distributeBinaryIncome(uint256 offset, uint256 limit) external",
+  "function distributePowerLeg(uint256 offset, uint256 limit) external",
+  // Events
+  "event Registered(address indexed user, address indexed sponsor, address indexed binaryParent, bool placeLeft)",
+  "event Activated(address indexed user, uint256 mvtMinted, uint256 grossMvt, uint256 levelAmt, uint256 binaryAmt, uint256 reserveAmt)",
+  "event LevelIncomePaid(address indexed to, address indexed from, uint8 level, uint256 amount)",
+  "event MvtSold(address indexed user, uint256 mvtAmount, uint256 usdtNet, uint256 usdtToBtcPool, uint256 usdtToIncome, uint256 usdtToRebirth)",
+  "event BtcPoolCredited(address indexed user, uint256 amount)",
+  "event BtcPoolWithdrawn(address indexed user, uint256 amount)",
+  "event UsdtWithdrawn(address indexed user, uint256 amount)",
+  "event Reborn(address indexed mainAccount, address indexed subAccount, uint256 rebirthIndex)",
+  "event BinaryIncomeDistributed(uint256 totalPool, uint256 binary70, uint256 powerLeg30, uint256 totalPairs)",
+];
+
+// ── MvaultToken ABI ───────────────────────────────────────────────────────────
+export const MVT_ABI = [
+  "function getBuyPrice() view returns (uint256)",
+  "function getSellPrice() view returns (uint256)",
+  "function totalSupply() view returns (uint256)",
+  "function totalLiquidity() view returns (uint256)",
+  "function balanceOf(address) view returns (uint256)",
+  "function decimals() view returns (uint8)",
+  "function symbol() view returns (string)",
+  "function name() view returns (string)",
+  "event TokensMinted(address indexed to, uint256 usdtAmount, uint256 mvtAmount)",
+  "event TokensBurned(address indexed from, uint256 mvtAmount, uint256 usdtAmount)",
+  "event PriceUpdated(uint256 newBuyPrice, uint256 newSellPrice)",
+];
+
+// ── Legacy ABI (for board, swap pages) ───────────────────────────────────────
 export const MLM_ABI = [
   "function register(uint256 _sponsorId, uint256 _binaryParentId, bool _placeLeft) external",
   "function activatePackage(uint8 _pkg) external",
@@ -37,44 +108,23 @@ export const MLM_ABI = [
   "function getUserInfo(address _user) view returns (uint256 userId, address sponsor, address binaryParent, address leftChild, address rightChild, uint8 placementSide, uint8 userPackage, uint8 status, uint256 walletBalance, uint256 tempWalletBalance, uint256 totalEarnings, uint256 directReferralCount, uint256 joinedAt)",
   "function getIncomeInfo(address _user) view returns (uint256 totalDirectIncome, uint256 totalBinaryIncome, uint256 totalMatchingOverrideIncome, uint256 totalWithdrawalMatchIncome, uint256 totalEarnings, uint256 totalWithdrawn, uint256 maxIncome)",
   "function getBinaryInfo(address _user) view returns (uint256 leftBusiness, uint256 rightBusiness, uint256 carryLeft, uint256 carryRight, uint256 todayBinaryIncome, uint256 dailyCap, uint256 claimableBinaryIncome, uint256 binaryDepth)",
-  "function getBinarySlabInfo(address _user) view returns (uint256[4] carryLeftSlabs, uint256[4] carryRightSlabs, uint256[4] matchableSlabs, uint256[4] potentialIncomeSlabs, uint256[4] rates)",
-  "function claimBinaryIncome() external",
-  "function autoDistributeBinaryIncome(uint256 _batchNumber) external",
-  "function binaryBatchSize() view returns (uint256)",
-  "function getTotalBatches() view returns (uint256)",
-  "function setBinaryBatchSize(uint256 _size) external",
-  "function setBinaryProcessor(address _processor, bool _status) external",
   "function getProfile(address _user) view returns (string displayName, string email, string phone, string country, bool profileSet)",
   "function getBtcPoolBalance(address _user) view returns (uint256)",
-  "function getBoardPrice(uint256 _boardLevel) view returns (uint256)",
-  "function getBoardQueueLength(uint256 _boardLevel) view returns (uint256)",
-  "function getBoardMatrixInfo(uint256 _boardLevel, uint256 _index) view returns (address owner, uint256 filledCount, bool completed)",
-  "function getBoardCurrentIndex(uint256 _boardLevel) view returns (uint256)",
   "function getDirectReferralsPaginated(address _user, uint256 _offset, uint256 _limit) view returns (address[] referrals, uint256 total)",
   "function getTotalUsers() view returns (uint256)",
-  "function getContractBalance() view returns (uint256)",
   "function getUserIdByAddress(address _user) view returns (uint256)",
   "function getAddressByUserId(uint256 _userId) view returns (address)",
-  "function packagePrices(uint256) view returns (uint256)",
-  "function getMaxIncomeLimit(uint8 _pkg) view returns (uint256)",
-  "function getPackagePrice(uint8 _pkg) view returns (uint256)",
-  "function getUserTransactionCount(address _user) view returns (uint256)",
   "function getUserTransactionsPaginated(address _user, uint256 _offset, uint256 _limit) view returns (uint8[] txTypes, uint256[] amounts, uint256[] timestamps, address[] relatedUsers, uint8[] extraDatas, uint256 total)",
-  "event PackageActivated(address indexed user, uint8 pkg, uint256 amountPaid)",
-  "event PackageUpgraded(address indexed user, uint8 oldPkg, uint8 newPkg, uint256 amountPaid)",
-  "event Withdrawal(address indexed user, uint256 netAmount, uint256 fee)",
-  "event Reactivated(address indexed user, uint8 pkg, uint256 amountPaid)",
-  "event DirectIncomeDistributed(address indexed recipient, address indexed from, uint256 amount)",
-  "event BinaryIncomeDistributed(address indexed recipient, uint256 income, uint256 matchedVolume)",
-  "event MatchingOverrideDistributed(address indexed recipient, address indexed from, uint256 amount, uint256 level)",
-  "event BinaryIncomeClaimed(address indexed user, uint256 amount)",
-  "event WithdrawalMatchDistributed(address indexed recipient, address indexed from, uint256 amount, uint256 level)",
+  "function claimBinaryIncome() external",
+  "event BinaryFlushed(address indexed user, uint256 flushedAmount)",
 ];
 
-export const BOARD_HANDLER_ADDRESS = import.meta.env.VITE_BOARD_HANDLER_ADDRESS || "0x0C63B585586E263DC801554d40A72F84976FdCfc";
-
-export const PANCAKE_ROUTER_ADDRESS = import.meta.env.VITE_PANCAKE_ROUTER_ADDRESS || "0xD99D1c33F9fC3444f8101754aBC46c52416550D1";
-
+export const BOARD_HANDLER_ADDRESS =
+  import.meta.env.VITE_BOARD_HANDLER_ADDRESS || "0xAFDf34f6e2FBa1D1E9b1E4e180821b463c3cB72D";
+export const DEPOSIT_VAULT_ADDRESS =
+  import.meta.env.VITE_DEPOSIT_VAULT_ADDRESS || "0xD307FB39d7d42B59AC46e28D71ef72019E9D5e38";
+export const PANCAKE_ROUTER_ADDRESS =
+  import.meta.env.VITE_PANCAKE_ROUTER_ADDRESS || "0xD99D1c33F9fC3444f8101754aBC46c52416550D1";
 export const BTCB_TOKEN_ADDRESS = import.meta.env.VITE_BTCB_TOKEN_ADDRESS || "";
 
 export const BOARD_HANDLER_ABI = [
@@ -116,30 +166,31 @@ export const ERC20_ABI = [
   "function symbol() view returns (string)",
 ];
 
-export const PACKAGE_NAMES = ["None", "Starter", "Basic", "Pro", "Elite", "Stockiest", "Super Stockiest"];
-export const PACKAGE_PRICES_USD = [0, 50, 200, 600, 1200, 2400, 4800];
-export const STATUS_NAMES = ["Inactive", "Active", "Grace Period"];
+// ── Contract factory helpers ──────────────────────────────────────────────────
+export function getMvaultContract(signerOrProvider: ethers.Signer | ethers.Provider) {
+  return new ethers.Contract(MVAULT_CONTRACT_ADDRESS, MVAULT_ABI, signerOrProvider);
+}
 
-export const BOARD_PRICES_USD = [0, 50, 180, 648, 2333, 8398, 30233, 108839, 391821, 1410555, 5077998];
-
-export const TX_TYPE_NAMES = [
-  "Activation", "Upgrade", "Reactivation", "Withdrawal",
-  "Direct Sponsor", "Binary Matching", "Matching Override", "Withdrawal Match",
-  "Board Entry", "Board Reward", "BTC Pool Deduction", "Withdrawal Match Deduction"
-];
-
-export const TX_TYPE_INCOME = [false, false, false, false, true, true, true, true, false, true, false, false];
-
-export function getContract(signerOrProvider: ethers.Signer | ethers.Provider) {
-  return new ethers.Contract(CONTRACT_ADDRESS, MLM_ABI, signerOrProvider);
+export function getMvtTokenContract(signerOrProvider: ethers.Signer | ethers.Provider) {
+  return new ethers.Contract(MVT_TOKEN_ADDRESS, MVT_ABI, signerOrProvider);
 }
 
 export function getTokenContract(signerOrProvider: ethers.Signer | ethers.Provider) {
   return new ethers.Contract(TOKEN_ADDRESS, ERC20_ABI, signerOrProvider);
 }
 
+export function getContract(signerOrProvider: ethers.Signer | ethers.Provider) {
+  return new ethers.Contract(CONTRACT_ADDRESS, MLM_ABI, signerOrProvider);
+}
+
+export const getMlmContract = getContract;
+
 export function getBoardHandlerContract(signerOrProvider: ethers.Signer | ethers.Provider) {
   return new ethers.Contract(BOARD_HANDLER_ADDRESS, BOARD_HANDLER_ABI, signerOrProvider);
+}
+
+export function getDepositVaultContract(signerOrProvider: ethers.Signer | ethers.Provider) {
+  return new ethers.Contract(DEPOSIT_VAULT_ADDRESS, BOARD_HANDLER_ABI, signerOrProvider);
 }
 
 export function getPancakeRouterContract(signerOrProvider: ethers.Signer | ethers.Provider) {
@@ -158,3 +209,18 @@ export function shortenAddress(addr: string): string {
   if (!addr) return "";
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
+
+export const PACKAGE_NAMES = ["None", "Starter", "Basic", "Pro", "Elite", "Stockiest", "Super Stockiest"];
+export const PACKAGE_PRICES_USD = [0, 50, 200, 600, 1200, 2400, 4800];
+export const STATUS_NAMES = ["Inactive", "Active", "Grace Period"];
+export const BOARD_PRICES_USD = [0, 50, 180, 648, 2333, 8398, 30233, 108839, 391821, 1410555, 5077998];
+
+export const TX_TYPE_NAMES = [
+  "Activation", "Level Income", "Binary Income", "Sell MVT",
+  "Withdraw USDT", "Withdraw BTC Pool", "Rebirth",
+];
+export const TX_TYPE_INCOME = [false, true, true, false, false, false, false];
+
+// Income limit = $390 USDT (3× package price)
+export const INCOME_LIMIT_USDT = 390;
+export const PACKAGE_PRICE_USDT = 130;

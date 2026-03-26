@@ -33,7 +33,7 @@ export default function DeepPlacementPage({ userInfo, account }: DeepPlacementPa
   const [placement, setPlacement] = useState<"left" | "right">("left");
   const [link, setLink] = useState("");
   const [showLink, setShowLink] = useState(false);
-  const [linkTimer, setLinkTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
+  const [linkTimer] = useState<ReturnType<typeof setTimeout> | null>(null);
 
   const loadTree = useCallback(async (rootAddr: string, _side: string) => {
     if (!rootAddr || rootAddr === ZERO_ADDRESS) {
@@ -94,16 +94,11 @@ export default function DeepPlacementPage({ userInfo, account }: DeepPlacementPa
 
   const genLink = () => {
     if (!selected) return;
-    const newLink = `${window.location.origin}?ref=${userInfo.userId}&parent=${selected.userId}&side=${placement}`;
+    const newLink = `${window.location.origin}?ref=${account}&parent=${selected.userId}&side=${placement}`;
     setLink(newLink);
     setShowLink(true);
     navigator.clipboard.writeText(newLink);
     if (linkTimer) clearTimeout(linkTimer);
-    const timer = setTimeout(() => {
-      setShowLink(false);
-      setLink("");
-    }, 15000);
-    setLinkTimer(timer);
   };
 
   return (
@@ -139,47 +134,58 @@ export default function DeepPlacementPage({ userInfo, account }: DeepPlacementPa
             <p className="text-xs text-muted-foreground/60 mt-1">This side of your tree is empty — new members can be placed directly here</p>
           </div>
         ) : (
-          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+          <div className="space-y-2 max-h-[420px] overflow-y-auto pr-0.5">
             {tree.map((node) => {
               const isSelected = selected?.address === node.address;
               const hasSlots = node.hasLeftSlot || node.hasRightSlot;
+              const initials = node.displayName.slice(0, 2).toUpperCase();
+              const pkgName = PKG_NAMES[node.userPackage] || "Unknown";
               return (
                 <button
                   key={node.address}
                   onClick={() => hasSlots ? setSelected(node) : null}
                   disabled={!hasSlots}
-                  className={`w-full text-left p-3 rounded-xl border transition-all ${
+                  className={`w-full text-left rounded-xl border transition-all ${
                     isSelected
-                      ? "border-purple-500/50 bg-yellow-600/10"
+                      ? "border-yellow-500/40 bg-yellow-600/10"
                       : hasSlots
-                        ? "border-white/[0.06] bg-white/[0.02] hover:border-yellow-600/20"
-                        : "border-white/[0.04] bg-white/[0.01] opacity-50"
+                        ? "border-white/[0.06] bg-white/[0.02] hover:border-yellow-600/30 hover:bg-white/[0.03]"
+                        : "border-white/[0.04] bg-white/[0.01] opacity-40 cursor-not-allowed"
                   }`}
                   data-testid={`button-dp-node-${node.userId}`}
                 >
-                  <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-2">
-                      <div className={`h-8 w-8 rounded-lg flex items-center justify-center text-xs font-bold ${isSelected ? "bg-yellow-600/20 text-yellow-300" : "bg-white/[0.05] text-muted-foreground"}`}>
-                        {node.userId}
+                  <div className="flex items-center gap-3 p-3">
+                    {/* Avatar */}
+                    <div className={`h-10 w-10 shrink-0 rounded-full flex items-center justify-center text-sm font-bold ${
+                      isSelected ? "bg-yellow-500/20 text-yellow-300 ring-2 ring-yellow-500/40" : "bg-white/[0.07] text-muted-foreground"
+                    }`}>
+                      {initials}
+                    </div>
+
+                    {/* Info */}
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-semibold truncate">{node.displayName}</p>
+                        {isSelected && <CheckCircle className="h-3.5 w-3.5 shrink-0 text-yellow-400" />}
                       </div>
-                      <div>
-                        <p className="text-sm font-medium">{node.displayName}</p>
-                        <p className="text-[10px] text-muted-foreground">
-                          {PKG_NAMES[node.userPackage] || "Unknown"} • ID: {node.userId}
-                        </p>
+                      <div className="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                        <span className="text-[10px] text-muted-foreground/70">ID #{node.userId}</span>
+                        <span className="text-[10px] text-muted-foreground/40">•</span>
+                        <span className={`text-[10px] font-medium ${isSelected ? "text-yellow-400/80" : "text-muted-foreground/70"}`}>{pkgName}</span>
                       </div>
                     </div>
-                    <div className="flex items-center gap-1.5">
+
+                    {/* Slot badges */}
+                    <div className="shrink-0 flex flex-col gap-1 items-end">
                       {node.hasLeftSlot && (
-                        <Badge variant="outline" className="text-[9px] border-emerald-500/20 text-emerald-400">L Open</Badge>
+                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-md bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">L Open</span>
                       )}
                       {node.hasRightSlot && (
-                        <Badge variant="outline" className="text-[9px] border-amber-600/20 text-amber-300">R Open</Badge>
+                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-md bg-amber-500/10 text-amber-400 border border-amber-500/20">R Open</span>
                       )}
                       {!hasSlots && (
-                        <Badge variant="outline" className="text-[9px] border-muted-foreground/20 text-muted-foreground">Full</Badge>
+                        <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-md bg-white/[0.04] text-muted-foreground/50 border border-white/[0.06]">Full</span>
                       )}
-                      {isSelected && <CheckCircle className="h-4 w-4 text-yellow-300" />}
                     </div>
                   </div>
                 </button>
@@ -239,7 +245,7 @@ export default function DeepPlacementPage({ userInfo, account }: DeepPlacementPa
                   <Copy className="h-3.5 w-3.5 text-emerald-400" />
                 </button>
               </div>
-              <p className="text-[10px] text-muted-foreground/60 mt-2">This link expires in 15 seconds</p>
+              <p className="text-[10px] text-muted-foreground/60 mt-2">Share this link to place the new member at the selected position.</p>
             </div>
           )}
         </div>

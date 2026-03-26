@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback } from "react";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, LogOut, UserPlus, Wallet, CheckCircle2, ScrollText, X } from "lucide-react";
-import { shortenAddress, CONTRACT_ADDRESS, MLM_ABI } from "@/lib/contract";
+import { Loader2, LogOut, UserPlus, Wallet, CheckCircle2, ScrollText, X, AlertCircle } from "lucide-react";
+import { shortenAddress, getMvaultContract, MVAULT_CONTRACT_ADDRESS } from "@/lib/contract";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { ethers } from "ethers";
@@ -83,16 +83,20 @@ By clicking "I Agree" or logging in, you confirm that:
 
 interface RegisterPageProps {
   account: string;
-  register: (sponsorId: string, binaryParentId: string, placeLeft: boolean) => Promise<void>;
+  register: (sponsor: string, binaryParent: string, placeLeft: boolean) => Promise<void>;
   totalUsers: number;
   disconnect: () => void;
 }
 
 interface SponsorInfo {
   address: string;
-  displayName: string;
+  isActive: boolean;
   valid: boolean;
   side: "L" | "R";
+}
+
+function isValidAddress(val: string) {
+  return ethers.isAddress(val);
 }
 
 export default function RegisterPage({ account, register, totalUsers, disconnect }: RegisterPageProps) {
@@ -104,252 +108,247 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
   const urlParams = new URLSearchParams(window.location.search);
   const refParam = urlParams.get("ref") || "";
   const sideParam = urlParams.get("side") || "left";
+  const parentParam = urlParams.get("parent") || "";
 
   const isFirstUser = totalUsers === 0;
 
-  const [sponsorId, setSponsorId] = useState(refParam);
+  const [sponsorAddress, setSponsorAddress] = useState(refParam);
+  const [binaryParentAddress, setBinaryParentAddress] = useState(parentParam || refParam);
   const placeLeft = sideParam === "left" || sideParam === "1";
+  const [selectedSide, setSelectedSide] = useState<boolean>(placeLeft);
+
   const [sponsorInfo, setSponsorInfo] = useState<SponsorInfo | null>(null);
   const [validating, setValidating] = useState(false);
 
-  const validateSponsor = useCallback(async (id: string) => {
-    if (!id.trim() || isNaN(Number(id))) {
+  const validateSponsor = useCallback(async (addr: string) => {
+    if (!isValidAddress(addr)) {
       setSponsorInfo(null);
       return;
     }
     setValidating(true);
     try {
       const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const contract = new ethers.Contract(CONTRACT_ADDRESS, MLM_ABI, provider);
-      const addr = await contract.userIdToAddress(id);
-      if (addr === ZERO_ADDRESS) {
+      const contract = getMvaultContract(provider);
+      const info = await contract.getUserInfo(addr);
+      const isReg = info[0];
+      const isAct = info[1];
+      if (!isReg) {
         setSponsorInfo(null);
-        setValidating(false);
-        return;
+      } else {
+        setSponsorInfo({ address: addr, isActive: isAct, valid: true, side: selectedSide ? "L" : "R" });
       }
-      const userInfo = await contract.getUserInfo(addr);
-      const profile = await contract.getProfile(addr);
-      const displayName = profile[4] && profile[0] ? profile[0] : shortenAddress(addr);
-      setSponsorInfo({
-        address: addr,
-        displayName,
-        valid: true,
-        side: placeLeft ? "L" : "R",
-      });
     } catch {
       setSponsorInfo(null);
     }
     setValidating(false);
-  }, [placeLeft]);
+  }, [selectedSide]);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (sponsorId.trim()) validateSponsor(sponsorId);
+      if (sponsorAddress.trim()) validateSponsor(sponsorAddress.trim());
       else setSponsorInfo(null);
-    }, 500);
+    }, 600);
     return () => clearTimeout(timer);
-  }, [sponsorId, validateSponsor]);
+  }, [sponsorAddress, validateSponsor]);
 
   useEffect(() => {
     if (sponsorInfo) {
-      setSponsorInfo(prev => prev ? { ...prev, side: placeLeft ? "L" : "R" } : null);
+      setSponsorInfo(prev => prev ? { ...prev, side: selectedSide ? "L" : "R" } : null);
     }
-  }, [placeLeft]);
+  }, [selectedSide]);
 
-  const handleSubmit = async () => {
+  const handleRegister = async () => {
     if (!agreedToTerms) {
-      toast({ title: "Terms Required", description: "Please agree to the Terms & Conditions before registering.", variant: "destructive" });
+      toast({ title: "Please agree to Terms & Conditions", variant: "destructive" });
       return;
     }
+
+    const sponsor = isFirstUser ? ZERO_ADDRESS : sponsorAddress.trim();
+    const binaryParent = binaryParentAddress.trim() || sponsor;
+
     if (!isFirstUser) {
-      if (!sponsorId.trim()) {
-        toast({ title: "Validation Error", description: "Sponsor ID is required.", variant: "destructive" });
-        return;
-      }
-      if (isNaN(Number(sponsorId))) {
-        toast({ title: "Validation Error", description: "Sponsor ID must be a numeric value.", variant: "destructive" });
+      if (!isValidAddress(sponsor)) {
+        toast({ title: "Invalid sponsor address", description: "Please enter a valid wallet address.", variant: "destructive" });
         return;
       }
       if (!sponsorInfo?.valid) {
-        toast({ title: "Validation Error", description: "Invalid Sponsor ID. Please check and try again.", variant: "destructive" });
+        toast({ title: "Sponsor not found", description: "The sponsor address is not registered.", variant: "destructive" });
         return;
       }
     }
 
     setLoading(true);
     try {
-      await register(isFirstUser ? "0" : sponsorId, isFirstUser ? "0" : sponsorId, placeLeft);
-      toast({ title: "Registration Successful", description: "Welcome to M-Vault!" });
+      await register(sponsor, binaryParent || sponsor, selectedSide);
+      toast({ title: "Registered!", description: "You are now registered. Please activate your account." });
     } catch (err: any) {
-      toast({ title: "Registration Failed", description: err?.reason || err?.message || "Transaction failed.", variant: "destructive" });
+      const msg = err?.reason || err?.shortMessage || err?.message || "Registration failed";
+      toast({ title: "Registration Failed", description: msg.slice(0, 150), variant: "destructive" });
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden" data-testid="page-register">
-      <div className="absolute top-20 -left-40 w-80 h-80 rounded-full bg-amber-500/8 blur-[100px]" />
-      <div className="absolute bottom-20 -right-40 w-80 h-80 rounded-full bg-cyan-500/8 blur-[100px]" />
-      <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[500px] h-[500px] rounded-full bg-yellow-600/5 blur-[120px]" />
+    <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
+      <div className="absolute inset-0 bg-gradient-to-br from-amber-600/4 via-yellow-600/3 to-amber-800/4" />
+      <div className="absolute top-[-20%] left-[-10%] w-[500px] h-[500px] rounded-full bg-amber-600/[0.06] blur-[180px] pointer-events-none" />
 
-      <div className="absolute top-4 right-4 flex items-center gap-2 z-20">
-        <div className="flex items-center gap-2 text-sm text-muted-foreground" data-testid="text-wallet-address">
-          <Wallet className="h-4 w-4" />
-          {shortenAddress(account)}
-        </div>
-        <Button variant="ghost" size="icon" onClick={disconnect} data-testid="button-disconnect">
-          <LogOut className="h-4 w-4" />
-        </Button>
-      </div>
-
-      <div className="w-full max-w-md relative z-10 slide-in">
-        <div className="glass-card rounded-2xl p-8 space-y-6">
-          <div className="text-center space-y-3">
-            <div className="w-16 h-16 mx-auto rounded-2xl gradient-icon flex items-center justify-center pulse-glow">
-              <UserPlus className="h-8 w-8 text-yellow-300" />
+      {showTerms && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="bg-background border border-white/[0.08] rounded-2xl w-full max-w-lg max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between p-4 border-b border-white/[0.06]">
+              <h2 className="font-bold text-sm" style={{ fontFamily: "var(--font-display)" }}>Terms & Conditions</h2>
+              <button onClick={() => setShowTerms(false)} className="text-muted-foreground hover:text-foreground transition-colors" data-testid="button-close-terms">
+                <X className="w-4 h-4" />
+              </button>
             </div>
-            <h1 className="text-2xl font-bold gradient-text" data-testid="text-register-title" style={{ fontFamily: 'var(--font-display)' }}>Join M-Vault</h1>
-            <p className="text-sm text-muted-foreground" data-testid="text-register-description">Register your wallet to start earning</p>
+            <div className="overflow-y-auto p-4 flex-1">
+              <pre className="text-[11px] text-muted-foreground whitespace-pre-wrap leading-relaxed font-sans">{TERMS_AND_CONDITIONS}</pre>
+            </div>
+            <div className="p-4 border-t border-white/[0.06]">
+              <Button
+                onClick={() => { setAgreedToTerms(true); setShowTerms(false); }}
+                className="w-full glow-button text-white"
+                data-testid="button-agree-terms"
+              >
+                <CheckCircle2 className="w-4 h-4 mr-2" /> I Agree
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div className="w-full max-w-md relative z-10 space-y-5 slide-in">
+        <div className="flex items-center justify-between">
+          <Logo size="sm" />
+          <button onClick={disconnect} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors" data-testid="button-disconnect">
+            <LogOut className="w-3.5 h-3.5" /> Disconnect
+          </button>
+        </div>
+
+        <div className="premium-card rounded-2xl p-6 space-y-5">
+          <div className="flex items-center gap-3">
+            <div className="h-12 w-12 rounded-xl bg-gradient-to-br from-amber-500/20 to-yellow-400/10 flex items-center justify-center">
+              <UserPlus className="h-6 w-6 text-yellow-300" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold" style={{ fontFamily: "var(--font-display)" }}>
+                <span className="gradient-text">Join M-Vault</span>
+              </h1>
+              <p className="text-xs text-muted-foreground">Register your wallet to get started</p>
+            </div>
           </div>
 
-          {isFirstUser ? (
-            <div className="rounded-xl bg-amber-500/10 border border-amber-500/20 p-4 text-center">
-              <p className="text-sm font-medium text-amber-400" data-testid="text-first-user">You are the first user. No referral code needed.</p>
-            </div>
-          ) : (
-            <div className="space-y-4">
-              <div className="space-y-2">
-                <label className="text-sm text-muted-foreground">Sponsor ID</label>
+          <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] px-3 py-2">
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Your Wallet</p>
+            <p className="text-xs font-mono text-amber-300/80" data-testid="text-account">{account}</p>
+          </div>
+
+          {!isFirstUser && (
+            <>
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Sponsor Address *</label>
                 <div className="relative">
                   <Input
-                    type="text"
-                    inputMode="numeric"
-                    placeholder="Enter sponsor's user ID"
-                    value={sponsorId}
-                    onChange={(e) => setSponsorId(e.target.value)}
+                    value={sponsorAddress}
+                    onChange={(e) => setSponsorAddress(e.target.value)}
+                    placeholder="0x... sponsor wallet address"
+                    className="bg-white/[0.03] border-white/[0.08] text-sm font-mono pr-8"
+                    data-testid="input-sponsor-address"
                     disabled={loading}
-                    className={`bg-white/[0.03] border-yellow-600/20 pr-10 ${sponsorInfo?.valid ? "border-emerald-500/40" : ""}`}
-                    data-testid="input-sponsor-id"
                   />
                   {validating && (
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
-                    </div>
-                  )}
-                  {!validating && sponsorInfo?.valid && (
-                    <div className="absolute right-3 top-1/2 -translate-y-1/2">
-                      <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                    </div>
+                    <Loader2 className="absolute right-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 animate-spin text-muted-foreground" />
                   )}
                 </div>
-                {sponsorInfo?.valid && (
-                  <div className="flex items-center justify-between px-1">
-                    <p className="text-xs text-emerald-400 font-medium" data-testid="text-sponsor-name">{sponsorInfo.displayName}</p>
-                    <span className="text-[10px] font-bold px-1.5 py-0.5 rounded bg-yellow-600/15 text-yellow-300" data-testid="text-sponsor-side">
-                      {sponsorInfo.side}
-                    </span>
+                {sponsorInfo && (
+                  <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20" data-testid="card-sponsor-info">
+                    <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                    <p className="text-xs text-emerald-400">
+                      Registered · {sponsorInfo.isActive ? "Active" : "Inactive"} · {shortenAddress(sponsorInfo.address)}
+                    </p>
                   </div>
                 )}
-                {sponsorId.trim() && !validating && !sponsorInfo?.valid && (
-                  <p className="text-xs text-red-400 px-1">Invalid Sponsor ID</p>
+                {sponsorAddress && isValidAddress(sponsorAddress) && !sponsorInfo && !validating && (
+                  <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-red-500/10 border border-red-500/20">
+                    <AlertCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />
+                    <p className="text-xs text-red-400">Address not registered in the system</p>
+                  </div>
                 )}
               </div>
+
+              <div className="space-y-1.5">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">
+                  Binary Parent Address <span className="text-muted-foreground/50">(optional, defaults to sponsor)</span>
+                </label>
+                <Input
+                  value={binaryParentAddress}
+                  onChange={(e) => setBinaryParentAddress(e.target.value)}
+                  placeholder="0x... leave blank to use sponsor"
+                  className="bg-white/[0.03] border-white/[0.08] text-sm font-mono"
+                  data-testid="input-binary-parent-address"
+                  disabled={loading}
+                />
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-[10px] uppercase tracking-wider text-muted-foreground">Placement Side</label>
+                <div className="grid grid-cols-2 gap-2">
+                  {[{ label: "Left", value: true }, { label: "Right", value: false }].map(({ label, value }) => (
+                    <button
+                      key={label}
+                      onClick={() => setSelectedSide(value)}
+                      className={`py-2.5 rounded-xl text-sm font-semibold transition-all border ${selectedSide === value ? "bg-amber-500/10 border-amber-500/30 text-amber-400" : "bg-white/[0.02] border-white/[0.06] text-muted-foreground hover:border-white/[0.12]"}`}
+                      data-testid={`button-place-${label.toLowerCase()}`}
+                    >
+                      {label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </>
+          )}
+
+          {isFirstUser && (
+            <div className="flex items-center gap-2 px-3 py-2.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
+              <Wallet className="h-4 w-4 text-amber-400 shrink-0" />
+              <p className="text-xs text-amber-400">You will be registered as the root (first) user.</p>
             </div>
           )}
 
-          <div className="flex items-start gap-3">
+          <div className="flex items-center gap-2.5">
             <button
-              type="button"
               onClick={() => setAgreedToTerms(!agreedToTerms)}
-              className={`mt-0.5 h-5 w-5 rounded border-2 flex items-center justify-center shrink-0 transition-all ${
-                agreedToTerms
-                  ? "bg-purple-500 border-purple-500"
-                  : "border-white/20 bg-white/[0.03] hover:border-purple-500/50"
-              }`}
-              data-testid="checkbox-terms"
+              className={`w-5 h-5 rounded-md border-2 flex items-center justify-center transition-all shrink-0 ${agreedToTerms ? "bg-amber-500/20 border-amber-500/50" : "border-white/[0.12] bg-white/[0.02]"}`}
+              data-testid="button-toggle-terms"
             >
-              {agreedToTerms && <CheckCircle2 className="h-3.5 w-3.5 text-white" />}
+              {agreedToTerms && <CheckCircle2 className="w-3 h-3 text-amber-400" />}
             </button>
-            <p className="text-xs text-muted-foreground leading-relaxed">
+            <p className="text-xs text-muted-foreground">
               I agree to the{" "}
-              <button
-                type="button"
-                onClick={() => setShowTerms(true)}
-                className="text-yellow-300 hover:text-yellow-200 underline underline-offset-2 font-medium transition-colors"
-                data-testid="link-terms"
-              >
+              <button onClick={() => setShowTerms(true)} className="text-amber-400 hover:text-amber-300 underline" data-testid="button-view-terms">
                 Terms & Conditions
               </button>
             </p>
           </div>
 
           <button
-            onClick={handleSubmit}
+            onClick={handleRegister}
             disabled={loading || (!isFirstUser && !sponsorInfo?.valid) || !agreedToTerms}
-            className="w-full glow-button text-white font-bold py-3.5 px-6 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+            className="w-full glow-button text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
             data-testid="button-register"
-            style={{ fontFamily: 'var(--font-display)' }}
+            style={{ fontFamily: "var(--font-display)" }}
           >
-            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+            {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
             {loading ? "Registering..." : "Register"}
           </button>
+
+          <p className="text-[10px] text-center text-muted-foreground/50">
+            Registration is free. You'll activate ($130 USDT) in the next step.
+          </p>
         </div>
       </div>
-
-      {showTerms && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" data-testid="modal-terms">
-          <div className="absolute inset-0 bg-black/70 backdrop-blur-sm" onClick={() => setShowTerms(false)} />
-          <div className="relative w-full max-w-lg max-h-[80vh] glass-card rounded-2xl flex flex-col overflow-hidden">
-            <div className="flex items-center justify-between p-5 border-b border-white/[0.08]">
-              <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-lg bg-yellow-600/15 flex items-center justify-center">
-                  <ScrollText className="h-4 w-4 text-yellow-300" />
-                </div>
-                <h2 className="text-base font-bold" style={{ fontFamily: 'var(--font-display)' }}>
-                  <span className="gradient-text">Terms & Conditions</span>
-                </h2>
-              </div>
-              <button
-                onClick={() => setShowTerms(false)}
-                className="h-8 w-8 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] flex items-center justify-center transition-colors"
-                data-testid="button-close-terms"
-              >
-                <X className="h-4 w-4" />
-              </button>
-            </div>
-            <div className="flex-1 overflow-y-auto p-5">
-              <div className="prose prose-invert prose-sm max-w-none">
-                {TERMS_AND_CONDITIONS.split('\n').map((line, i) => {
-                  const trimmed = line.trim();
-                  if (!trimmed) return <div key={i} className="h-3" />;
-                  if (trimmed.startsWith('🔐') || trimmed.startsWith('✅')) {
-                    return <h3 key={i} className="text-sm font-bold gradient-text mt-4 mb-1" style={{ fontFamily: 'var(--font-display)' }}>{trimmed}</h3>;
-                  }
-                  if (/^[0-9️⃣]+/.test(trimmed)) {
-                    return <h3 key={i} className="text-sm font-bold text-amber-400 mt-4 mb-1" style={{ fontFamily: 'var(--font-display)' }}>{trimmed}</h3>;
-                  }
-                  if (trimmed.startsWith('✔')) {
-                    return <p key={i} className="text-xs text-emerald-400 py-0.5">{trimmed}</p>;
-                  }
-                  return <p key={i} className="text-xs text-muted-foreground py-0.5">{trimmed}</p>;
-                })}
-              </div>
-            </div>
-            <div className="p-5 border-t border-white/[0.08]">
-              <button
-                onClick={() => { setAgreedToTerms(true); setShowTerms(false); }}
-                className="w-full glow-button text-white font-bold py-3 px-6 rounded-xl transition-all flex items-center justify-center gap-2"
-                data-testid="button-agree-terms"
-                style={{ fontFamily: 'var(--font-display)' }}
-              >
-                <CheckCircle2 className="h-4 w-4" />
-                I Agree
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect } from "react";
 import { Switch, Route, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
@@ -9,9 +9,6 @@ import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useWeb3 } from "@/hooks/use-web3";
 import { Wallet } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Badge } from "@/components/ui/badge";
-import { PACKAGE_NAMES } from "@/lib/contract";
 import { Logo } from "@/components/logo";
 import { MobileNav } from "@/components/mobile-nav";
 
@@ -27,11 +24,11 @@ import SettingsPage from "@/pages/settings";
 import SupportPage from "@/pages/support";
 import BoardPage from "@/pages/board";
 import BinaryDetailsPage from "@/pages/binary-details";
-import StakingPage from "@/pages/staking";
 import DeepPlacementPage from "@/pages/deep-placement";
 import StorePage from "@/pages/store";
 import SwapPage from "@/pages/swap";
 import PaidStakingPage from "@/pages/paid-staking";
+import SellTokensPage from "@/pages/sell-tokens";
 
 function ScrollToTop() {
   const [location] = useLocation();
@@ -70,11 +67,11 @@ function ConnectScreen({ onConnect }: { onConnect: () => void }) {
 
           <div className="grid grid-cols-3 gap-3 py-2">
             <div className="text-center" data-testid="text-stat-packages">
-              <div className="text-lg font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }}>5</div>
-              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Packages</div>
+              <div className="text-lg font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }}>$130</div>
+              <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Activation</div>
             </div>
             <div className="text-center border-x border-white/[0.06]" data-testid="text-stat-max-earn">
-              <div className="text-lg font-bold gradient-text-gold" style={{ fontFamily: 'var(--font-display)' }}>5x</div>
+              <div className="text-lg font-bold gradient-text-gold" style={{ fontFamily: 'var(--font-display)' }}>3×</div>
               <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Max Earn</div>
             </div>
             <div className="text-center" data-testid="text-stat-rewards">
@@ -117,41 +114,23 @@ function LoadingScreen() {
 function App() {
   const web3 = useWeb3();
   const [hasProfile, setHasProfile] = useState<boolean | null>(null);
-  const [profileLoading, setProfileLoading] = useState(false);
-
-  const checkProfile = useCallback(async (walletAddress: string) => {
-    setProfileLoading(true);
-    try {
-      const res = await fetch(`/api/profiles/${walletAddress.toLowerCase()}`);
-      setHasProfile(res.ok);
-    } catch {
-      setHasProfile(false);
-    } finally {
-      setProfileLoading(false);
-    }
-  }, []);
 
   useEffect(() => {
-    if (web3.account && web3.isRegistered && web3.profileOnChain) {
-      setHasProfile(web3.profileOnChain.profileSet);
-    } else if (web3.account && web3.isRegistered) {
-      checkProfile(web3.account);
+    if (web3.account && web3.isRegistered) {
+      setHasProfile(web3.profileOnChain?.profileSet ?? false);
     } else {
       setHasProfile(null);
     }
-  }, [web3.account, web3.isRegistered, web3.profileOnChain, checkProfile]);
+  }, [web3.account, web3.isRegistered, web3.profileOnChain]);
 
   const disconnect = () => window.location.reload();
 
   const getFlowStep = () => {
     if (!web3.account) return "connect";
     const isInitialLoad = !web3.initialLoaded;
-    if ((isInitialLoad && web3.loading) || profileLoading || (web3.isRegistered && hasProfile === null)) return "loading";
+    if ((isInitialLoad && web3.loading) || (web3.isRegistered && hasProfile === null)) return "loading";
     if (!web3.isRegistered) return "register";
-    if (!web3.userInfo || web3.userInfo.userPackage === 0) return "activate";
-    if (!web3.incomeInfo || !web3.binaryInfo) {
-      return "loading";
-    }
+    if (!web3.userInfo || !web3.userInfo.isActive) return "activate";
     if (!hasProfile) return "profile";
     return "dashboard";
   };
@@ -219,7 +198,7 @@ function App() {
     );
   }
 
-  const userId = web3.userInfo ? web3.userInfo.userId.toString() : "0";
+  const userAddress = web3.account || "0x0";
 
   const sidebarStyle = {
     "--sidebar-width": "16rem",
@@ -234,7 +213,7 @@ function App() {
             <div className="flex h-screen w-full">
               <AppSidebar
                 account={web3.account!}
-                userId={userId}
+                userAddress={userAddress}
                 disconnect={disconnect}
               />
               <div className="flex flex-col flex-1 overflow-hidden">
@@ -258,39 +237,33 @@ function App() {
                     <Route path="/">
                       <DashboardPage
                         userInfo={web3.userInfo!}
-                        incomeInfo={web3.incomeInfo!}
-                        binaryInfo={web3.binaryInfo!}
-                        btcPoolBalance={web3.btcPoolBalance}
+                        mvtPrice={web3.mvtPrice}
+                        binaryPairs={web3.binaryPairs}
                         formatAmount={web3.formatAmount}
                         account={web3.account!}
                         profileOnChain={web3.profileOnChain}
-                        getTransactionsFromContract={web3.getTransactionsFromContract}
+                        sellMvt={web3.sellMvt}
+                        withdrawFunds={web3.withdrawFunds}
+                        withdrawBtcPool={web3.withdrawBtcPool}
+                        rebirth={web3.rebirth}
+                        fetchUserData={web3.fetchUserData}
                         approveToken={web3.approveToken}
-                        reactivatePackage={web3.reactivatePackage}
-                        repurchase={web3.repurchase}
-                        tokenDecimals={web3.tokenDecimals}
                       />
                     </Route>
                     <Route path="/income">
                       <IncomePage
-                        incomeInfo={web3.incomeInfo!}
-                        binaryInfo={web3.binaryInfo!}
-                        slabInfo={web3.slabInfo}
-                        userPackage={web3.userInfo!.userPackage}
+                        userInfo={web3.userInfo!}
+                        mvtPrice={web3.mvtPrice}
+                        binaryPairs={web3.binaryPairs}
                         formatAmount={web3.formatAmount}
-                        getTransactionsFromContract={web3.getTransactionsFromContract}
-                        claimBinaryIncome={web3.claimBinaryIncome}
                       />
                     </Route>
                     <Route path="/binary">
                       <BinaryDetailsPage
-                        incomeInfo={web3.incomeInfo!}
-                        binaryInfo={web3.binaryInfo!}
-                        slabInfo={web3.slabInfo}
+                        userInfo={web3.userInfo!}
+                        mvtPrice={web3.mvtPrice}
+                        binaryPairs={web3.binaryPairs}
                         formatAmount={web3.formatAmount}
-                        tokenDecimals={web3.tokenDecimals}
-                        getTransactionsFromContract={web3.getTransactionsFromContract}
-                        claimBinaryIncome={web3.claimBinaryIncome}
                       />
                     </Route>
                     <Route path="/wallet">
@@ -299,13 +272,13 @@ function App() {
                         account={web3.account!}
                         formatAmount={web3.formatAmount}
                         withdrawFunds={web3.withdrawFunds}
+                        withdrawBtcPool={web3.withdrawBtcPool}
                         getTransactionsFromContract={web3.getTransactionsFromContract}
                       />
                     </Route>
                     <Route path="/team">
                       <TeamPage
                         userInfo={web3.userInfo!}
-                        binaryInfo={web3.binaryInfo!}
                         formatAmount={web3.formatAmount}
                         getDirectReferrals={web3.getDirectReferrals}
                         account={web3.account!}
@@ -348,11 +321,19 @@ function App() {
                         account={web3.account!}
                       />
                     </Route>
-                    <Route path="/staking">
-                      <StakingPage account={web3.account!} binaryInfo={web3.binaryInfo} tokenDecimals={web3.tokenDecimals} />
-                    </Route>
                     <Route path="/paid-staking">
                       <PaidStakingPage account={web3.account!} />
+                    </Route>
+                    <Route path="/sell-tokens">
+                      <SellTokensPage
+                        account={web3.account!}
+                        userInfo={web3.userInfo!}
+                        mvtPrice={web3.mvtPrice}
+                        formatAmount={web3.formatAmount}
+                        sellMvt={web3.sellMvt}
+                        approveToken={web3.approveToken}
+                        fetchUserData={web3.fetchUserData}
+                      />
                     </Route>
                     <Route path="/store">
                       <StorePage />

@@ -3,7 +3,7 @@ import { User, Mail, Phone, Globe, Wallet, Loader2, Save, Users, Copy, Check, Sh
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { shortenAddress, CONTRACT_ADDRESS, MLM_ABI, PACKAGE_NAMES } from "@/lib/contract";
+import { shortenAddress, getMvaultContract } from "@/lib/contract";
 import { ethers } from "ethers";
 import type { UserInfo } from "@/hooks/use-web3";
 
@@ -26,7 +26,6 @@ export default function Settings({ account, userInfo, profileOnChain, saveProfil
   const [saving, setSaving] = useState(false);
   const [sponsorName, setSponsorName] = useState<string | null>(null);
   const [sponsorEmail, setSponsorEmail] = useState<string | null>(null);
-  const [sponsorPackage, setSponsorPackage] = useState<number>(0);
   const [sponsorLoading, setSponsorLoading] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -37,15 +36,12 @@ export default function Settings({ account, userInfo, profileOnChain, saveProfil
     setSponsorLoading(true);
     (async () => {
       try {
-        if (!(window as any).ethereum) { setSponsorLoading(false); return; }
         const provider = new ethers.BrowserProvider((window as any).ethereum);
-        const contract = new ethers.Contract(CONTRACT_ADDRESS, MLM_ABI, provider);
-        const info = await contract.getUserInfo(userInfo.sponsor);
-        setSponsorPackage(Number(info[6]));
-        const profile = await contract.getProfile(userInfo.sponsor);
-        if (profile[4]) {
-          setSponsorName(profile[0]);
-          if (profile[1]) setSponsorEmail(profile[1]);
+        const contract = getMvaultContract(provider);
+        const [displayName, email, , , profileSet] = await contract.getProfile(userInfo.sponsor);
+        if (profileSet) {
+          if (displayName) setSponsorName(displayName);
+          if (email) setSponsorEmail(email);
         }
       } catch {}
       setSponsorLoading(false);
@@ -132,11 +128,9 @@ export default function Settings({ account, userInfo, profileOnChain, saveProfil
                   <span className="gradient-text">{sponsorName || "Not Set"}</span>
                 </p>
               </div>
-              {sponsorPackage > 0 && (
-                <Badge variant="outline" className="text-[10px] border-yellow-600/20 text-yellow-300" data-testid="badge-sponsor-package">
-                  {PACKAGE_NAMES[sponsorPackage] || "Unknown"}
-                </Badge>
-              )}
+              <Badge variant="outline" className="text-[10px] border-yellow-600/20 text-yellow-300" data-testid="badge-sponsor-package">
+                Active
+              </Badge>
             </div>
 
             <div className="h-px bg-gradient-to-r from-transparent via-yellow-500/10 to-transparent" />

@@ -1,23 +1,57 @@
 import { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
-import { getContract, getTokenContract, CONTRACT_ADDRESS, NETWORK, formatTokenAmount, TX_TYPE_NAMES, TX_TYPE_INCOME, PACKAGE_NAMES } from "@/lib/contract";
+import {
+  getMvaultContract, getTokenContract,
+  MVAULT_CONTRACT_ADDRESS, TOKEN_ADDRESS,
+  NETWORK, formatTokenAmount,
+} from "@/lib/contract";
+
+// ── Type definitions ──────────────────────────────────────────────────────────
 
 export interface UserInfo {
-  userId: bigint;
+  isRegistered: boolean;
+  isActive: boolean;
   sponsor: string;
+  directCount: bigint;
   binaryParent: string;
+  placedLeft: boolean;
   leftChild: string;
   rightChild: string;
-  placementSide: number;
-  userPackage: number;
-  status: number;
-  walletBalance: bigint;
-  tempWalletBalance: bigint;
-  totalEarnings: bigint;
-  directReferralCount: bigint;
+  leftSubUsers: bigint;
+  rightSubUsers: bigint;
+  mvtBalance: bigint;
+  totalReceived: bigint;
+  totalSold: bigint;
+  incomeLimit: bigint;
+  usdtBalance: bigint;
+  rebirthPool: bigint;
+  btcPoolBalance: bigint;
+  powerLegPoints: bigint;
+  matchedPairs: bigint;
+  mainAccount: string;
+  rebirthCount: bigint;
   joinedAt: bigint;
 }
 
+export interface MvtPrice {
+  buyPrice: bigint;
+  sellPrice: bigint;
+}
+
+export interface BinaryPairs {
+  currentPairs: bigint;
+  newPairs: bigint;
+}
+
+export interface ProfileOnChain {
+  displayName: string;
+  email: string;
+  phone: string;
+  country: string;
+  profileSet: boolean;
+}
+
+// ── Legacy types kept for pages that haven't been migrated ────────────────────
 export interface IncomeInfo {
   totalDirectIncome: bigint;
   totalBinaryIncome: bigint;
@@ -47,19 +81,20 @@ export interface SlabInfo {
   rates: bigint[];
 }
 
+// ── Hook ──────────────────────────────────────────────────────────────────────
+
 export function useWeb3() {
   const [account, setAccount] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [initialLoaded, setInitialLoaded] = useState(false);
   const [isRegistered, setIsRegistered] = useState(false);
   const [userInfo, setUserInfo] = useState<UserInfo | null>(null);
-  const [incomeInfo, setIncomeInfo] = useState<IncomeInfo | null>(null);
-  const [binaryInfo, setBinaryInfo] = useState<BinaryInfo | null>(null);
-  const [slabInfo, setSlabInfo] = useState<SlabInfo | null>(null);
+  const [mvtPrice, setMvtPrice] = useState<MvtPrice>({ buyPrice: 0n, sellPrice: 0n });
+  const [binaryPairs, setBinaryPairs] = useState<BinaryPairs>({ currentPairs: 0n, newPairs: 0n });
   const [btcPoolBalance, setBtcPoolBalance] = useState<bigint>(0n);
-  const [tokenDecimals, setTokenDecimals] = useState(18);
   const [totalUsers, setTotalUsers] = useState<number>(0);
-  const [profileOnChain, setProfileOnChain] = useState<{ displayName: string; email: string; phone: string; country: string; profileSet: boolean } | null>(null);
+  const [profileOnChain, setProfileOnChain] = useState<ProfileOnChain | null>(null);
+  const tokenDecimals = 18;
 
   const getProvider = useCallback(() => {
     if (!(window as any).ethereum) throw new Error("MetaMask not installed");
@@ -89,68 +124,70 @@ export function useWeb3() {
     setLoading(true);
     try {
       const provider = getProvider();
-      const contract = getContract(provider);
-      const decimals = Number(await contract.tokenDecimals());
-      setTokenDecimals(decimals);
+      const contract = getMvaultContract(provider);
 
-      const total = Number(await contract.getTotalUsers());
+      // Total users
+      let total = 0;
+      try { total = Number(await contract.totalUsers()); } catch { }
       setTotalUsers(total);
 
-      const registered = await contract.isRegistered(address);
-      setIsRegistered(registered);
+      // getUserInfo
+      let info: any;
+      try {
+        info = await contract.getUserInfo(address);
+      } catch (e) {
+        console.error("getUserInfo failed:", e);
+        setIsRegistered(false);
+        setUserInfo(null);
+        return;
+      }
 
-      if (registered) {
-        const info = await contract.getUserInfo(address);
-        setUserInfo({
-          userId: info[0], sponsor: info[1], binaryParent: info[2],
-          leftChild: info[3], rightChild: info[4], placementSide: Number(info[5]),
-          userPackage: Number(info[6]), status: Number(info[7]),
-          walletBalance: info[8], tempWalletBalance: info[9],
-          totalEarnings: info[10], directReferralCount: info[11], joinedAt: info[12],
-        });
+      const ui: UserInfo = {
+        isRegistered:    info[0],
+        isActive:        info[1],
+        sponsor:         info[2],
+        directCount:     info[3],
+        binaryParent:    info[4],
+        placedLeft:      info[5],
+        leftChild:       info[6],
+        rightChild:      info[7],
+        leftSubUsers:    info[8],
+        rightSubUsers:   info[9],
+        mvtBalance:      info[10],
+        totalReceived:   info[11],
+        totalSold:       info[12],
+        incomeLimit:     info[13],
+        usdtBalance:     info[14],
+        rebirthPool:     info[15],
+        btcPoolBalance:  info[16],
+        powerLegPoints:  info[17],
+        matchedPairs:    info[18],
+        mainAccount:     info[19],
+        rebirthCount:    info[20],
+        joinedAt:        info[21],
+      };
 
-        const inc = await contract.getIncomeInfo(address);
-        setIncomeInfo({
-          totalDirectIncome: inc[0], totalBinaryIncome: inc[1],
-          totalMatchingOverrideIncome: inc[2], totalWithdrawalMatchIncome: inc[3],
-          totalEarnings: inc[4], totalWithdrawn: inc[5], maxIncome: inc[6],
-        });
+      setIsRegistered(ui.isRegistered);
+      setUserInfo(ui);
+      setBtcPoolBalance(ui.btcPoolBalance);
 
-        const bin = await contract.getBinaryInfo(address);
-        setBinaryInfo({
-          leftBusiness: bin[0], rightBusiness: bin[1],
-          carryLeft: bin[2], carryRight: bin[3],
-          todayBinaryIncome: bin[4], dailyCap: bin[5],
-          claimableBinaryIncome: bin[6], binaryDepth: bin[7] ?? 0n,
-        });
-
+      if (ui.isRegistered) {
+        // MVT price
         try {
-          const slab = await contract.getBinarySlabInfo(address);
-          const toArr = (v: unknown): bigint[] => {
-            const arr = Array.from(v as ArrayLike<unknown>).map(x => BigInt(x as string | number | bigint));
-            while (arr.length < 4) arr.push(0n);
-            return arr.slice(0, 4);
-          };
-          setSlabInfo({
-            carryLeftSlabs: toArr(slab[0]),
-            carryRightSlabs: toArr(slab[1]),
-            matchableSlabs: toArr(slab[2]),
-            potentialIncomeSlabs: toArr(slab[3]),
-            rates: toArr(slab[4]),
-          });
-        } catch {
-          setSlabInfo(null);
-        }
+          const [bp, sp] = await contract.getMvtPrice();
+          setMvtPrice({ buyPrice: bp, sellPrice: sp });
+        } catch { }
 
-        const btcBal = await contract.getBtcPoolBalance(address);
-        setBtcPoolBalance(btcBal);
-
+        // Binary pairs
         try {
-          const profile = await contract.getProfile(address);
-          setProfileOnChain({
-            displayName: profile[0], email: profile[1],
-            phone: profile[2], country: profile[3], profileSet: profile[4],
-          });
+          const [curr, newP] = await contract.getCurrentBinaryPairs(address);
+          setBinaryPairs({ currentPairs: curr, newPairs: newP });
+        } catch { }
+
+        // Profile from new MvaultContract (on-chain)
+        try {
+          const [displayName, email, phone, country, profileSet] = await contract.getProfile(address);
+          setProfileOnChain({ displayName, email, phone, country, profileSet });
         } catch {
           setProfileOnChain(null);
         }
@@ -162,6 +199,8 @@ export function useWeb3() {
       setInitialLoaded(true);
     }
   }, [account, getProvider]);
+
+  // ── Connection ──────────────────────────────────────────────────────────────
 
   const connect = useCallback(async () => {
     try {
@@ -177,86 +216,192 @@ export function useWeb3() {
     }
   }, [switchNetwork, getProvider, fetchUserData]);
 
-  const register = useCallback(async (sponsorId: string, binaryParentId: string, placeLeft: boolean) => {
+  // ── Registration (address-based) ────────────────────────────────────────────
+
+  const register = useCallback(async (sponsor: string, binaryParent: string, placeLeft: boolean) => {
     const signer = await getSigner();
-    const contract = getContract(signer);
-    const tx = await contract.register(BigInt(sponsorId), BigInt(binaryParentId), placeLeft);
+    const contract = getMvaultContract(signer);
+    const tx = await contract.register(sponsor, binaryParent, placeLeft);
     await tx.wait();
     await fetchUserData();
   }, [getSigner, fetchUserData]);
 
-  const approveToken = useCallback(async (amount: string) => {
+  // ── USDT approval for MvaultContract ───────────────────────────────────────
+
+  const approveToken = useCallback(async (_amount?: string) => {
     const signer = await getSigner();
     const token = getTokenContract(signer);
-    const parsedAmount = ethers.parseUnits(amount, tokenDecimals);
-    const tx = await token.approve(CONTRACT_ADDRESS, parsedAmount);
+    const signerAddress = await signer.getAddress();
+    const currentAllowance = await token.allowance(signerAddress, MVAULT_CONTRACT_ADDRESS);
+    const needed = _amount ? ethers.parseUnits(_amount, tokenDecimals) : 0n;
+    if (currentAllowance >= needed && needed > 0n) return;
+    const tx = await token.approve(MVAULT_CONTRACT_ADDRESS, ethers.MaxUint256);
     await tx.wait();
   }, [getSigner, tokenDecimals]);
 
-  const activatePackage = useCallback(async (pkg: number) => {
+  // ── Activation ($130 USDT, no package selection) ───────────────────────────
+
+  const activatePackage = useCallback(async (_pkg?: number) => {
     const signer = await getSigner();
-    const contract = getContract(signer);
-    const tx = await contract.activatePackage(pkg);
+    const contract = getMvaultContract(signer);
+    const tx = await contract.activate();
     await tx.wait();
     await fetchUserData();
   }, [getSigner, fetchUserData]);
 
-  const withdrawFunds = useCallback(async (amount: string) => {
+  // ── Sell virtual MVT → USDT (stays in contract) ────────────────────────────
+
+  const sellMvt = useCallback(async (amount: string) => {
     const signer = await getSigner();
-    const contract = getContract(signer);
-    const parsedAmount = ethers.parseUnits(amount, tokenDecimals);
-    const tx = await contract.withdraw(parsedAmount);
+    const contract = getMvaultContract(signer);
+    const parsed = ethers.parseUnits(amount, tokenDecimals);
+    const tx = await contract.sellMvt(parsed);
     await tx.wait();
     await fetchUserData();
   }, [getSigner, tokenDecimals, fetchUserData]);
 
-  const reactivatePackage = useCallback(async (pkg: number) => {
+  // ── Withdraw USDT balance → wallet ─────────────────────────────────────────
+
+  const withdrawFunds = useCallback(async (amount: string) => {
     const signer = await getSigner();
-    const contract = getContract(signer);
-    const tx = await contract.reactivate(pkg);
+    const contract = getMvaultContract(signer);
+    const parsed = ethers.parseUnits(amount, tokenDecimals);
+    const tx = await contract.withdrawUsdt(parsed);
+    await tx.wait();
+    await fetchUserData();
+  }, [getSigner, tokenDecimals, fetchUserData]);
+
+  // ── Withdraw BTC pool balance → wallet ─────────────────────────────────────
+
+  const withdrawBtcPool = useCallback(async (amount: string) => {
+    const signer = await getSigner();
+    const contract = getMvaultContract(signer);
+    const parsed = ethers.parseUnits(amount, tokenDecimals);
+    const tx = await contract.withdrawBtcPool(parsed);
+    await tx.wait();
+    await fetchUserData();
+  }, [getSigner, tokenDecimals, fetchUserData]);
+
+  // ── Rebirth (create sub-account) ───────────────────────────────────────────
+
+  const rebirth = useCallback(async (subAccount: string, placeLeft: boolean) => {
+    const signer = await getSigner();
+    const contract = getMvaultContract(signer);
+    const tx = await contract.rebirth(subAccount, placeLeft);
     await tx.wait();
     await fetchUserData();
   }, [getSigner, fetchUserData]);
 
-  const repurchase = useCallback(async () => {
-    const signer = await getSigner();
-    const contract = getContract(signer);
-    const tx = await contract.repurchase();
-    await tx.wait();
-    await fetchUserData();
-  }, [getSigner, fetchUserData]);
+  // ── Profile (on-chain via MvaultContract) ──────────────────────────────────
 
-  const enterBoardPool = useCallback(async () => {
+  const saveProfileOnChain = useCallback(async (
+    displayName: string, email: string, phone: string, country: string,
+  ) => {
+    if (!account) return;
     const signer = await getSigner();
-    const contract = getContract(signer);
-    const tx = await contract.enterBoardPool();
-    await tx.wait();
-    await fetchUserData();
-  }, [getSigner, fetchUserData]);
-
-  const claimBinaryIncome = useCallback(async () => {
-    const signer = await getSigner();
-    const contract = getContract(signer);
-    const tx = await contract.claimBinaryIncome();
-    await tx.wait();
-    await fetchUserData();
-  }, [getSigner, fetchUserData]);
-
-  const saveProfileOnChain = useCallback(async (displayName: string, email: string, phone: string, country: string) => {
-    const signer = await getSigner();
-    const contract = getContract(signer);
+    const contract = getMvaultContract(signer);
     const tx = await contract.setProfile(displayName, email, phone, country);
     await tx.wait();
-    await fetchUserData();
-  }, [getSigner, fetchUserData]);
+    setProfileOnChain({ displayName, email, phone, country, profileSet: true });
+  }, [account, getSigner]);
+
+  // ── Direct referrals (via events) ──────────────────────────────────────────
 
   const getDirectReferrals = useCallback(async (offset: number, limit: number) => {
     if (!account) return { referrals: [], total: 0 };
-    const provider = getProvider();
-    const contract = getContract(provider);
-    const result = await contract.getDirectReferralsPaginated(account, offset, limit);
-    return { referrals: result[0] as string[], total: Number(result[1]) };
+    try {
+      const provider = getProvider();
+      const contract = getMvaultContract(provider);
+      const filter = contract.filters.Registered(null, account);
+      let events: any[];
+      try {
+        events = await contract.queryFilter(filter, 0);
+      } catch {
+        const current = await provider.getBlockNumber();
+        events = await contract.queryFilter(filter, Math.max(0, current - 100000));
+      }
+      const all = events.map((e: any) => e.args?.[0] as string).filter(Boolean);
+      const page = all.slice(offset, offset + limit);
+      return { referrals: page, total: all.length };
+    } catch (err) {
+      console.error("getDirectReferrals error:", err);
+      return { referrals: [], total: 0 };
+    }
   }, [account, getProvider]);
+
+  // ── Transactions (from on-chain events) ────────────────────────────────────
+
+  const getTransactionsFromContract = useCallback(async (offset: number, limit: number) => {
+    if (!account) return { transactions: [], total: 0 };
+    try {
+      const provider = getProvider();
+      const contract = getMvaultContract(provider);
+      let startBlock = 0;
+      try {
+        const current = await provider.getBlockNumber();
+        startBlock = Math.max(0, current - 100000);
+      } catch { }
+
+      const [activatedEvts, soldEvts, usdtEvts, btcEvts, levelEvts, rebirthEvts] = await Promise.all([
+        contract.queryFilter(contract.filters.Activated(account), startBlock).catch(() => []),
+        contract.queryFilter(contract.filters.MvtSold(account), startBlock).catch(() => []),
+        contract.queryFilter(contract.filters.UsdtWithdrawn(account), startBlock).catch(() => []),
+        contract.queryFilter(contract.filters.BtcPoolWithdrawn(account), startBlock).catch(() => []),
+        contract.queryFilter(contract.filters.LevelIncomePaid(account), startBlock).catch(() => []),
+        contract.queryFilter(contract.filters.Reborn(account), startBlock).catch(() => []),
+      ]);
+
+      type RawEvt = { blockNumber: number; args?: any };
+      const all: Array<{ type: string; amount: bigint; detail: string; timestamp: number; isIncome: boolean; blockNumber: number }> = [];
+
+      const blocks = new Map<number, number>();
+      const getTs = async (bn: number) => {
+        if (blocks.has(bn)) return blocks.get(bn)!;
+        try {
+          const b = await provider.getBlock(bn);
+          const ts = (b as any)?.timestamp ?? 0;
+          blocks.set(bn, ts);
+          return ts;
+        } catch { return 0; }
+      };
+
+      for (const e of (activatedEvts as RawEvt[])) {
+        all.push({ type: "Activation", amount: e.args?.[1] ?? 0n, detail: "$130 package activated", timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
+      }
+      for (const e of (soldEvts as RawEvt[])) {
+        all.push({ type: "Sell MVT", amount: e.args?.[2] ?? 0n, detail: `${formatTokenAmount(e.args?.[1] ?? 0n, 18)} MVT sold`, timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
+      }
+      for (const e of (usdtEvts as RawEvt[])) {
+        all.push({ type: "Withdrawal", amount: e.args?.[1] ?? 0n, detail: "USDT withdrawn", timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
+      }
+      for (const e of (btcEvts as RawEvt[])) {
+        all.push({ type: "BTC Pool Withdraw", amount: e.args?.[1] ?? 0n, detail: "BTC pool withdrawn", timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
+      }
+      for (const e of (levelEvts as RawEvt[])) {
+        const lvl = Number(e.args?.[2] ?? 0);
+        all.push({ type: "Level Income", amount: e.args?.[3] ?? 0n, detail: `Level ${lvl} income`, timestamp: await getTs(e.blockNumber), isIncome: true, blockNumber: e.blockNumber });
+      }
+      for (const e of (rebirthEvts as RawEvt[])) {
+        all.push({ type: "Rebirth", amount: 0n, detail: `Sub-account created`, timestamp: await getTs(e.blockNumber), isIncome: false, blockNumber: e.blockNumber });
+      }
+
+      all.sort((a, b) => b.timestamp - a.timestamp);
+      const total = all.length;
+      const page = all.slice(offset, offset + limit);
+      return { transactions: page, total };
+    } catch (err) {
+      console.error("getTransactionsFromContract error:", err);
+      return { transactions: [], total: 0 };
+    }
+  }, [account, getProvider]);
+
+  // ── Stubs for legacy pages that haven't been migrated yet ──────────────────
+
+  const enterBoardPool = useCallback(async () => {}, []);
+  const claimBinaryIncome = useCallback(async () => {}, []);
+  const reactivatePackage = useCallback(async (_pkg: number) => {}, []);
+  const repurchase = useCallback(async () => {}, []);
+  const getBinaryFlushedEvents = useCallback(async () => [], []);
 
   const getTokenBalance = useCallback(async () => {
     if (!account) return "0";
@@ -266,64 +411,29 @@ export function useWeb3() {
     return formatTokenAmount(bal, tokenDecimals);
   }, [account, getProvider, tokenDecimals]);
 
-  const getTransactionsFromContract = useCallback(async (offset: number, limit: number) => {
-    if (!account) return { transactions: [], total: 0 };
-    try {
-      const provider = getProvider();
-      const contract = getContract(provider);
-      const result = await contract.getUserTransactionsPaginated(account, offset, limit);
-      const txTypes = result[0] as number[];
-      const amounts = result[1] as bigint[];
-      const timestamps = result[2] as bigint[];
-      const relatedUsers = result[3] as string[];
-      const extraDatas = result[4] as number[];
-      const total = Number(result[5]);
+  // ── Incomeinfo / binaryinfo stubs (old pages compatibility) ────────────────
+  const incomeInfo: IncomeInfo = {
+    totalDirectIncome: 0n,
+    totalBinaryIncome: userInfo?.mvtBalance ?? 0n,
+    totalMatchingOverrideIncome: 0n,
+    totalWithdrawalMatchIncome: 0n,
+    totalEarnings: userInfo?.totalReceived ?? 0n,
+    totalWithdrawn: userInfo?.totalSold ?? 0n,
+    maxIncome: 390n * 10n ** 18n,
+  };
 
-      const txs: { type: string; amount: bigint; detail: string; timestamp: number; isIncome: boolean }[] = [];
+  const binaryInfo: BinaryInfo = {
+    leftBusiness: userInfo?.leftSubUsers ?? 0n,
+    rightBusiness: userInfo?.rightSubUsers ?? 0n,
+    carryLeft: 0n,
+    carryRight: 0n,
+    todayBinaryIncome: 0n,
+    dailyCap: 0n,
+    claimableBinaryIncome: 0n,
+    binaryDepth: 0n,
+  };
 
-      for (let i = 0; i < txTypes.length; i++) {
-        const txType = Number(txTypes[i]);
-        const typeName = TX_TYPE_NAMES[txType] || "Unknown";
-        const isIncome = TX_TYPE_INCOME[txType] || false;
-        const related = relatedUsers[i];
-        const extra = Number(extraDatas[i]);
-        let detail = "";
-
-        if (txType === 0 || txType === 2) {
-          detail = PACKAGE_NAMES[extra] || `Package ${extra}`;
-        } else if (txType === 1) {
-          detail = PACKAGE_NAMES[extra] || `Package ${extra}`;
-        } else if (txType === 3) {
-          detail = "Withdrawal";
-        } else if (txType === 4) {
-          detail = related !== ethers.ZeroAddress ? `From ${related.slice(0, 6)}...${related.slice(-4)}` : "";
-        } else if (txType === 5) {
-          detail = "Binary Match";
-        } else if (txType === 6) {
-          detail = related !== ethers.ZeroAddress ? `Level ${extra} from ${related.slice(0, 6)}...${related.slice(-4)}` : `Level ${extra}`;
-        } else if (txType === 7) {
-          detail = related !== ethers.ZeroAddress ? `Level ${extra} from ${related.slice(0, 6)}...${related.slice(-4)}` : `Level ${extra}`;
-        } else if (txType === 8) {
-          detail = `Pool ${extra}`;
-        } else if (txType === 9) {
-          detail = `Pool ${extra} Reward`;
-        }
-
-        txs.push({
-          type: typeName,
-          amount: amounts[i],
-          detail,
-          timestamp: Number(timestamps[i]),
-          isIncome,
-        });
-      }
-
-      return { transactions: txs, total };
-    } catch (err) {
-      console.error("getTransactionsFromContract error:", err);
-      return { transactions: [], total: 0 };
-    }
-  }, [account, getProvider]);
+  // ── MetaMask event listener ─────────────────────────────────────────────────
 
   useEffect(() => {
     const ethereum = (window as any).ethereum;
@@ -349,11 +459,16 @@ export function useWeb3() {
   }, [fetchUserData]);
 
   return {
-    account, loading, initialLoaded, isRegistered, userInfo, incomeInfo, binaryInfo, slabInfo,
+    account, loading, initialLoaded, isRegistered, userInfo,
+    incomeInfo, binaryInfo, slabInfo: null as SlabInfo | null,
+    mvtPrice, binaryPairs,
     btcPoolBalance, tokenDecimals, totalUsers, profileOnChain,
     connect, register, approveToken, activatePackage,
-    withdrawFunds, enterBoardPool, claimBinaryIncome, saveProfileOnChain, reactivatePackage, repurchase,
-    getDirectReferrals, getTokenBalance, getTransactionsFromContract, fetchUserData,
+    sellMvt, withdrawFunds, withdrawBtcPool, rebirth,
+    enterBoardPool, claimBinaryIncome, saveProfileOnChain,
+    reactivatePackage, repurchase,
+    getDirectReferrals, getTokenBalance,
+    getTransactionsFromContract, getBinaryFlushedEvents, fetchUserData,
     formatAmount: (val: bigint) => formatTokenAmount(val, tokenDecimals),
   };
 }

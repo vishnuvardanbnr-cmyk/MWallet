@@ -95,22 +95,27 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
   const nextTarget = nextRank ? nextRank.totalQual / 2 : null;
   const progressPct = nextTarget ? Math.min(100, (minLeg / nextTarget) * 100) : 100;
 
+  const [buyPrice, setBuyPrice] = useState<number>(0.0036);
+
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [activeRes, plansRes, walletRes, leadershipRes] = await Promise.all([
+      const [activeRes, plansRes, walletRes, leadershipRes, priceRes] = await Promise.all([
         fetch(`/api/staking/${account.toLowerCase()}/active`),
         fetch(`/api/staking/${account.toLowerCase()}`),
         fetch(`/api/mwallet/${account.toLowerCase()}`),
         fetch(`/api/leadership/${account.toLowerCase()}`),
+        fetch("/api/token/price"),
       ]);
       const activeData = activeRes.ok ? await activeRes.json() : null;
       const plansData = plansRes.ok ? await plansRes.json() : [];
       const walletData = walletRes.ok ? await walletRes.json() : null;
       const leadershipData = leadershipRes.ok ? await leadershipRes.json() : [];
+      const priceData = priceRes.ok ? await priceRes.json() : null;
       setActivePlan(activeData || null);
       setAllPlans(Array.isArray(plansData) ? plansData : []);
       setMwallet(walletData || { balance: "0", totalClaimed: "0" });
+      if (priceData?.buyPrice) setBuyPrice(parseFloat(priceData.buyPrice));
       if (Array.isArray(leadershipData)) {
         setClaimedRanks(new Set(leadershipData.map((r: { starRank: number }) => r.starRank)));
       }
@@ -185,7 +190,7 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
       }
       setClaimResult({
         success: true,
-        message: `Claimed ${parseFloat(data.claimed).toFixed(2)} M Tokens (${data.days} day${data.days > 1 ? "s" : ""})`,
+        message: `$${parseFloat(data.usdtValue).toFixed(4)} USDT → ${parseFloat(data.claimed).toFixed(4)} M-Tokens at $${parseFloat(data.priceUsed).toFixed(6)} buy price (${data.days} day${data.days > 1 ? "s" : ""})`,
       });
       fetchData();
       fetchClaims(1);
@@ -198,20 +203,29 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
 
   const getProgress = () => {
     if (!activePlan) return null;
-    const total = parseFloat(activePlan.totalTokens);
-    const claimed = parseFloat(activePlan.claimedTokens);
-    const percent = total > 0 ? (claimed / total) * 100 : 0;
+    // dailyTokens/totalTokens/claimedTokens columns now store USDT values
+    const totalUsdt = parseFloat(activePlan.totalTokens);       // total USDT reward budget
+    const claimedUsdt = parseFloat(activePlan.claimedTokens);   // USDT already consumed
+    const dailyUsdt = parseFloat(activePlan.dailyTokens);       // USDT earned per day
+    const percent = totalUsdt > 0 ? (claimedUsdt / totalUsdt) * 100 : 0;
     const now = new Date();
     const start = new Date(activePlan.startDate);
     const end = new Date(activePlan.endDate);
     const daysLeft = Math.max(0, Math.ceil((end.getTime() - now.getTime()) / (1000 * 60 * 60 * 24)));
     const totalDays = Math.ceil((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24));
     const elapsedDays = totalDays - daysLeft;
-    const dailyRate = parseFloat(activePlan.dailyTokens);
     const earnedSoFar = Math.floor((Math.min(now.getTime(), end.getTime()) - start.getTime()) / (1000 * 60 * 60 * 24));
-    const maxEarned = Math.min(earnedSoFar * dailyRate, total);
-    const claimable = Math.max(0, maxEarned - claimed);
-    return { percent: Math.min(percent, 100), daysLeft, totalDays, elapsedDays, claimed, total, claimable, remaining: total - claimed };
+    const maxEarnedUsdt = Math.min(earnedSoFar * dailyUsdt, totalUsdt);
+    const claimableUsdt = Math.max(0, maxEarnedUsdt - claimedUsdt);
+    // Estimate tokens at current buy price
+    const claimableTokens = buyPrice > 0 ? claimableUsdt / buyPrice : 0;
+    return {
+      percent: Math.min(percent, 100),
+      daysLeft, totalDays, elapsedDays,
+      claimedUsdt, totalUsdt, dailyUsdt,
+      claimableUsdt, claimableTokens,
+      remainingUsdt: Math.max(0, totalUsdt - claimedUsdt),
+    };
   };
 
   const progress = getProgress();
@@ -280,11 +294,12 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
         <div className="glass-card rounded-2xl p-4">
           <div className="flex items-center gap-1.5 mb-2">
             <Timer className="h-3.5 w-3.5 text-amber-400" />
-            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Daily Rate</p>
+            <p className="text-[10px] text-muted-foreground uppercase tracking-wider">Daily Reward</p>
           </div>
-          <p className="text-xl font-bold" style={{ fontFamily: "var(--font-display)" }} data-testid="text-daily-rate">
-            {plan ? parseFloat(plan.dailyTokens).toFixed(2) : "0.00"}
+          <p className="text-xl font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-daily-rate">
+            ${plan ? parseFloat(plan.dailyTokens).toFixed(4) : "0.00"}
           </p>
+          <p className="text-[10px] text-muted-foreground">USDT/day</p>
         </div>
         <div className="glass-card rounded-2xl p-4">
           <div className="flex items-center gap-1.5 mb-2">
@@ -318,15 +333,15 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
           <div className="space-y-3 mb-5">
             <div className="flex flex-wrap items-end justify-between gap-2">
               <div>
-                <p className="text-xs text-muted-foreground">Tokens Claimed</p>
+                <p className="text-xs text-muted-foreground">USDT Reward Claimed</p>
                 <p className="text-2xl font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }}>
-                  {progress.claimed.toFixed(2)}
+                  ${progress.claimedUsdt.toFixed(4)}
                 </p>
               </div>
               <div className="text-right">
-                <p className="text-xs text-muted-foreground">Total Tokens</p>
+                <p className="text-xs text-muted-foreground">Total USDT Reward</p>
                 <p className="text-lg font-medium text-muted-foreground" style={{ fontFamily: "var(--font-display)" }}>
-                  {progress.total.toLocaleString()}
+                  ${progress.totalUsdt.toFixed(4)}
                 </p>
               </div>
             </div>
@@ -337,7 +352,7 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
               />
             </div>
             <div className="flex flex-wrap items-center justify-between gap-2">
-              <p className="text-xs text-muted-foreground">{progress.percent.toFixed(1)}% of total claimed</p>
+              <p className="text-xs text-muted-foreground">{progress.percent.toFixed(1)}% of total reward claimed</p>
               <p className="text-xs text-muted-foreground flex items-center gap-1">
                 <Clock className="h-3 w-3" /> {progress.daysLeft} days remaining
               </p>
@@ -346,15 +361,15 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
 
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-5">
             <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Total Tokens</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Total USDT Reward</p>
               <p className="text-sm font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }}>
-                {parseFloat(plan.totalTokens).toLocaleString(undefined, { maximumFractionDigits: 2 })}
+                ${progress.totalUsdt.toFixed(4)}
               </p>
             </div>
             <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Remaining</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Remaining USDT</p>
               <p className="text-sm font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>
-                {progress.remaining.toFixed(2)}
+                ${progress.remainingUsdt.toFixed(4)}
               </p>
             </div>
             <div className="p-3 rounded-xl bg-white/[0.03] border border-white/[0.05]">
@@ -369,20 +384,28 @@ export default function StakingPage({ account, binaryInfo, tokenDecimals = 18 }:
 
           {plan.isActive && (
             <div className="space-y-3">
-              {progress.claimable > 0.001 ? (
-                <button
-                  onClick={handleClaim}
-                  disabled={claiming}
-                  className="w-full glow-button text-white font-bold py-3.5 px-6 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                  data-testid="button-claim-tokens"
-                  style={{ fontFamily: "var(--font-display)" }}
-                >
-                  {claiming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
-                  {claiming ? "Claiming..." : `Claim ${progress.claimable.toFixed(2)} Tokens`}
-                </button>
+              {progress.claimableUsdt > 0.0001 ? (
+                <div className="space-y-2">
+                  <div className="p-3 rounded-xl bg-amber-500/10 border border-amber-500/20">
+                    <p className="text-xs font-medium text-amber-400 mb-0.5">Ready to Claim</p>
+                    <p className="text-[10px] text-muted-foreground">
+                      ${progress.claimableUsdt.toFixed(4)} USDT → ~{progress.claimableTokens.toFixed(4)} M-Tokens at current buy price (${buyPrice.toFixed(6)})
+                    </p>
+                  </div>
+                  <button
+                    onClick={handleClaim}
+                    disabled={claiming}
+                    className="w-full glow-button text-white font-bold py-3.5 px-6 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                    data-testid="button-claim-tokens"
+                    style={{ fontFamily: "var(--font-display)" }}
+                  >
+                    {claiming ? <Loader2 className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+                    {claiming ? "Claiming..." : `Claim ~${progress.claimableTokens.toFixed(2)} M-Tokens`}
+                  </button>
+                </div>
               ) : (
                 <div className="w-full py-3.5 px-6 rounded-xl bg-white/[0.03] border border-white/[0.06] text-center text-sm text-muted-foreground" data-testid="text-no-claimable">
-                  No tokens available to claim right now
+                  No rewards available to claim right now
                 </div>
               )}
               {claimResult && (

@@ -2,7 +2,6 @@ import { useState, useEffect, useCallback } from "react";
 import { ArrowLeftRight, Loader2, ArrowDownToLine, ArrowUpRight, RefreshCw, Package, Coins, Wallet, ChevronLeft, ChevronRight, Users, GitBranch, Layers, Trophy, Star } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { PACKAGE_NAMES } from "@/lib/contract";
 
 interface ContractTx {
   type: string;

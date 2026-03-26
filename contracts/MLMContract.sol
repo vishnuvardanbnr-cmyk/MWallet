@@ -557,6 +557,8 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
             u.carryLeft  -= totalMatchedLeft;
             u.carryRight -= totalMatchedRight;
 
+            u.todayBinaryIncome  = 0;
+            u.lastBinaryResetDay = block.timestamp / 1 days;
             u.claimableBinaryIncome += totalBinaryIncome;
             emit BinaryIncomeAllocated(userAddr, totalBinaryIncome);
             processedCount++;
@@ -569,12 +571,6 @@ contract MLMContract is Ownable, ReentrancyGuard, Pausable {
         User storage u = users[msg.sender];
         require(u.status == Status.ACTIVE || u.status == Status.GRACE_PERIOD, "NA");
         require(u.claimableBinaryIncome > 0, "NC");
-
-        uint256 today = block.timestamp / 1 days;
-        if (u.lastBinaryResetDay < today) {
-            u.todayBinaryIncome  = 0;
-            u.lastBinaryResetDay = today;
-        }
 
         uint256 cap = dailyCapping[uint256(u.userPackage)];
         uint256 remainingCap = 0;

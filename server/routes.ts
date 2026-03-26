@@ -29,7 +29,7 @@ const MLM_READ_ABI = [
   "function getUserInfo(address _user) external view returns (uint256 userId, address sponsor, address binaryParent, address leftChild, address rightChild, uint8 placementSide, uint8 userPackage, uint8 status, uint256 walletBalance, uint256 tempWalletBalance, uint256 totalEarnings, uint256 directReferralCount, uint256 joinedAt)",
 ];
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
-const MLM_CONTRACT_ADDR = "0x284dcb5C8F2407c135713a093A4fB42Ef2b1bCBF";
+const MLM_CONTRACT_ADDR = process.env.VITE_CONTRACT_ADDRESS || "0x6Ff2b61d1882e7a122b09a109F78F5b2E5ef174e";
 
 async function distributeStakingOverride(fromWallet: string, usdtProfit: number): Promise<void> {
   try {
@@ -134,24 +134,23 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Invalid package level" });
       }
 
-      const econ = await storage.getTokenEconomics();
-      const TOKEN_PRICE = parseFloat(econ.listingPrice) || 0.0036;
       const multiplier = 0.1;
-      const totalUsd = activationFee * multiplier;
-      const totalTokens = totalUsd / TOKEN_PRICE;
+      const totalUsdtReward = activationFee * multiplier; // e.g. $60 for Pro package
       const totalDays = parsed.planMonths * 30;
-      const dailyTokens = totalTokens / totalDays;
+      const dailyUsdtReward = totalUsdtReward / totalDays; // e.g. $0.20/day
 
       const startDate = new Date();
       const endDate = new Date();
       endDate.setDate(endDate.getDate() + totalDays);
 
+      // dailyTokens and totalTokens columns are repurposed to store USDT values.
+      // At claim time the USDT value is converted to M-Tokens at the current buy price.
       const plan = await storage.createStakingPlan({
         walletAddress: addr,
         planMonths: parsed.planMonths,
         activationFee: activationFee.toString(),
-        totalTokens: totalTokens.toString(),
-        dailyTokens: dailyTokens.toFixed(6),
+        totalTokens: totalUsdtReward.toFixed(6),     // total USDT reward budget
+        dailyTokens: dailyUsdtReward.toFixed(6),     // daily USDT reward
         startDate,
         endDate,
       });
@@ -195,44 +194,57 @@ export async function registerRoutes(
 
       const now = new Date();
       const endDate = new Date(plan.endDate);
-
-      if (now > endDate) {
-        now.setTime(endDate.getTime());
-      }
+      if (now > endDate) now.setTime(endDate.getTime());
 
       const startMs = new Date(plan.startDate).getTime();
-      const totalElapsedDays = Math.floor((now.getTime() - startMs) / (1000 * 60 * 60 * 24));
-      const dailyAmount = parseFloat(plan.dailyTokens);
-      const alreadyClaimed = parseFloat(plan.claimedTokens);
-      const totalAvailable = parseFloat(plan.totalTokens);
-      const totalEarnedToDate = Math.min(totalElapsedDays * dailyAmount, totalAvailable);
-      const claimable = totalEarnedToDate - alreadyClaimed;
+      const totalElapsedDays = Math.floor((now.getTime() - startMs) / (1000 * 60 * 5)); // [TEST MODE] 5 min periods (prod: 1000*60*60*24)
+      const lastClaimMs = plan.lastClaimDate
+        ? new Date(plan.lastClaimDate).getTime()
+        : startMs;
+      const daysSinceClaim = Math.floor((now.getTime() - lastClaimMs) / (1000 * 60 * 5)); // [TEST MODE] 5 min periods (prod: 1000*60*60*24)
 
-      if (claimable < 0.001) {
-        if (alreadyClaimed >= totalAvailable - 0.001) {
-          return res.status(400).json({ message: "All tokens have been claimed for this plan" });
+      // dailyTokens/totalTokens columns store USDT values (repurposed at plan creation)
+      const dailyUsdtReward = parseFloat(plan.dailyTokens);
+      const totalUsdtBudget = parseFloat(plan.totalTokens);
+      const alreadyClaimedUsdt = parseFloat(plan.claimedTokens);
+
+      const totalUsdtEarned = Math.min(totalElapsedDays * dailyUsdtReward, totalUsdtBudget);
+      const pendingUsdt = Math.min(totalUsdtEarned - alreadyClaimedUsdt, totalUsdtBudget - alreadyClaimedUsdt);
+
+      if (pendingUsdt < 0.0001) {
+        if (alreadyClaimedUsdt >= totalUsdtBudget - 0.0001) {
+          return res.status(400).json({ message: "All rewards have been claimed for this plan" });
         }
-        return res.status(400).json({ message: "No tokens available to claim yet. Come back tomorrow!" });
+        return res.status(400).json({ message: "No rewards available yet. Come back tomorrow!" });
       }
 
-      const finalClaim = Math.min(claimable, totalAvailable - alreadyClaimed);
-      const daysSinceClaim = plan.lastClaimDate
-        ? Math.floor((now.getTime() - new Date(plan.lastClaimDate).getTime()) / (1000 * 60 * 60 * 24))
-        : totalElapsedDays;
-
-      const claimStr = finalClaim.toFixed(6);
+      // Convert pending USDT reward to M-Tokens at current buy price
+      const { buyPrice } = await getTokenPrice();
+      const tokensToGive = pendingUsdt / buyPrice;
+      const tokenStr = tokensToGive.toFixed(6);
       const claimDays = Math.max(daysSinceClaim, 1);
-      const updatedPlan = await storage.claimTokens(plan.id, claimStr);
-      await storage.addToMwalletBalance(addr, claimStr);
+
+      // claimedTokens column tracks cumulative USDT claimed (repurposed)
+      const updatedPlan = await storage.claimTokens(plan.id, pendingUsdt.toFixed(6));
+      await storage.addToMwalletBalance(addr, tokenStr);
       await storage.createStakingClaim({
         walletAddress: addr,
         planId: plan.id,
-        amount: claimStr,
+        amount: tokenStr,
         daysCount: claimDays,
       });
 
-      const newClaimed = parseFloat(updatedPlan.claimedTokens);
-      if (newClaimed >= totalAvailable - 0.001) {
+      await storage.logTokenTransaction({
+        walletAddress: addr,
+        txType: "free_stake_reward",
+        tokenAmount: tokenStr,
+        usdtAmount: pendingUsdt.toFixed(6),
+        priceAtTxn: buyPrice.toFixed(8),
+        note: `Free staking: ${claimDays} day(s) × $${dailyUsdtReward.toFixed(6)}/day @ buy price $${buyPrice.toFixed(8)}`,
+      });
+
+      const newClaimedUsdt = parseFloat(updatedPlan.claimedTokens);
+      if (newClaimedUsdt >= totalUsdtBudget - 0.0001) {
         const { db } = await import("./db");
         const { stakingPlans: stakingTable } = await import("@shared/schema");
         const { eq } = await import("drizzle-orm");
@@ -240,10 +252,12 @@ export async function registerRoutes(
       }
 
       res.json({
-        claimed: claimStr,
+        claimed: tokenStr,          // M-Tokens received
+        usdtValue: pendingUsdt.toFixed(6),
+        priceUsed: buyPrice.toFixed(8),
         days: claimDays,
-        totalClaimed: updatedPlan.claimedTokens,
-        remaining: (totalAvailable - newClaimed).toFixed(6),
+        totalClaimedUsdt: newClaimedUsdt.toFixed(6),
+        remainingUsdt: Math.max(0, totalUsdtBudget - newClaimedUsdt).toFixed(6),
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -483,8 +497,8 @@ export async function registerRoutes(
         return res.status(400).json({ message: "Transaction failed on-chain" });
       }
 
-      // Verify the Deposited(address indexed user, uint256 amount) event from BoardMatrixHandler
-      const BOARD_HANDLER = "0x0C63B585586E263DC801554d40A72F84976FdCfc".toLowerCase();
+      // Verify the Deposited(address indexed user, uint256 amount) event from DepositVault
+      const BOARD_HANDLER = (process.env.VITE_DEPOSIT_VAULT_ADDRESS || "0xD307FB39d7d42B59AC46e28D71ef72019E9D5e38").toLowerCase();
       const DEPOSITED_TOPIC = ethers.id("Deposited(address,uint256)").toLowerCase();
 
       let verifiedAmount: string | null = null;
@@ -598,55 +612,9 @@ export async function registerRoutes(
       const allocationStr = usdtAmt.toFixed(4);
       const reward = await storage.claimLeadershipReward(addr, rank, allocationStr);
 
-      // Auto-create a paid staking plan with the rank reward instead of crediting virtual wallet
-      const { buyPrice } = await getTokenPrice();
-      const theoreticalTokens = usdtAmt / buyPrice;
-      const mintedTokens = theoreticalTokens * 0.9;
-      const userTokens   = theoreticalTokens * 0.7;
-      const adminTokens  = theoreticalTokens * 0.2;
-      const dailyRewardUsdt = usdtAmt * 0.003; // 0.3% daily
-
-      const startDate = new Date();
-      const endDate = new Date(startDate);
-      endDate.setMonth(endDate.getMonth() + 10);
-
-      const stakingPlan = await storage.createPaidStakingPlan({
-        walletAddress: addr,
-        usdtInvested:        usdtAmt.toFixed(4),
-        buyPriceAtEntry:     buyPrice.toFixed(8),
-        totalTokensMinted:   mintedTokens.toFixed(8),
-        userTokens:          userTokens.toFixed(8),
-        adminTokens:         adminTokens.toFixed(8),
-        dailyRewardUsdt:     dailyRewardUsdt.toFixed(4),
-        startDate,
-        endDate,
-      });
-
-      // Update global token economics
-      const econ = await storage.getTokenEconomics();
-      await storage.updateTokenEconomics({
-        circulatingSupply: (parseFloat(econ.circulatingSupply) + mintedTokens).toFixed(8),
-        liquidity:         (parseFloat(econ.liquidity) + usdtAmt).toFixed(8),
-      });
-
-      // Credit tokens to user's M-token balance
-      await storage.addMTokenMainBalance(addr, userTokens.toFixed(8));
-
-      // Log the staking transaction
-      await storage.logTokenTransaction({
-        walletAddress: addr,
-        txType:      "paid_stake",
-        tokenAmount: mintedTokens.toFixed(8),
-        usdtAmount:  usdtAmt.toFixed(4),
-        priceAtTxn:  buyPrice.toFixed(8),
-        note:        `Auto-staked Star ${rank} rank reward: $${usdtAmt.toLocaleString()} USDT`,
-      });
-
       res.json({
         reward,
-        stakingPlan,
-        autoStaked: allocationStr,
-        message: `$${rankInfo.allocation.toLocaleString()} USDT auto-staked for Star ${rank} rank! Earning $${dailyRewardUsdt.toFixed(2)}/day starting now.`,
+        message: `Star ${rank} reward of $${rankInfo.allocation.toLocaleString()} USDT claimed successfully.`,
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -659,16 +627,24 @@ export async function registerRoutes(
   app.get("/api/paidstaking/:walletAddress", async (req, res) => {
     try {
       const addr = req.params.walletAddress.toLowerCase();
-      const [activePlan, allPlans, mTokenBal, usdtBal, tokenTxns, overrideIncome] = await Promise.all([
+      const [activePlan, allPlans, mTokenBal, usdtBal, tokenTxns, overrideIncome, freeBatches] = await Promise.all([
         storage.getActivePaidStakingPlan(addr),
         storage.getAllPaidStakingPlans(addr),
         storage.getMTokenBalance(addr),
         storage.getVirtualUsdtBalance(addr),
         storage.getTokenTransactions(addr),
         storage.getStakingOverrideIncome(addr),
+        storage.getFreeBatches(addr),
       ]);
       const { buyPrice, sellPrice } = await getTokenPrice();
       const overrideTotal = overrideIncome.reduce((s, r) => s + parseFloat(r.amountUsdt), 0);
+
+      // Get staked batch for active plan if exists
+      let stakedBatch = null;
+      if (activePlan) {
+        stakedBatch = await storage.getStakedBatch(addr, activePlan.id);
+      }
+
       res.json({
         activePlan,
         allPlans,
@@ -679,6 +655,8 @@ export async function registerRoutes(
         tokenTransactions: tokenTxns,
         overrideIncome,
         overrideTotalUsdt: overrideTotal.toFixed(4),
+        freeBatches,
+        stakedBatch,
       });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
@@ -686,6 +664,8 @@ export async function registerRoutes(
   });
 
   // POST /api/paidstaking/stake
+  // Tokens are LOCKED in a purchase batch (NOT added to mainBalance).
+  // No daily rewards. Sell after 10 months at 4x entry price cap.
   app.post("/api/paidstaking/stake", async (req, res) => {
     try {
       const { walletAddress, usdtAmount } = req.body;
@@ -695,7 +675,6 @@ export async function registerRoutes(
       const usdtAmt = parseFloat(usdtAmount);
       const addr = walletAddress.toLowerCase();
 
-      // Check virtual USDT balance
       const usdtBal = await storage.getVirtualUsdtBalance(addr);
       if (!usdtBal || parseFloat(usdtBal.balance) < usdtAmt) {
         return res.status(400).json({ message: "Insufficient virtual USDT balance" });
@@ -703,32 +682,24 @@ export async function registerRoutes(
 
       const { buyPrice } = await getTokenPrice();
 
-      // Token calculations
+      // Token calculations — user gets 70% of theoretical tokens, locked in plan
       const theoreticalTokens = usdtAmt / buyPrice;
-      const mintedTokens = theoreticalTokens * 0.9;       // mint 90%
-      const userTokens = theoreticalTokens * 0.7;          // user gets 70%
-      const adminTokens = theoreticalTokens * 0.2;         // admin gets 20%
-      const dailyRewardUsdt = usdtAmt * 0.003;             // 0.3% daily of invested USDT
+      const mintedTokens = theoreticalTokens * 0.9;   // 90% minted total
+      const userTokens = theoreticalTokens * 0.7;      // 70% locked for user
+      const adminTokens = theoreticalTokens * 0.2;     // 20% for admin
 
-      // Deduct USDT from user, add to liquidity (USDT backs the token supply)
       await storage.deductVirtualUsdt(addr, usdtAmt.toString());
 
-      // Update circulating supply and liquidity
       const econ = await storage.getTokenEconomics();
-      const newSupply = parseFloat(econ.circulatingSupply) + mintedTokens;
-      const newLiquidity = parseFloat(econ.liquidity) + usdtAmt;
       await storage.updateTokenEconomics({
-        circulatingSupply: newSupply.toFixed(8),
-        liquidity: newLiquidity.toFixed(8),
+        circulatingSupply: (parseFloat(econ.circulatingSupply) + mintedTokens).toFixed(8),
+        liquidity: (parseFloat(econ.liquidity) + usdtAmt).toFixed(8),
       });
 
-      // Add user's tokens to their M token main balance
-      await storage.addMTokenMainBalance(addr, userTokens.toFixed(8));
-
-      // Create the staking plan
+      // Tokens are NOT added to mainBalance — they are locked in the staking plan
       const startDate = new Date();
       const endDate = new Date(startDate);
-      endDate.setMonth(endDate.getMonth() + 10); // 10 months
+      endDate.setMinutes(endDate.getMinutes() + 10 * 5); // [TEST MODE] 10 months × 5 min/month = 50 min (prod: setMonth +10)
 
       const plan = await storage.createPaidStakingPlan({
         walletAddress: addr,
@@ -737,22 +708,86 @@ export async function registerRoutes(
         totalTokensMinted: mintedTokens.toFixed(8),
         userTokens: userTokens.toFixed(8),
         adminTokens: adminTokens.toFixed(8),
-        dailyRewardUsdt: dailyRewardUsdt.toFixed(4),
+        dailyRewardUsdt: "0",   // No daily rewards — price appreciation only
         startDate,
         endDate,
       });
 
-      // Log transaction
+      // Create a staked purchase batch for sell-cap tracking (4x cap)
+      await storage.createTokenBatch({
+        walletAddress: addr,
+        tokenAmount: userTokens.toFixed(8),
+        tokensRemaining: userTokens.toFixed(8),
+        entryPrice: buyPrice.toFixed(8),
+        batchType: "staked",
+        stakingPlanId: plan.id,
+      });
+
       await storage.logTokenTransaction({
         walletAddress: addr,
         txType: "paid_stake",
-        tokenAmount: mintedTokens.toFixed(8),
+        tokenAmount: userTokens.toFixed(8),
         usdtAmount: usdtAmt.toFixed(4),
         priceAtTxn: buyPrice.toFixed(8),
-        note: `Staked $${usdtAmt} USDT. User: ${userTokens.toFixed(2)} tokens, Admin: ${adminTokens.toFixed(2)} tokens`,
+        note: `Staked $${usdtAmt} USDT @ $${buyPrice.toFixed(8)}/token. ${userTokens.toFixed(2)} tokens locked for 10 months. 4x sell cap = $${(buyPrice * 4).toFixed(8)}/token`,
       });
 
-      res.json({ plan, mintedTokens: mintedTokens.toFixed(8), userTokens: userTokens.toFixed(8), adminTokens: adminTokens.toFixed(8), buyPriceUsed: buyPrice.toFixed(8) });
+      res.json({ plan, userTokens: userTokens.toFixed(8), adminTokens: adminTokens.toFixed(8), buyPriceUsed: buyPrice.toFixed(8), capPrice: (buyPrice * 4).toFixed(8) });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/paidstaking/buy-hold
+  // Buy M-tokens without staking. Added to mainBalance. 2x entry price sell cap.
+  app.post("/api/paidstaking/buy-hold", async (req, res) => {
+    try {
+      const { walletAddress, usdtAmount } = req.body;
+      if (!walletAddress || !usdtAmount || parseFloat(usdtAmount) <= 0) {
+        return res.status(400).json({ message: "walletAddress and positive usdtAmount required" });
+      }
+      const usdtAmt = parseFloat(usdtAmount);
+      const addr = walletAddress.toLowerCase();
+
+      const usdtBal = await storage.getVirtualUsdtBalance(addr);
+      if (!usdtBal || parseFloat(usdtBal.balance) < usdtAmt) {
+        return res.status(400).json({ message: "Insufficient virtual USDT balance" });
+      }
+
+      const { buyPrice } = await getTokenPrice();
+      const tokens = usdtAmt / buyPrice;  // 100% go to user, no lock
+
+      await storage.deductVirtualUsdt(addr, usdtAmt.toString());
+
+      const econ = await storage.getTokenEconomics();
+      await storage.updateTokenEconomics({
+        circulatingSupply: (parseFloat(econ.circulatingSupply) + tokens).toFixed(8),
+        liquidity: (parseFloat(econ.liquidity) + usdtAmt).toFixed(8),
+      });
+
+      // Add directly to mainBalance (no lock)
+      await storage.addMTokenMainBalance(addr, tokens.toFixed(8));
+
+      // Create a free purchase batch for sell-cap tracking (2x cap)
+      const batch = await storage.createTokenBatch({
+        walletAddress: addr,
+        tokenAmount: tokens.toFixed(8),
+        tokensRemaining: tokens.toFixed(8),
+        entryPrice: buyPrice.toFixed(8),
+        batchType: "free",
+        stakingPlanId: null,
+      });
+
+      await storage.logTokenTransaction({
+        walletAddress: addr,
+        txType: "buy_hold",
+        tokenAmount: tokens.toFixed(8),
+        usdtAmount: usdtAmt.toFixed(4),
+        priceAtTxn: buyPrice.toFixed(8),
+        note: `Bought & held ${tokens.toFixed(2)} M-tokens @ $${buyPrice.toFixed(8)}. 2x cap = $${(buyPrice * 2).toFixed(8)}/token`,
+      });
+
+      res.json({ tokens: tokens.toFixed(8), buyPriceUsed: buyPrice.toFixed(8), capPrice: (buyPrice * 2).toFixed(8), batch });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -770,9 +805,9 @@ export async function registerRoutes(
 
       const now = new Date();
       const lastClaim = plan.lastRewardClaimDate ? new Date(plan.lastRewardClaimDate) : new Date(plan.startDate);
-      const daysSince = Math.floor((now.getTime() - lastClaim.getTime()) / (1000 * 60 * 60 * 24));
+      const daysSince = Math.floor((now.getTime() - lastClaim.getTime()) / (1000 * 60 * 5)); // [TEST MODE] 5 min periods (prod: 1000*60*60*24)
 
-      if (daysSince < 1) return res.status(400).json({ message: "Rewards can only be claimed once per day" });
+      if (daysSince < 1) return res.status(400).json({ message: "Rewards can only be claimed once per 5 minutes" }); // [TEST MODE]
 
       const { buyPrice } = await getTokenPrice();
       const dailyUsdtValue = parseFloat(plan.dailyRewardUsdt);
@@ -817,9 +852,9 @@ export async function registerRoutes(
 
       const now = new Date();
       const lastClaim = plan.lastRewardClaimDate ? new Date(plan.lastRewardClaimDate) : new Date(plan.startDate);
-      const daysSince = Math.floor((now.getTime() - lastClaim.getTime()) / (1000 * 60 * 60 * 24));
+      const daysSince = Math.floor((now.getTime() - lastClaim.getTime()) / (1000 * 60 * 5)); // [TEST MODE] 5 min periods (prod: 1000*60*60*24)
 
-      if (daysSince < 1) return res.status(400).json({ message: "Rewards can only be claimed once per day" });
+      if (daysSince < 1) return res.status(400).json({ message: "Rewards can only be claimed once per 5 minutes" }); // [TEST MODE]
 
       const dailyUsdtValue = parseFloat(plan.dailyRewardUsdt);
       const totalUsdtReward = dailyUsdtValue * daysSince;
@@ -837,6 +872,171 @@ export async function registerRoutes(
       });
 
       res.json({ usdtClaimed: totalUsdtReward.toFixed(4), daysRewarded: daysSince });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/paidstaking/sell-staked  (sell locked staked tokens after 10 months at 4x entry price cap)
+  app.post("/api/paidstaking/sell-staked", async (req, res) => {
+    try {
+      const { walletAddress, planId, tokenAmount } = req.body;
+      if (!walletAddress || !planId || !tokenAmount || parseFloat(tokenAmount) <= 0) {
+        return res.status(400).json({ message: "walletAddress, planId and positive tokenAmount required" });
+      }
+      const addr = walletAddress.toLowerCase();
+      const tokens = parseFloat(tokenAmount);
+      const pid = parseInt(planId);
+
+      const batch = await storage.getStakedBatch(addr, pid);
+      if (!batch) return res.status(404).json({ message: "No staked token batch found for this plan" });
+
+      // Check lock period
+      const plans = await storage.getAllPaidStakingPlans(addr);
+      const plan = plans.find(p => p.id === pid);
+      if (!plan) return res.status(404).json({ message: "Staking plan not found" });
+      const now = new Date();
+      if (now < new Date(plan.endDate)) {
+        const daysLeft = Math.ceil((new Date(plan.endDate).getTime() - now.getTime()) / 86400000);
+        return res.status(400).json({ message: `Tokens locked for ${daysLeft} more days (until ${new Date(plan.endDate).toLocaleDateString()})` });
+      }
+
+      const remaining = parseFloat(batch.tokensRemaining);
+      if (tokens > remaining + 0.000001) {
+        return res.status(400).json({ message: `Only ${remaining.toFixed(8)} tokens remaining in this staked batch` });
+      }
+
+      const { sellPrice } = await getTokenPrice();
+      const entryPrice = parseFloat(batch.entryPrice);
+      const capPrice = entryPrice * 4;                          // 4x sell cap
+      const effectivePrice = Math.min(sellPrice, capPrice);     // user gets the lower of current or cap
+      const usdtToUser = tokens * effectivePrice;
+      const excessPerToken = Math.max(0, sellPrice - capPrice); // excess stays in company liquidity
+      const companyRetains = tokens * excessPerToken;
+
+      // Deduct from staked batch
+      await storage.deductFromBatch(batch.id, tokens.toFixed(8));
+
+      // Burn tokens from circulating supply; only reduce liquidity by what user receives
+      const econ = await storage.getTokenEconomics();
+      await storage.updateTokenEconomics({
+        circulatingSupply: Math.max(0, parseFloat(econ.circulatingSupply) - tokens).toFixed(8),
+        liquidity: Math.max(0, parseFloat(econ.liquidity) - usdtToUser).toFixed(8),
+      });
+
+      await storage.creditVirtualUsdt(addr, usdtToUser.toFixed(4));
+
+      // If batch exhausted, close the staking plan
+      const updatedBatch = await storage.getStakedBatch(addr, pid);
+      if (!updatedBatch || parseFloat(updatedBatch.tokensRemaining) < 0.00001) {
+        await storage.markPaidStakingUnstaked(pid, usdtToUser.toFixed(4));
+      }
+
+      await storage.logTokenTransaction({
+        walletAddress: addr,
+        txType: "sell_staked",
+        tokenAmount: tokens.toFixed(8),
+        usdtAmount: usdtToUser.toFixed(4),
+        priceAtTxn: effectivePrice.toFixed(8),
+        note: `Sold ${tokens.toFixed(4)} staked M-tokens. Entry: $${entryPrice.toFixed(8)}, Cap: $${capPrice.toFixed(8)}, Market: $${sellPrice.toFixed(8)}, Received: $${usdtToUser.toFixed(4)}, Company retained: $${companyRetains.toFixed(4)}`,
+      });
+
+      res.json({
+        usdtReceived: usdtToUser.toFixed(4),
+        tokensSold: tokens.toFixed(8),
+        effectivePrice: effectivePrice.toFixed(8),
+        capPrice: capPrice.toFixed(8),
+        marketPrice: sellPrice.toFixed(8),
+        companyRetains: companyRetains.toFixed(4),
+        tokensRemainingInBatch: updatedBatch ? updatedBatch.tokensRemaining : "0",
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // POST /api/paidstaking/sell-main-tokens
+  // Sell free/held M-tokens (from mainBalance) using FIFO purchase batches with 2x entry price cap.
+  // Excess above 2x cap stays in company liquidity pool.
+  app.post("/api/paidstaking/sell-main-tokens", async (req, res) => {
+    try {
+      const { walletAddress, tokenAmount } = req.body;
+      if (!walletAddress || !tokenAmount || parseFloat(tokenAmount) <= 0) {
+        return res.status(400).json({ message: "walletAddress and positive tokenAmount required" });
+      }
+      const addr = walletAddress.toLowerCase();
+      let tokensToSell = parseFloat(tokenAmount);
+
+      const mBal = await storage.getMTokenBalance(addr);
+      const mainBal = parseFloat(mBal?.mainBalance ?? "0");
+      if (mainBal < tokensToSell - 0.000001) {
+        return res.status(400).json({ message: "Insufficient M-Token main balance" });
+      }
+
+      const { sellPrice } = await getTokenPrice();
+
+      // Try FIFO free batches first (2x cap enforced)
+      const freeBatches = await storage.getFreeBatches(addr);
+      let totalUsdtToUser = 0;
+      let totalTokensBurned = 0;
+      let totalCompanyRetains = 0;
+      let remaining = tokensToSell;
+
+      if (freeBatches.length > 0) {
+        for (const batch of freeBatches) {
+          if (remaining <= 0) break;
+          const batchRemaining = parseFloat(batch.tokensRemaining);
+          const fromThisBatch = Math.min(remaining, batchRemaining);
+          const entryPrice = parseFloat(batch.entryPrice);
+          const capPrice = entryPrice * 2;
+          const effectivePrice = Math.min(sellPrice, capPrice);
+          const usdtFromBatch = fromThisBatch * effectivePrice;
+          const companyFromBatch = fromThisBatch * Math.max(0, sellPrice - capPrice);
+
+          totalUsdtToUser += usdtFromBatch;
+          totalCompanyRetains += companyFromBatch;
+          totalTokensBurned += fromThisBatch;
+          remaining -= fromThisBatch;
+
+          await storage.deductFromBatch(batch.id, fromThisBatch.toFixed(8));
+        }
+        // Any remaining tokens (beyond tracked batches) sell without cap (legacy)
+        if (remaining > 0.000001) {
+          totalUsdtToUser += remaining * sellPrice;
+          totalTokensBurned += remaining;
+          remaining = 0;
+        }
+      } else {
+        // No free batches — legacy sell at current price (no cap, backward compat)
+        totalUsdtToUser = tokensToSell * sellPrice;
+        totalTokensBurned = tokensToSell;
+      }
+
+      // Burn tokens from main balance and circulating supply
+      await storage.deductMTokenMainBalance(addr, totalTokensBurned.toFixed(8));
+      const econ = await storage.getTokenEconomics();
+      await storage.updateTokenEconomics({
+        circulatingSupply: Math.max(0, parseFloat(econ.circulatingSupply) - totalTokensBurned).toFixed(8),
+        liquidity: Math.max(0, parseFloat(econ.liquidity) - totalUsdtToUser).toFixed(8),
+      });
+
+      await storage.creditVirtualUsdt(addr, totalUsdtToUser.toFixed(4));
+
+      await storage.logTokenTransaction({
+        walletAddress: addr,
+        txType: "sell_main_tokens",
+        tokenAmount: totalTokensBurned.toFixed(8),
+        usdtAmount: totalUsdtToUser.toFixed(4),
+        priceAtTxn: sellPrice.toFixed(8),
+        note: `Sold ${totalTokensBurned.toFixed(4)} held M-tokens. Received: $${totalUsdtToUser.toFixed(4)}. Company retained: $${totalCompanyRetains.toFixed(4)} (2x cap enforced)`,
+      });
+
+      res.json({
+        usdtReceived: totalUsdtToUser.toFixed(4),
+        tokensBurned: totalTokensBurned.toFixed(8),
+        sellPriceUsed: sellPrice.toFixed(8),
+        companyRetains: totalCompanyRetains.toFixed(4),
+      });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -967,7 +1167,7 @@ export async function registerRoutes(
 
   // ── BTC Swap via backend liquidity wallet ──────────────────────────────────
 
-  const BOARD_HANDLER_TESTNET = "0x0C63B585586E263DC801554d40A72F84976FdCfc";
+  const BOARD_HANDLER_TESTNET = process.env.VITE_BOARD_HANDLER_ADDRESS || "0xAFDf34f6e2FBa1D1E9b1E4e180821b463c3cB72D";
   const BOARD_HANDLER_SYNC_ABI = ["function totalVirtualRewards(address) view returns (uint256)"];
 
   // POST /api/btcswap/sync/:walletAddress — sync on-chain board rewards to backend virtual balance
@@ -1161,10 +1361,6 @@ export async function registerRoutes(
       res.status(500).json({ message: err.message });
     }
   });
-
-  // Distribute staking override income daily for all active plans, independent of user claims
-  runDailyOverrideDistribution(); // run once immediately on startup to catch any missed days
-  setInterval(runDailyOverrideDistribution, 60 * 60 * 1000); // then every hour
 
   return httpServer;
 }
