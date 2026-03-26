@@ -1,6 +1,6 @@
 const { ethers } = require("hardhat");
 
-const MVAULT_CONTRACT = "0x285E52524C048E1dF22368F02563Ce561b10d647";
+const MVAULT_CONTRACT = "0x061A05290a668D30b8Ab5A52d8b2Ca115a3121FE";
 
 const ABI = [
   "function getPoolBalances() view returns (uint256 binary, uint256 reserve, uint256 admin)",

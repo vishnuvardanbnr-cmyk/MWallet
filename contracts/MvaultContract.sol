@@ -20,11 +20,12 @@ interface IMvaultToken {
 // MvaultContract
 //
 // Activation ($130 USDT):
-//   $130 → MvaultToken mints MVT (token keeps 10%)
+//   $130 → MvaultToken mints MVT (token keeps 10% for liquidity)
 //   Gross MVT (pre-deduction, e.g. 1,300) is the basis for all splits:
-//     40% → level income   (15 upline levels)
+//     30% → level income   (10 upline levels)
 //     30% → binaryPool     (admin distributes per cycle)
-//     30% → reservePool    (future use)
+//     30% → adminPool      (admin free pool)
+//     10% → liquidity      (handled by MvaultToken internally)
 //
 // Income limit  = 3 × $130 = $390 USDT per user.
 //   When user sells MVT → USDT first fills income limit → excess to rebirthPool.
@@ -65,8 +66,10 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // ── Constants ─────────────────────────────────────────────────────────────
     uint256 public constant PACKAGE_PRICE  = 130 * 1e18; // $130 USDT (18 decimals)
     uint256 public constant INCOME_LIMIT   = 390 * 1e18; // 3 × $130 per activation cycle
-    uint256 public constant LEVEL_ALLOC    = 40;          // % of gross MVT → level income
+    uint256 public constant LEVEL_ALLOC    = 30;          // % of gross MVT → level income (10 levels)
     uint256 public constant BINARY_ALLOC   = 30;          // % of gross MVT → binary pool
+    uint256 public constant ADMIN_ALLOC    = 30;          // % of gross MVT → admin free pool
+    // Liquidity 10% handled internally by MvaultToken (only 90% minted)
     uint256 public constant BTC_POOL_RATE  = 10;          // % of sell USDT → user BTC pool
 
     // ── User record ───────────────────────────────────────────────────────────
@@ -126,7 +129,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
     // ── Events ────────────────────────────────────────────────────────────────
     event Registered(address indexed user, address indexed sponsor, address indexed binaryParent, bool placeLeft);
-    event Activated(address indexed user, uint256 mvtMinted, uint256 grossMvt, uint256 levelAmt, uint256 binaryAmt, uint256 reserveAmt);
+    event Activated(address indexed user, uint256 mvtMinted, uint256 grossMvt, uint256 levelAmt, uint256 binaryAmt, uint256 adminAmt);
     event LevelIncomePaid(address indexed to, address indexed from, uint8 level, uint256 amount);
     event LevelIncomeSkipped(address indexed upline, uint8 level, uint256 amount);
     event BinaryIncomeDistributed(uint256 totalPool, uint256 binary70, uint256 powerLeg30, uint256 totalPairs);
@@ -283,24 +286,26 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         mvaultToken.addLiquidityAndMint(address(this), PACKAGE_PRICE);
         uint256 minted = mvaultToken.balanceOf(address(this)) - before; // actual 90%
 
-        // Split on GROSS basis (1,300 not 1,170)
-        uint256 levelAmt   = (grossMvt * LEVEL_ALLOC)  / 100;  // 40%
-        uint256 binaryAmt  = (grossMvt * BINARY_ALLOC) / 100;  // 30%
-        uint256 reserveAmt = grossMvt - levelAmt - binaryAmt;  // 30%
+        // Split on GROSS basis: 30% level + 30% binary + 30% admin + 10% liquidity (in MVT token)
+        uint256 levelAmt  = (grossMvt * LEVEL_ALLOC)  / 100;  // 30%
+        uint256 binaryAmt = (grossMvt * BINARY_ALLOC) / 100;  // 30%
+        uint256 adminAmt  = (grossMvt * ADMIN_ALLOC)  / 100;  // 30%
+        // Remaining ~10% (rounding dust) also goes to adminPool
+        uint256 dust = grossMvt - levelAmt - binaryAmt - adminAmt;
 
-        binaryPool  += binaryAmt;
-        reservePool += reserveAmt;
+        binaryPool += binaryAmt;
+        adminPool  += adminAmt + dust;
 
         users[user].isActive    = true;
         users[user].incomeLimit = INCOME_LIMIT; // $390
 
         _distributeLevelIncome(user, grossMvt, levelAmt);
 
-        emit Activated(user, minted, grossMvt, levelAmt, binaryAmt, reserveAmt);
+        emit Activated(user, minted, grossMvt, levelAmt, binaryAmt, adminAmt);
     }
 
     /**
-     * @dev Walks up 15 sponsor levels, credits qualifying uplines, unqualified → adminPool.
+     * @dev Walks up 10 sponsor levels, credits qualifying uplines, unqualified → adminPool.
      */
     function _distributeLevelIncome(
         address from,
@@ -310,7 +315,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         address cur = users[from].sponsor;
         uint256 distributed = 0;
 
-        for (uint8 lvl = 1; lvl <= 15 && cur != address(0); lvl++) {
+        for (uint8 lvl = 1; lvl <= 10 && cur != address(0); lvl++) {
             uint256 share = _levelShare(grossMvt, lvl);
             if (share == 0) { cur = users[cur].sponsor; continue; }
 
@@ -335,25 +340,25 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (levelAmt > distributed) adminPool += levelAmt - distributed;
     }
 
-    /** @dev Level share as % of gross MVT.  Rates sum to 40%. */
+    /** @dev Level share as % of gross MVT.  Rates sum to 30%. */
     function _levelShare(uint256 grossMvt, uint8 lvl) internal pure returns (uint256) {
-        if (lvl == 1)                  return (grossMvt * 20)  / 100;
-        if (lvl == 2)                  return (grossMvt * 5)   / 100;
-        if (lvl == 3)                  return (grossMvt * 4)   / 100;
-        if (lvl == 4)                  return (grossMvt * 3)   / 100;
-        if (lvl == 5)                  return (grossMvt * 2)   / 100;
-        if (lvl == 6)                  return (grossMvt * 1)   / 100;
-        if (lvl == 7)                  return (grossMvt * 1)   / 100;
-        if (lvl >= 8 && lvl <= 15)    return (grossMvt * 5)   / 1000; // 0.5%
+        if (lvl == 1)  return (grossMvt * 20)  / 100;   // 20%
+        if (lvl == 2)  return (grossMvt * 5)   / 100;   //  5%
+        if (lvl == 3)  return (grossMvt * 2)   / 100;   //  2%
+        if (lvl == 4)  return (grossMvt * 1)   / 100;   //  1%
+        if (lvl == 5)  return (grossMvt * 5)   / 1000;  //  0.5%
+        if (lvl == 6)  return (grossMvt * 5)   / 1000;  //  0.5%
+        if (lvl == 7)  return (grossMvt * 3)   / 1000;  //  0.3%
+        if (lvl == 8)  return (grossMvt * 3)   / 1000;  //  0.3%
+        if (lvl == 9)  return (grossMvt * 2)   / 1000;  //  0.2%
+        if (lvl == 10) return (grossMvt * 2)   / 1000;  //  0.2%
         return 0;
     }
 
     /** @dev Minimum directs needed to qualify at each level. */
     function _directReq(uint8 lvl) internal pure returns (uint256) {
-        if (lvl <= 1) return 0;
-        if (lvl <= 4) return 2;
-        if (lvl <= 7) return 5;
-        return 10; // L8-L15
+        if (lvl <= 4)  return 2;  // L1–L4: 2 direct sponsors
+        return 5;                 // L5–L10: 5 direct sponsors
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -11,22 +11,17 @@ interface IncomeProps {
   formatAmount: (val: bigint) => string;
 }
 
-const LEVEL_RATES: { level: number; pct: string; dirReq: number }[] = [
-  { level: 1, pct: "20%", dirReq: 0 },
-  { level: 2, pct: "5%", dirReq: 2 },
-  { level: 3, pct: "4%", dirReq: 2 },
-  { level: 4, pct: "3%", dirReq: 2 },
-  { level: 5, pct: "2%", dirReq: 5 },
-  { level: 6, pct: "1%", dirReq: 5 },
-  { level: 7, pct: "1%", dirReq: 5 },
-  { level: 8, pct: "0.5%", dirReq: 10 },
-  { level: 9, pct: "0.5%", dirReq: 10 },
-  { level: 10, pct: "0.5%", dirReq: 10 },
-  { level: 11, pct: "0.5%", dirReq: 10 },
-  { level: 12, pct: "0.5%", dirReq: 10 },
-  { level: 13, pct: "0.5%", dirReq: 10 },
-  { level: 14, pct: "0.5%", dirReq: 10 },
-  { level: 15, pct: "0.5%", dirReq: 10 },
+const LEVEL_RATES: { level: number; pct: string; value: string; dirReq: number }[] = [
+  { level: 1,  pct: "20%",  value: "$26.00", dirReq: 2 },
+  { level: 2,  pct: "5%",   value: "$6.50",  dirReq: 2 },
+  { level: 3,  pct: "2%",   value: "$2.60",  dirReq: 2 },
+  { level: 4,  pct: "1%",   value: "$1.30",  dirReq: 2 },
+  { level: 5,  pct: "0.5%", value: "$0.65",  dirReq: 5 },
+  { level: 6,  pct: "0.5%", value: "$0.65",  dirReq: 5 },
+  { level: 7,  pct: "0.3%", value: "$0.39",  dirReq: 5 },
+  { level: 8,  pct: "0.3%", value: "$0.39",  dirReq: 5 },
+  { level: 9,  pct: "0.2%", value: "$0.26",  dirReq: 5 },
+  { level: 10, pct: "0.2%", value: "$0.26",  dirReq: 5 },
 ];
 
 function mvtFmt(val: bigint) {
@@ -190,23 +185,23 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
               <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>
                 <span className="gradient-text">Level Income Structure</span>
               </h2>
-              <p className="text-[10px] text-muted-foreground">40% of each $130 activation distributed over 15 levels</p>
+              <p className="text-[10px] text-muted-foreground">30% of each $130 activation distributed over 10 levels</p>
             </div>
           </div>
-          <div className="mt-3 flex items-center gap-2">
+          <div className="mt-3 flex items-center gap-2 flex-wrap">
             <Badge variant="outline" className="text-[9px] border-amber-500/30 text-amber-400">
               You have {directCount} direct{directCount !== 1 ? "s" : ""}
             </Badge>
             <Badge variant="outline" className={`text-[9px] ${directCount >= 2 ? "border-emerald-500/30 text-emerald-400" : "border-muted-foreground/30 text-muted-foreground"}`}>
-              L2–L4: {directCount >= 2 ? "✓ Qualified" : `Need ${2 - directCount} more`}
+              L1–L4: {directCount >= 2 ? "✓ Qualified" : `Need ${2 - directCount} more`}
             </Badge>
             <Badge variant="outline" className={`text-[9px] ${directCount >= 5 ? "border-emerald-500/30 text-emerald-400" : "border-muted-foreground/30 text-muted-foreground"}`}>
-              L5–L7: {directCount >= 5 ? "✓ Qualified" : `Need ${5 - directCount} more`}
+              L5–L10: {directCount >= 5 ? "✓ Qualified" : `Need ${5 - directCount} more`}
             </Badge>
           </div>
         </div>
         <div className="divide-y divide-white/[0.04]">
-          {LEVEL_RATES.map(({ level, pct, dirReq }) => {
+          {LEVEL_RATES.map(({ level, pct, value, dirReq }) => {
             const qualified = directCount >= dirReq;
             return (
               <div key={level} className="flex items-center justify-between px-5 py-2.5" data-testid={`row-level-${level}`}>
@@ -215,8 +210,8 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
                     <span className="text-[11px] font-bold text-muted-foreground">L{level}</span>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold">{pct} of gross MVT</p>
-                    <p className="text-[10px] text-muted-foreground">{dirReq === 0 ? "No requirement" : `${dirReq} directs needed`}</p>
+                    <p className="text-xs font-semibold">{pct} of gross MVT <span className="text-muted-foreground font-normal">≈ {value}</span></p>
+                    <p className="text-[10px] text-muted-foreground">{dirReq} direct{dirReq !== 1 ? "s" : ""} required</p>
                   </div>
                 </div>
                 <Badge variant="outline" className={`text-[9px] ${qualified ? "border-emerald-500/30 text-emerald-400" : "border-muted-foreground/20 text-muted-foreground/50"}`}>
