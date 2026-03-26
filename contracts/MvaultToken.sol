@@ -24,7 +24,7 @@ contract MvaultToken is ERC20, Ownable, ReentrancyGuard {
     uint256 public totalMinted;
     uint256 public totalBurned;
 
-    uint256 public constant INITIAL_PRICE  = 0.1 ether;
+    uint256 public constant INITIAL_PRICE  = 0.01 ether;
     uint256 public constant MINT_PERCENTAGE = 90;
     uint256 public constant SELL_PERCENTAGE = 90;
 
