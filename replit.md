@@ -1,101 +1,81 @@
 # M-Vault — Web3 MLM/DeFi Platform
 
 ## Overview
-M-Vault is a Web3 MLM/DeFi platform for BNB Smart Chain. Users connect MetaMask wallets and participate in a binary MLM structure with staking rewards, board pools, BTC swap, and M Token paid staking.
+M-Vault is a Web3 MLM/DeFi platform for BNB Smart Chain. Users connect MetaMask wallets and participate in a binary MLM structure with staking rewards, board pools, BTC swap, and MVT token paid staking.
 
 **Production URL**: https://app.mvault.pro  
 **VPS**: 173.249.10.179 (root) — Ubuntu 24.04, Nginx → Node.js on port 5000  
 **VPS App Path**: /opt/mvault  
-**VPS SSH Password**: stored in secret `VPS_SSH_PASSWORD`
+**VPS SSH Password**: stored in secret `VPS_PASSWORD`
 
 ## Tech Stack
 - **Frontend**: React 18 + Vite + TailwindCSS + shadcn/ui + Wouter routing + TanStack Query + ethers.js
 - **Backend**: Node.js + Express 5 + Drizzle ORM + PostgreSQL
-- **Blockchain**: BSC (BNB Smart Chain) — testnet by default
-- **Process manager (VPS)**: PM2
+- **Blockchain**: BSC (BNB Smart Chain) — testnet active
+- **Process manager (VPS)**: PM2 (name: `mvault`)
 
-## Smart Contracts (BSC Testnet)
-- **MLMContract**: `0x284dcb5C8F2407c135713a093A4fB42Ef2b1bCBF` (redeployed — correct slab: Pro L1-5 at 1%, Stockist L1-5 at 1%)
-- **Payment Token (USDT)**: `0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3`
-- **BoardHandler**: `0x0C63B585586E263DC801554d40A72F84976FdCfc` (redeployed — linked to new MLMContract)
-- **Deployer wallet**: `0x12Fcf3d1084455d3677a110925D73b01F3846750`
+## Smart Contracts (BSC Testnet — ACTIVE)
+| Contract | Address |
+|---|---|
+| **MVault Main** | `0xa4E74AC04BD3EAdadA8728a117C691D850e7158C` |
+| **MVT Token** | `0x9FD2D859E55fE4245561E8EFdB10D500EF90f9eF` |
+| **USDT (testnet)** | `0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3` |
+| **Board Handler** | same as Main (0xa4E74...) |
 
-## Environment Variables
+## Deploying to VPS
+```bash
+bash scripts/update-vps.sh <TOKEN_ADDR> <CONTRACT_ADDR> <BOARD_ADDR>
+# Requires VPS_PASSWORD env secret and DEPLOYER_PRIVATE_KEY secret
+```
+
+## Environment Variables (VPS .env)
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | PostgreSQL connection string (Replit-managed) |
-| `VITE_CONTRACT_ADDRESS` | MLMContract address |
+| `VITE_MVAULT_CONTRACT_ADDRESS` | MVault main contract |
+| `VITE_MVT_TOKEN_ADDRESS` | MVT token contract |
 | `VITE_PAYMENT_TOKEN_ADDRESS` | USDT token address |
+| `VITE_BOARD_HANDLER_ADDRESS` | Board handler address |
 | `VITE_BSC_NETWORK` | `testnet` or `mainnet` |
-| `VITE_BOARD_HANDLER_ADDRESS` | BoardHandler contract address |
+| `DEPLOYER_PRIVATE_KEY` | Admin wallet for on-chain scripts |
+| `NEW_USER_PRIVATE_KEY` | Test wallet for registration scripts |
+
+## RPC Configuration
+All reads, BFS, and simulations use `https://bsc-testnet-rpc.publicnode.com` (direct, not MetaMask).  
+MetaMask is forced to add/update BSC testnet via `wallet_addEthereumChain` with publicnode as primary RPC on every connect, fixing inconsistent MetaMask simulations.
+
+## Registration Flow
+1. Sponsor address validated via publicnode RPC
+2. If sponsor's direct slots are taken → BFS up to 128 nodes to find first open slot
+3. `staticCall` simulates the tx via publicnode before sending — catches all revert reasons
+4. Actual tx goes through MetaMask with `gasLimit: 500_000` to skip `eth_estimateGas`
+5. All errors decoded with `decodeContractError()` from `client/src/lib/contract.ts`
 
 ## Project Structure
 ```
 client/src/
-  pages/           — All 16 pages (dashboard, income, wallet, team, board, staking, swap, etc.)
+  pages/           — All pages (dashboard, income, wallet, team, board, staking, transactions, register, etc.)
   components/      — App sidebar, logo, mobile nav, theme provider + shadcn/ui
   hooks/
     use-web3.ts    — MetaMask connection, contract calls, user state
-    use-support-ws.ts — WebSocket for support chat
   lib/
-    contract.ts    — Contract ABIs, addresses, helper functions
+    contract.ts    — ABIs, addresses, getDirectProvider(), decodeContractError()
     queryClient.ts — TanStack Query setup
 server/
   index.ts         — Express server entry
   routes.ts        — API routes
   storage.ts       — Database CRUD via Drizzle
-  db.ts            — PostgreSQL pool + Drizzle instance
-  websocket.ts     — WebSocket for support ticket real-time chat
 shared/
-  schema.ts        — Drizzle schema (profiles, staking_plans, staking_claims, mwallet_balances, support_tickets, ticket_messages)
+  schema.ts        — Drizzle schema
+scripts/
+  update-vps.sh    — Build + sync + restart on VPS
+  deploy-mvault.cjs — Contract deployment script
 ```
 
-## Pages
-| Route | Page | Description |
-|---|---|---|
-| `/` | Dashboard | Overview stats |
-| `/income` | Income | Direct, binary, matching income |
-| `/wallet` | Wallet | mWallet balance & withdrawals |
-| `/team` | Team | Binary tree & referrals |
-| `/binary` | Binary Details | Deep binary tree view |
-| `/board` | Board | BTC pool board entry |
-| `/swap` | BTC Swap | Swap virtual rewards to BTCB via PancakeSwap |
-| `/staking` | Staking | Token staking plans (15/30 month) |
-| `/store` | Store | Hardware product store |
-| `/transactions` | Transactions | On-chain transaction history |
-| `/support` | Support | Ticket system (admin: 0x127323b3...) |
-| `/profile` | Settings | Profile management |
-| `/register` | Register | Wallet-based registration |
-| `/activate` | Activate | Package selection |
+## TX_META Currency Rules
+- **MVT-denominated** (amber, no $): types 1 (Level Income), 2 (Level Missed), 3 (Binary Income), 4 (Power Leg)
+- **USDT-denominated** (green, with $): types 0, 5–11
 
-## Database Schema
-- `profiles` — wallet-linked user profiles
-- `staking_plans` — staking positions
-- `staking_claims` — daily claim history
-- `mwallet_balances` — off-chain wallet balances
-- `support_tickets` — support tickets
-- `ticket_messages` — support chat messages
-
-## Development
-```bash
-npm run dev        # Start dev server (port 5000)
-npm run db:push    # Push schema changes to database
-npm run build      # Build for production
-```
-
-## Deploying to VPS
-```bash
-# SSH into VPS
-sshpass -p "$VPS_SSH_PASSWORD" ssh root@173.249.10.179
-
-# On VPS: pull changes, rebuild, restart
-cd /opt/mvault
-git pull
-npm run build
-pm2 restart mvault
-```
-
-## Known Issues / Notes
-- The `.env` file on the VPS was being served publicly via `/api/.env` — this is a security vulnerability that should be blocked in nginx
-- BoardMatrixHandler contract changes (virtualRewardBalance, claimAndSwapToBTC, 9-member boards) are NOT yet deployed to the blockchain
-- The BTC Updater PM2 process has a placeholder private key and is not running
+## Known Notes
+- `getDirectReferralsPaginated` uses the contract view function directly (single call, not event scanning)
+- BFS and sponsor validation both use `getDirectProvider()` for consistent state with MetaMask tx simulation
+- `0x3794bBC8641Cc30232B193bD23B5fB4668e0Bb78` — registered as user #10 via test script (NEW_USER_PRIVATE_KEY), not yet activated
