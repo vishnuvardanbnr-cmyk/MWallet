@@ -5,7 +5,7 @@ import {
   Loader2, LogOut, UserPlus, Wallet, CheckCircle2, X,
   AlertCircle, Shield, ArrowRight, Users, ArrowDownLeft, ArrowDownRight,
 } from "lucide-react";
-import { shortenAddress, getMvaultContract, MVAULT_CONTRACT_ADDRESS, decodeContractError } from "@/lib/contract";
+import { shortenAddress, getMvaultContract, MVAULT_CONTRACT_ADDRESS, decodeContractError, getDirectProvider } from "@/lib/contract";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { ethers } from "ethers";
@@ -92,9 +92,9 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
   const [bfsSearching,   setBfsSearching]   = useState(false);
 
   // BFS through the binary tree to find the first open slot under startAddr
+  // Uses a direct RPC provider (not MetaMask) for consistent state
   const findFirstOpenSlot = useCallback(async (startAddr: string): Promise<AutoPlacement | null> => {
-    const provider = new ethers.BrowserProvider((window as any).ethereum);
-    const contract = getMvaultContract(provider);
+    const contract = getMvaultContract(getDirectProvider());
     const queue: string[] = [startAddr];
     let checked = 0;
     const MAX_NODES = 128; // safety limit
@@ -120,8 +120,7 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
     setValidating(true);
     setAutoPlacement(null);
     try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const contract = getMvaultContract(provider);
+      const contract = getMvaultContract(getDirectProvider());
       const info = await contract.getUserInfo(addr);
       const isReg = info[0];
       const isAct = info[1];
