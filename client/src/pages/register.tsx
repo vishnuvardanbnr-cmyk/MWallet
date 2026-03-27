@@ -90,14 +90,17 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
   const [validating,     setValidating]     = useState(false);
   const [autoPlacement,  setAutoPlacement]  = useState<AutoPlacement | null>(null);
   const [bfsSearching,   setBfsSearching]   = useState(false);
+  const [spilloverLeg,   setSpilloverLeg]   = useState<boolean>(placeLeft); // which leg BFS searched
 
-  // BFS through the binary tree to find the first open slot under startAddr
-  // Uses a direct RPC provider (not MetaMask) for consistent state
+  // BFS through the binary tree to find the first open slot starting from startAddr.
+  // Searches the subtree rooted at startAddr (left-first within that subtree).
+  // Uses a direct RPC provider (not MetaMask) for consistent chain state.
   const findFirstOpenSlot = useCallback(async (startAddr: string): Promise<AutoPlacement | null> => {
+    if (!startAddr || startAddr === ZERO_ADDRESS) return null;
     const contract = getMvaultContract(getDirectProvider());
     const queue: string[] = [startAddr];
     let checked = 0;
-    const MAX_NODES = 128; // safety limit
+    const MAX_NODES = 128;
     while (queue.length > 0 && checked < MAX_NODES) {
       const cur = queue.shift()!;
       checked++;
@@ -115,7 +118,10 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
     return null;
   }, []);
 
-  const validateSponsor = useCallback(async (addr: string) => {
+  // Validate sponsor and, if both slots full, BFS only into the preferred leg.
+  // preferLeft = true → spill into sponsor's LEFT subtree (child B)
+  // preferLeft = false → spill into sponsor's RIGHT subtree (child C)
+  const validateSponsor = useCallback(async (addr: string, preferLeft: boolean) => {
     if (!isValidAddress(addr)) { setSponsorInfo(null); setAutoPlacement(null); return; }
     setValidating(true);
     setAutoPlacement(null);
@@ -134,12 +140,15 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
         const si: SponsorInfo = { address: addr, displayName: dname, isActive: isAct, valid: true, leftTaken, rightTaken };
         setSponsorInfo(si);
         if (leftTaken && rightTaken) {
-          // Both slots full — BFS to find first open slot in downline
+          // Both direct slots full — spill into the REQUESTED leg only.
+          // preferLeft=true → start BFS from leftChild (B's subtree)
+          // preferLeft=false → start BFS from rightChild (C's subtree)
           setValidating(false);
           setBfsSearching(true);
-          const placement = await findFirstOpenSlot(addr);
+          setSpilloverLeg(preferLeft);
+          const legRoot = preferLeft ? leftChild : rightChild;
+          const placement = await findFirstOpenSlot(legRoot);
           setAutoPlacement(placement);
-          if (placement) setSelectedSide(placement.placeLeft);
           setBfsSearching(false);
         } else {
           // Auto-select the available side
@@ -155,11 +164,11 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (sponsorAddress.trim()) validateSponsor(sponsorAddress.trim());
+      if (sponsorAddress.trim()) validateSponsor(sponsorAddress.trim(), placeLeft);
       else setSponsorInfo(null);
     }, 600);
     return () => clearTimeout(timer);
-  }, [sponsorAddress, validateSponsor]);
+  }, [sponsorAddress, validateSponsor, placeLeft]);
 
   const handleRegister = async () => {
     if (!agreedToTerms) {
@@ -429,7 +438,9 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
                         <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-emerald-500/8 border border-emerald-500/20">
                           <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
                           <div>
-                            <p className="text-xs text-emerald-400 font-semibold">Auto-placed in downline</p>
+                            <p className="text-xs text-emerald-400 font-semibold">
+                              Auto-placed in sponsor's {spilloverLeg ? "Left" : "Right"} leg
+                            </p>
                             <p className="text-[10px] text-emerald-400/70 font-mono mt-0.5">
                               Under {shortenAddress(autoPlacement.parent)} · {autoPlacement.placeLeft ? "Left" : "Right"} slot
                             </p>
