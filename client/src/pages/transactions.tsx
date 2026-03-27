@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { ArrowLeftRight, Loader2, ArrowDownToLine, ArrowUpRight, RefreshCw, Package, Coins, Wallet, ChevronLeft, ChevronRight, Users, GitBranch, Layers, Trophy, Star, Zap, TrendingDown, Repeat2, Ban } from "lucide-react";
+import { ArrowLeftRight, Loader2, ArrowDownToLine, ArrowUpRight, RefreshCw, Package, Coins, Wallet, ChevronLeft, ChevronRight, Users, GitBranch, Layers, Trophy, Star, Zap, TrendingDown, Repeat2, Ban, Lock, Unlock, ChevronDown, ChevronUp, Info } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { ethers } from "ethers";
@@ -11,6 +11,8 @@ interface ContractTx {
   timestamp: number;
   isIncome: boolean;
   currency: "USDT" | "MVT";
+  mvtMinted?: bigint;
+  mvtReturned?: bigint;
 }
 
 interface TransactionsProps {
@@ -26,11 +28,12 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
   const [txLoading, setTxLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"all" | "income" | "activity" | "withdrawal">("all");
   const [currentPage, setCurrentPage] = useState(1);
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
 
   const loadTransactions = useCallback(async () => {
     setTxLoading(true);
     try {
-      const result = await getTransactionsFromContract(0, 100);
+      const result = await getTransactionsFromContract(0, 200);
       setAllTxs(result.transactions);
       setTotalCount(result.total);
       setCurrentPage(1);
@@ -48,70 +51,73 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
 
   const getTxIcon = (type: string) => {
     switch (type) {
-      case "Activation":        return Package;
-      case "Sell MVT":          return TrendingDown;
-      case "Withdrawal":        return ArrowDownToLine;
-      case "BTC Pool Withdraw": return ArrowDownToLine;
-      case "BTC Pool Credited": return Coins;
+      case "Activation":          return Package;
+      case "Sell MVT":            return TrendingDown;
+      case "Withdrawal":          return ArrowDownToLine;
+      case "BTC Pool Withdraw":   return ArrowDownToLine;
+      case "BTC Pool Credited":   return Coins;
       case "Level Income":        return Users;
       case "Level Income Missed": return Ban;
-      case "Binary Income":     return GitBranch;
-      case "Power Leg Income":  return Zap;
-      case "Rebirth":           return Repeat2;
-      case "Board Entry":       return Star;
-      case "Board Reward":      return Trophy;
-      default:                  return Coins;
+      case "Binary Income":       return GitBranch;
+      case "Power Leg Income":    return Zap;
+      case "Rebirth":             return Repeat2;
+      case "Board Entry":         return Star;
+      case "Board Reward":        return Trophy;
+      case "Staked":              return Lock;
+      case "Unstaked":            return Unlock;
+      default:                    return Coins;
     }
   };
 
   const getTxColor = (type: string) => {
     switch (type) {
-      case "Activation":        return { text: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/10" };
-      case "Sell MVT":          return { text: "text-rose-400",    bg: "bg-rose-500/10",    border: "border-rose-500/10" };
-      case "Withdrawal":        return { text: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10" };
-      case "BTC Pool Withdraw": return { text: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10" };
-      case "BTC Pool Credited": return { text: "text-amber-300",   bg: "bg-amber-600/10",   border: "border-amber-600/10" };
+      case "Activation":          return { text: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/10" };
+      case "Sell MVT":            return { text: "text-rose-400",    bg: "bg-rose-500/10",    border: "border-rose-500/10" };
+      case "Withdrawal":          return { text: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10" };
+      case "BTC Pool Withdraw":   return { text: "text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/10" };
+      case "BTC Pool Credited":   return { text: "text-amber-300",   bg: "bg-amber-600/10",   border: "border-amber-600/10" };
       case "Level Income":        return { text: "text-yellow-300",  bg: "bg-yellow-600/10",  border: "border-yellow-600/10" };
-      case "Level Income Missed": return { text: "text-orange-400",  bg: "bg-orange-500/8",   border: "border-orange-500/10" };
-      case "Binary Income":     return { text: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/10" };
-      case "Power Leg Income":  return { text: "text-violet-400",  bg: "bg-violet-500/10",  border: "border-violet-500/10" };
-      case "Rebirth":           return { text: "text-sky-400",     bg: "bg-sky-500/10",     border: "border-sky-500/10" };
-      case "Board Entry":       return { text: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/10" };
-      case "Board Reward":      return { text: "text-yellow-300",  bg: "bg-yellow-600/10",  border: "border-yellow-600/10" };
-      default:                  return { text: "text-muted-foreground", bg: "bg-white/[0.05]", border: "border-white/[0.05]" };
+      case "Level Income Missed": return { text: "text-orange-400",  bg: "bg-orange-500/10",  border: "border-orange-500/10" };
+      case "Binary Income":       return { text: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/10" };
+      case "Power Leg Income":    return { text: "text-violet-400",  bg: "bg-violet-500/10",  border: "border-violet-500/10" };
+      case "Rebirth":             return { text: "text-sky-400",     bg: "bg-sky-500/10",     border: "border-sky-500/10" };
+      case "Board Entry":         return { text: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/10" };
+      case "Board Reward":        return { text: "text-yellow-300",  bg: "bg-yellow-600/10",  border: "border-yellow-600/10" };
+      case "Staked":              return { text: "text-blue-400",    bg: "bg-blue-500/10",    border: "border-blue-500/10" };
+      case "Unstaked":            return { text: "text-purple-400",  bg: "bg-purple-500/10",  border: "border-purple-500/10" };
+      default:                    return { text: "text-muted-foreground", bg: "bg-white/[0.05]", border: "border-white/[0.05]" };
     }
   };
 
   const formatTimestamp = (ts: number) => {
     if (ts === 0) return "";
     const date = new Date(ts * 1000);
-    return date.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' }) + " " + date.toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
+    return date.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) + " " +
+           date.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
   };
 
-  // Format amount based on currency type with clean decimal places
+  const fmt2 = (val: bigint, decimals = 18) =>
+    parseFloat(ethers.formatUnits(val, decimals)).toFixed(2);
+
   const formatTxAmount = (amount: bigint, currency: "USDT" | "MVT") => {
     const raw = parseFloat(ethers.formatUnits(amount, 18));
     if (currency === "USDT") {
-      return { symbol: "$", value: raw.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }), suffix: "" };
+      return { symbol: "$", value: raw.toFixed(2), suffix: "" };
     }
-    // MVT: show up to 4 decimals, trim trailing zeros
-    const formatted = raw >= 1
-      ? raw.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })
-      : raw.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 4 });
-    return { symbol: "", value: formatted, suffix: " MVT" };
+    return { symbol: "", value: raw.toFixed(2), suffix: " MVT" };
   };
 
-  const incomeTxs = allTxs.filter(tx => tx.isIncome);
+  const incomeTxs     = allTxs.filter(tx => tx.isIncome);
   const withdrawalTxs = allTxs.filter(tx => tx.type === "Withdrawal" || tx.type === "BTC Pool Withdraw");
-  const activityTxs = allTxs.filter(tx => !tx.isIncome && tx.type !== "Withdrawal" && tx.type !== "BTC Pool Withdraw");
-  const displayTxs = activeTab === "all" ? allTxs : activeTab === "income" ? incomeTxs : activeTab === "withdrawal" ? withdrawalTxs : activityTxs;
-  const totalPages = Math.max(1, Math.ceil(displayTxs.length / ITEMS_PER_PAGE));
-  const paginatedTxs = displayTxs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
+  const activityTxs   = allTxs.filter(tx => !tx.isIncome && tx.type !== "Withdrawal" && tx.type !== "BTC Pool Withdraw");
+  const displayTxs    = activeTab === "all" ? allTxs : activeTab === "income" ? incomeTxs : activeTab === "withdrawal" ? withdrawalTxs : activityTxs;
+  const totalPages    = Math.max(1, Math.ceil(displayTxs.length / ITEMS_PER_PAGE));
+  const paginatedTxs  = displayTxs.slice((currentPage - 1) * ITEMS_PER_PAGE, currentPage * ITEMS_PER_PAGE);
 
   const tabs = [
-    { key: "all" as const, label: "All", count: allTxs.length },
-    { key: "income" as const, label: "Income", count: incomeTxs.length },
-    { key: "activity" as const, label: "Activity", count: activityTxs.length },
+    { key: "all" as const,        label: "All",        count: allTxs.length },
+    { key: "income" as const,     label: "Income",     count: incomeTxs.length },
+    { key: "activity" as const,   label: "Activity",   count: activityTxs.length },
     { key: "withdrawal" as const, label: "Withdrawal", count: withdrawalTxs.length },
   ];
 
@@ -119,7 +125,7 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
     <div className="p-4 sm:p-6 space-y-6 relative z-10">
       <div className="flex items-center justify-between slide-in">
         <div>
-          <h1 className="text-2xl font-bold" data-testid="text-transactions-title" style={{ fontFamily: 'var(--font-display)' }}>
+          <h1 className="text-2xl font-bold" data-testid="text-transactions-title" style={{ fontFamily: "var(--font-display)" }}>
             <span className="gradient-text">Transactions</span>
           </h1>
           <p className="text-sm text-muted-foreground mt-0.5">All your on-chain activity</p>
@@ -129,11 +135,11 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
         </button>
       </div>
 
-      <div className="flex gap-2 slide-in" style={{ animationDelay: '0.05s' }}>
+      <div className="flex gap-2 flex-wrap slide-in" style={{ animationDelay: "0.05s" }}>
         {tabs.map(tab => (
           <button
             key={tab.key}
-            onClick={() => { setActiveTab(tab.key); setCurrentPage(1); }}
+            onClick={() => { setActiveTab(tab.key); setCurrentPage(1); setExpandedIdx(null); }}
             className={`px-4 py-2 rounded-xl text-xs font-medium transition-all ${
               activeTab === tab.key
                 ? "glow-button text-white"
@@ -152,54 +158,133 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
           <p className="text-sm text-muted-foreground">Loading transactions...</p>
         </div>
       ) : displayTxs.length > 0 ? (
-        <div className="glass-card rounded-2xl slide-in" style={{ animationDelay: '0.1s' }}>
+        <div className="glass-card rounded-2xl slide-in" style={{ animationDelay: "0.1s" }}>
           <div className="divide-y divide-white/[0.04]">
             {paginatedTxs.map((tx, index) => {
-              const TxIcon = getTxIcon(tx.type);
-              const colors = getTxColor(tx.type);
-              const globalIndex = (currentPage - 1) * ITEMS_PER_PAGE + index;
+              const TxIcon    = getTxIcon(tx.type);
+              const colors    = getTxColor(tx.type);
+              const globalIdx = (currentPage - 1) * ITEMS_PER_PAGE + index;
+              const isExpanded = expandedIdx === globalIdx;
+              const canExpand  = tx.type === "Sell MVT" || tx.type === "Staked" || tx.type === "Unstaked";
+
               return (
-                <div key={`${tx.timestamp}-${globalIndex}`} className="flex items-center justify-between px-5 py-3.5" data-testid={`row-tx-${globalIndex}`}>
-                  <div className="flex items-center gap-3">
-                    <div className={`h-10 w-10 rounded-xl ${colors.bg} flex items-center justify-center shrink-0`}>
-                      <TxIcon className={`h-5 w-5 ${colors.text}`} />
-                    </div>
-                    <div>
-                      <div className="flex flex-wrap items-center gap-2">
-                        <span className="text-sm font-semibold" data-testid={`text-tx-type-${globalIndex}`}>{tx.type}</span>
-                        <Badge variant="outline" className="text-[10px] border-yellow-600/20">{tx.detail}</Badge>
+                <div key={`${tx.timestamp}-${globalIdx}`} data-testid={`row-tx-${globalIdx}`}>
+                  {/* Main row */}
+                  <div
+                    className={`flex items-center justify-between px-5 py-3.5 ${canExpand ? "cursor-pointer hover:bg-white/[0.02] transition-colors" : ""}`}
+                    onClick={() => canExpand && setExpandedIdx(isExpanded ? null : globalIdx)}
+                  >
+                    <div className="flex items-center gap-3">
+                      <div className={`h-10 w-10 rounded-xl ${colors.bg} flex items-center justify-center shrink-0`}>
+                        <TxIcon className={`h-5 w-5 ${colors.text}`} />
                       </div>
-                      <p className="text-[11px] text-muted-foreground mt-0.5">{formatTimestamp(tx.timestamp)}</p>
+                      <div>
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="text-sm font-semibold" data-testid={`text-tx-type-${globalIdx}`}>{tx.type}</span>
+                          <Badge variant="outline" className="text-[10px] border-yellow-600/20">{tx.detail}</Badge>
+                          {canExpand && (
+                            <span className="text-[9px] text-muted-foreground/50">tap for details</span>
+                          )}
+                        </div>
+                        <p className="text-[11px] text-muted-foreground mt-0.5">{formatTimestamp(tx.timestamp)}</p>
+                      </div>
                     </div>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    {tx.type === "Level Income Missed" ? (
-                      <div className="text-right">
-                        {(() => {
-                          const { symbol, value, suffix } = formatTxAmount(tx.amount, tx.currency ?? "MVT");
+                    <div className="flex items-center gap-2">
+                      {tx.type === "Level Income Missed" ? (
+                        <div className="text-right">
+                          {(() => {
+                            const { symbol, value, suffix } = formatTxAmount(tx.amount, tx.currency ?? "MVT");
+                            return (
+                              <>
+                                <span className="font-bold text-sm text-orange-400/70 line-through" style={{ fontFamily: "var(--font-display)" }} data-testid={`text-tx-amount-${globalIdx}`}>
+                                  {symbol}{value}{suffix}
+                                </span>
+                                <p className="text-[9px] text-orange-400/60">Missed — sent to admin</p>
+                              </>
+                            );
+                          })()}
+                        </div>
+                      ) : (
+                        (() => {
+                          const { symbol, value, suffix } = formatTxAmount(tx.amount, tx.currency ?? "USDT");
+                          const sign  = tx.isIncome || tx.type === "Withdrawal" ? "+" : "-";
+                          const color = tx.isIncome || tx.type === "Withdrawal" ? "text-emerald-400" : tx.type === "Staked" ? "text-blue-400" : tx.type === "Unstaked" ? "text-purple-400" : "";
                           return (
-                            <>
-                              <span className="font-bold text-sm text-orange-400/70 line-through" style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-tx-amount-${globalIndex}`}>
-                                {symbol}{value}{suffix}
-                              </span>
-                              <p className="text-[9px] text-orange-400/60">Missed — sent to admin</p>
-                            </>
+                            <span className={`font-bold text-sm ${color}`} style={{ fontFamily: "var(--font-display)" }} data-testid={`text-tx-amount-${globalIdx}`}>
+                              {sign}{symbol}{value}{suffix}
+                            </span>
                           );
-                        })()}
-                      </div>
-                    ) : (
-                      (() => {
-                        const { symbol, value, suffix } = formatTxAmount(tx.amount, tx.currency ?? "USDT");
-                        const sign = tx.isIncome || tx.type === "Withdrawal" ? "+" : "-";
-                        const color = tx.isIncome || tx.type === "Withdrawal" ? "text-emerald-400" : tx.currency === "MVT" ? "text-amber-300" : "";
-                        return (
-                          <span className={`font-bold text-sm ${color}`} style={{ fontFamily: 'var(--font-display)' }} data-testid={`text-tx-amount-${globalIndex}`}>
-                            {sign}{symbol}{value}{suffix}
-                          </span>
-                        );
-                      })()
-                    )}
+                        })()
+                      )}
+                      {canExpand && (
+                        isExpanded
+                          ? <ChevronUp className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+                          : <ChevronDown className="h-3.5 w-3.5 text-muted-foreground/40 shrink-0" />
+                      )}
+                    </div>
                   </div>
+
+                  {/* Expanded detail row */}
+                  {isExpanded && (
+                    <div className="px-5 pb-4 bg-white/[0.01]">
+                      <div className="rounded-xl border border-white/[0.06] p-3 space-y-2">
+                        <div className="flex items-center gap-1.5 mb-2">
+                          <Info className="h-3 w-3 text-muted-foreground/60" />
+                          <p className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider">Transaction Detail</p>
+                        </div>
+
+                        {tx.type === "Sell MVT" && (
+                          <div className="grid grid-cols-2 gap-2 text-[11px]">
+                            <div className="bg-white/[0.02] rounded-lg p-2">
+                              <p className="text-muted-foreground/60 mb-0.5">USDT Received (90%)</p>
+                              <p className="font-semibold text-emerald-400">${fmt2(tx.amount)}</p>
+                            </div>
+                            <div className="bg-white/[0.02] rounded-lg p-2">
+                              <p className="text-muted-foreground/60 mb-0.5">BTC Pool (10%)</p>
+                              <p className="font-semibold text-orange-400">~${(parseFloat(fmt2(tx.amount)) / 9).toFixed(2)}</p>
+                            </div>
+                            <div className="bg-white/[0.02] rounded-lg p-2 col-span-2">
+                              <p className="text-muted-foreground/60 mb-0.5">Total USDT from sell</p>
+                              <p className="font-semibold text-white">${(parseFloat(fmt2(tx.amount)) / 0.9).toFixed(2)}</p>
+                            </div>
+                          </div>
+                        )}
+
+                        {tx.type === "Staked" && (
+                          <div className="grid grid-cols-2 gap-2 text-[11px]">
+                            <div className="bg-white/[0.02] rounded-lg p-2">
+                              <p className="text-muted-foreground/60 mb-0.5">USDT Staked</p>
+                              <p className="font-semibold text-blue-400">${fmt2(tx.amount)}</p>
+                            </div>
+                            {tx.mvtMinted && tx.mvtMinted > 0n && (
+                              <div className="bg-white/[0.02] rounded-lg p-2">
+                                <p className="text-muted-foreground/60 mb-0.5">MVT Received</p>
+                                <p className="font-semibold text-amber-400">{fmt2(tx.mvtMinted)} MVT</p>
+                              </div>
+                            )}
+                            <div className="bg-white/[0.02] rounded-lg p-2 col-span-2 text-[10px] text-muted-foreground/60">
+                              {tx.detail.includes("Locked") ? "🔒 Locked stake — no cap, 10-month lock" : "🔓 Flexible stake — 2× cap, instant unstake"}
+                            </div>
+                          </div>
+                        )}
+
+                        {tx.type === "Unstaked" && (
+                          <div className="grid grid-cols-2 gap-2 text-[11px]">
+                            <div className="bg-white/[0.02] rounded-lg p-2">
+                              <p className="text-muted-foreground/60 mb-0.5">USDT Returned</p>
+                              <p className="font-semibold text-purple-400">${fmt2(tx.amount)}</p>
+                            </div>
+                            {tx.mvtReturned && tx.mvtReturned > 0n && (
+                              <div className="bg-white/[0.02] rounded-lg p-2">
+                                <p className="text-muted-foreground/60 mb-0.5">MVT Burned</p>
+                                <p className="font-semibold text-rose-400">{fmt2(tx.mvtReturned)} MVT</p>
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -208,16 +293,10 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
           {displayTxs.length > ITEMS_PER_PAGE && (
             <div className="flex items-center justify-between gap-2 px-5 py-3 border-t border-white/[0.06]">
               <p className="text-[11px] text-muted-foreground">
-                Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}-{Math.min(currentPage * ITEMS_PER_PAGE, displayTxs.length)} of {displayTxs.length}
+                Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–{Math.min(currentPage * ITEMS_PER_PAGE, displayTxs.length)} of {displayTxs.length}
               </p>
               <div className="flex items-center gap-1">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                  disabled={currentPage === 1}
-                  data-testid="button-txs-prev"
-                >
+                <Button variant="ghost" size="icon" onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={currentPage === 1} data-testid="button-txs-prev">
                   <ChevronLeft className="h-4 w-4" />
                 </Button>
                 {Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -226,7 +305,7 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
                     const showEllipsis = idx > 0 && page - arr[idx - 1] > 1;
                     return (
                       <span key={page} className="flex items-center gap-1">
-                        {showEllipsis && <span className="text-xs text-muted-foreground px-1">...</span>}
+                        {showEllipsis && <span className="text-xs text-muted-foreground px-1">…</span>}
                         <Button
                           variant={page === currentPage ? "default" : "ghost"}
                           size="icon"
@@ -239,13 +318,7 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
                       </span>
                     );
                   })}
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))}
-                  disabled={currentPage === totalPages}
-                  data-testid="button-txs-next"
-                >
+                <Button variant="ghost" size="icon" onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={currentPage === totalPages} data-testid="button-txs-next">
                   <ChevronRight className="h-4 w-4" />
                 </Button>
               </div>

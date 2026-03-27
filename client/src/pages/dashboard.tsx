@@ -275,7 +275,7 @@ export default function Dashboard({
       {/* Rebirth Pool */}
       {rebirthPoolNum > 0 && (
         <div className="glass-card rounded-2xl p-4 slide-in" style={{ animationDelay: "0.07s" }} data-testid="card-rebirth-pool">
-          <div className="flex items-center justify-between">
+          <div className="flex items-center justify-between mb-2">
             <div className="flex items-center gap-2">
               <div className="h-8 w-8 rounded-lg bg-purple-500/15 flex items-center justify-center">
                 <RotateCcw className="h-4 w-4 text-purple-400" />
@@ -289,14 +289,31 @@ export default function Dashboard({
             </div>
             {rebirthPoolNum >= 130 && (
               <Badge variant="outline" className="text-[9px] border-purple-500/30 text-purple-400 animate-pulse">
-                Rebirth Ready!
+                Ready!
               </Badge>
             )}
           </div>
-          {rebirthPoolNum < 130 && (
-            <p className="text-[10px] text-muted-foreground mt-2">
-              ${(130 - rebirthPoolNum).toFixed(2)} more needed to trigger rebirth ($130 required)
-            </p>
+
+          {rebirthPoolNum < 130 ? (
+            <div className="mt-1">
+              <div className="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden">
+                <div className="h-full rounded-full bg-purple-500/60 transition-all" style={{ width: `${Math.min(100, (rebirthPoolNum / 130) * 100)}%` }} />
+              </div>
+              <p className="text-[10px] text-muted-foreground mt-1.5">
+                ${(130 - rebirthPoolNum).toFixed(2)} more needed to trigger rebirth ($130 required)
+              </p>
+            </div>
+          ) : (
+            <div className="mt-2 space-y-2">
+              <p className="text-[10px] text-purple-300/80">$130 reached — create a new sub-account to continue earning beyond your $390 limit.</p>
+              <button
+                onClick={() => setLocation("/register-for")}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-purple-500/15 border border-purple-500/30 text-sm font-semibold text-purple-300 hover:bg-purple-500/20 transition-all"
+                data-testid="button-trigger-rebirth"
+              >
+                <RotateCcw className="h-4 w-4" /> Create Rebirth Account
+              </button>
+            </div>
           )}
         </div>
       )}

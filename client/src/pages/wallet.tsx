@@ -150,13 +150,13 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
             <div className="h-10 w-10 rounded-xl bg-orange-500/15 flex items-center justify-center">
               <Bitcoin className="h-5 w-5 text-orange-400" />
             </div>
-            <Badge variant="outline" className="text-[9px] border-orange-500/30 text-orange-400">10% of Sells</Badge>
+            <Badge variant="outline" className="text-[9px] border-orange-500/30 text-orange-400">BTC Conversion</Badge>
           </div>
-          <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">BTC Pool</p>
+          <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">BTC Pool Income</p>
           <p className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }} data-testid="text-btc-pool-balance">
             <span className="text-orange-400">${btcPoolBalance.toFixed(2)}</span>
           </p>
-          <p className="text-xs text-muted-foreground mt-1">10% deducted from every MVT sell</p>
+          <p className="text-xs text-muted-foreground mt-1">Accumulated from 10% of each MVT sell — will be converted to BTC</p>
           <button
             onClick={() => setShowBtcWithdrawDialog(true)}
             disabled={btcPoolBalance <= 0}
@@ -173,7 +173,7 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
         <Info className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
         <div className="text-[11px] text-muted-foreground leading-relaxed">
           <span className="text-amber-400 font-medium">How it works: </span>
-          Sell MVT tokens on the Sell MVT page → 90% fills your income limit → excess goes to rebirth pool. The withdrawable USDT here comes from selling MVT while your income limit is active. 10% of every sell goes to your BTC pool.
+          Sell MVT → 90% credited to your withdrawable USDT balance (up to $390 income limit), excess fills rebirth pool. 10% of every sell goes to your BTC Pool Income — this accumulates and will be converted to BTC.
         </div>
       </div>
 
@@ -241,7 +241,7 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
                   <div className="text-right">
                     {tx.amount > 0n && (
                       <p className={`text-sm font-bold ${tx.isIncome ? "text-emerald-400" : "text-muted-foreground"}`} data-testid={`text-tx-amount-${idx}`}>
-                        {tx.isIncome ? "+" : ""}{amtNum.toLocaleString(undefined, { maximumFractionDigits: 4 })}
+                        {tx.isIncome ? "+" : ""}{amtNum.toFixed(2)} {tx.currency ?? "USDT"}
                       </p>
                     )}
                     <p className="text-[9px] text-muted-foreground">

@@ -331,11 +331,9 @@ export function useWeb3() {
     try {
       const provider = getDirectProvider();
       const contract = getMvaultContract(provider);
-      // `sponsor` is the 2nd indexed topic in Registered(user, sponsor, binaryParent, placeLeft)
-      // so filtering by it is efficient — no full scan needed
       const filter = contract.filters.Registered(null, account);
-      const events = await contract.queryFilter(filter);
-      // events are oldest-first; reverse to newest-first for display
+      // Explicit block range avoids RPC timeout on BSC
+      const events = await contract.queryFilter(filter, 0, "latest");
       const allAddresses = events.map((e: any) => e.args[0] as string).reverse();
       const total = allAddresses.length;
       const referrals = allAddresses.slice(offset, offset + limit);
@@ -354,15 +352,7 @@ export function useWeb3() {
       const provider = getProvider();
       const contract = getMvaultContract(provider);
 
-      // Single on-chain read — no event querying, no block range limits.
-      const [records, totalBn] = await contract.getTransactions(account, BigInt(offset), BigInt(limit));
-      const total = Number(totalBn);
-
-      // txType → display metadata
-      // 0=Activation 1=LevelIncome 2=LevelMissed 3=BinaryIncome 4=PowerLeg
-      // 5=SellMVT 6=BtcCredited 7=UsdtWithdraw 8=BtcWithdraw 9=Rebirth
-      // 10=BoardEntry 11=BoardReward
-      // currency: "MVT" for token rewards, "USDT" for dollar amounts
+      // TX_META: type 0-11 from on-chain _recordTx
       const TX_META: Record<number, { type: string; isIncome: boolean; currency: "USDT" | "MVT"; detail: (r: any) => string }> = {
         0:  { type: "Activation",          isIncome: false, currency: "USDT", detail: ()  => "$130 package activated" },
         1:  { type: "Level Income",         isIncome: true,  currency: "MVT",  detail: (r) => {
@@ -375,7 +365,7 @@ export function useWeb3() {
         3:  { type: "Binary Income",        isIncome: true,  currency: "MVT",  detail: ()  => "Binary pairs matched" },
         4:  { type: "Power Leg Income",     isIncome: true,  currency: "MVT",  detail: ()  => "Power leg distribution" },
         5:  { type: "Sell MVT",             isIncome: false, currency: "USDT", detail: ()  => "MVT sold for USDT" },
-        6:  { type: "BTC Pool Credited",    isIncome: true,  currency: "USDT", detail: ()  => "10% credited to BTC pool" },
+        6:  { type: "BTC Pool Credited",    isIncome: true,  currency: "USDT", detail: ()  => "10% of sell → BTC pool" },
         7:  { type: "Withdrawal",           isIncome: false, currency: "USDT", detail: ()  => "USDT withdrawn to wallet" },
         8:  { type: "BTC Pool Withdraw",    isIncome: false, currency: "USDT", detail: ()  => "BTC pool withdrawn" },
         9:  { type: "Rebirth",              isIncome: false, currency: "USDT", detail: (r) => {
@@ -386,10 +376,68 @@ export function useWeb3() {
         11: { type: "Board Reward",         isIncome: true,  currency: "USDT", detail: (r) => `Pool ${Number(r.level)} completed` },
       };
 
-      const transactions = (records as any[]).map((r) => {
+      // Fetch stored TX records
+      const [records, totalBn] = await contract.getTransactions(account, BigInt(offset), BigInt(limit));
+      const total = Number(totalBn);
+
+      // Fetch MvtSold events for sell detail (token amount + breakdown)
+      let sellEventMap = new Map<number, { mvtAmount: bigint; btcCharge: bigint; toIncome: bigint; toRebirth: bigint }>();
+      try {
+        const sellFilter = contract.filters.MvtSold(account);
+        const sellEvents = await contract.queryFilter(sellFilter, 0, "latest");
+        for (const ev of sellEvents as any[]) {
+          const blk = ev.blockNumber;
+          sellEventMap.set(blk, {
+            mvtAmount:  BigInt(ev.args[1]),
+            btcCharge:  BigInt(ev.args[3]),
+            toIncome:   BigInt(ev.args[4]),
+            toRebirth:  BigInt(ev.args[5]),
+          });
+        }
+      } catch {}
+
+      // Fetch Staked events
+      let stakedTxs: any[] = [];
+      try {
+        const stakedFilter = contract.filters.Staked(account);
+        const stakedEvents = await contract.queryFilter(stakedFilter, 0, "latest");
+        for (const ev of stakedEvents as any[]) {
+          const block = await provider.getBlock(ev.blockNumber);
+          stakedTxs.push({
+            type: "Staked",
+            amount: BigInt(ev.args[2]),
+            detail: `$${(parseFloat(ethers.formatUnits(BigInt(ev.args[2]), 18))).toFixed(2)} USDT · ${ev.args[4] ? "Locked" : "Flexible"}`,
+            timestamp: block?.timestamp ?? 0,
+            isIncome: false,
+            currency: "USDT" as const,
+            mvtMinted: BigInt(ev.args[3]),
+          });
+        }
+      } catch {}
+
+      // Fetch Unstaked events
+      let unstakedTxs: any[] = [];
+      try {
+        const unstakedFilter = contract.filters.Unstaked(account);
+        const unstakedEvents = await contract.queryFilter(unstakedFilter, 0, "latest");
+        for (const ev of unstakedEvents as any[]) {
+          const block = await provider.getBlock(ev.blockNumber);
+          unstakedTxs.push({
+            type: "Unstaked",
+            amount: BigInt(ev.args[3]),
+            detail: `${(parseFloat(ethers.formatUnits(BigInt(ev.args[2]), 18))).toFixed(2)} MVT returned`,
+            timestamp: block?.timestamp ?? 0,
+            isIncome: false,
+            currency: "USDT" as const,
+            mvtReturned: BigInt(ev.args[2]),
+          });
+        }
+      } catch {}
+
+      const coreTxs = (records as any[]).map((r) => {
         const txType = Number(r.txType);
         const meta = TX_META[txType] ?? { type: "Unknown", isIncome: false, currency: "USDT" as const, detail: () => "" };
-        return {
+        const base: any = {
           type:      meta.type,
           amount:    BigInt(r.amount),
           detail:    meta.detail(r),
@@ -397,18 +445,30 @@ export function useWeb3() {
           isIncome:  meta.isIncome,
           currency:  meta.currency,
         };
+        return base;
       });
 
-      return { transactions, total };
+      // Merge all, sort newest-first
+      const all = [...coreTxs, ...stakedTxs, ...unstakedTxs]
+        .sort((a, b) => b.timestamp - a.timestamp);
+
+      return { transactions: all, total: all.length };
     } catch (err) {
       console.error("getTransactionsFromContract error:", err);
       return { transactions: [], total: 0 };
     }
   }, [account, getProvider]);
 
-  // ── Stubs for legacy pages that haven't been migrated yet ──────────────────
+  // ── Board pool entry ────────────────────────────────────────────────────────
 
-  const enterBoardPool = useCallback(async () => {}, []);
+  const enterBoardPool = useCallback(async () => {
+    const signer = await getSigner();
+    const contract = getMvaultContract(signer);
+    const tx = await contract.enterBoardPool();
+    await tx.wait();
+    await fetchUserData();
+  }, [getSigner, fetchUserData]);
+
   const claimBinaryIncome = useCallback(async () => {}, []);
   const reactivatePackage = useCallback(async (_pkg: number) => {}, []);
   const repurchase = useCallback(async () => {}, []);
