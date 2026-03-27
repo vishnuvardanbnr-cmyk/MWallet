@@ -173,6 +173,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint8 internal constant TX_REBIRTH        = 9;
     uint8 internal constant TX_BOARD_ENTRY    = 10;
     uint8 internal constant TX_BOARD_REWARD   = 11;
+    uint8 internal constant TX_STAKE          = 12;
+    uint8 internal constant TX_UNSTAKE        = 13;
 
     struct TxRecord {
         uint8   txType;    // one of TX_* constants above
@@ -225,6 +227,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     error AlreadyRegistered();
     error NotRegistered();
     error AlreadyActive();
+    error NotActive();
     error InvalidSponsor();
     error PositionTaken();
     error InsufficientVirtualBalance();
@@ -239,6 +242,17 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     error BinaryAlreadyDistributed();
     error BoardHandlerNotSet();
     error InsufficientBtcPoolForBoard();
+    error NotBoardHandler();
+    error InvalidIndex();
+    error AlreadyUnstaked();
+    error AlreadyLocked();
+    error StillLocked();
+    error BelowMinStake();
+    error EmptyPool();
+    error ExceedsPool();
+    error SubAccountAlreadyRegistered();
+    error AlreadyConverted();
+    error NoMvtMinted();
 
     // ─────────────────────────────────────────────────────────────────────────
     constructor(address _usdt, address _mvaultToken) Ownable(msg.sender) {
@@ -276,7 +290,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (address(boardHandler) == address(0)) revert BoardHandlerNotSet();
 
         User storage u = users[msg.sender];
-        require(u.isActive, "Not active");
+        if (!u.isActive) revert NotActive();
 
         uint256 price = boardHandler.getBoardPrice(1);
         if (u.btcPoolBalance < price) revert InsufficientBtcPoolForBoard();
@@ -306,9 +320,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      *         then credited to the user's withdrawable usdtBalance.
      */
     function creditBoardReward(address _user, uint256 _usdtAmount, uint256 _boardLevel) external nonReentrant {
-        require(msg.sender == address(boardHandler), "Not board handler");
-        require(_user != address(0), "ZA");
-        require(_usdtAmount > 0, "ZA");
+        if (msg.sender != address(boardHandler)) revert NotBoardHandler();
+        if (_user == address(0)) revert ZeroAddress();
+        if (_usdtAmount == 0) revert ZeroAmount();
 
         users[_user].usdtBalance     += _usdtAmount;
         users[_user].totalUsdtEarned += _usdtAmount;
@@ -410,6 +424,22 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         bool ok = usdtToken.transferFrom(msg.sender, address(this), PACKAGE_PRICE);
         if (!ok) revert TransferFailed();
 
+        _doActivate(msg.sender);
+    }
+
+    /**
+     * @notice Activate using your in-contract USDT balance (usdtBalance).
+     *         Useful if you have accumulated USDT from income/unstaking and want to
+     *         self-activate without an external wallet transfer.
+     *         Caller must be registered but not yet active, and have >= $130 virtual USDT.
+     */
+    function activateFromBalance() external nonReentrant {
+        User storage u = users[msg.sender];
+        if (!u.isRegistered)       revert NotRegistered();
+        if (u.isActive)            revert AlreadyActive();
+        if (u.usdtBalance < PACKAGE_PRICE) revert InsufficientUsdtBalance();
+
+        u.usdtBalance -= PACKAGE_PRICE;
         _doActivate(msg.sender);
     }
 
@@ -665,9 +695,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (subAccount == address(0)) revert ZeroAddress();
 
         User storage u = users[msg.sender];
-        require(u.isActive, "Not active");
+        if (!u.isActive) revert NotActive();
         if (u.rebirthPool < PACKAGE_PRICE) revert InsufficientRebirthPool();
-        require(!users[subAccount].isRegistered, "Sub-account already registered");
+        if (users[subAccount].isRegistered) revert SubAccountAlreadyRegistered();
 
         // ── 1. Deduct $130 for activation ────────────────────────────────────
         u.rebirthPool -= PACKAGE_PRICE;
@@ -767,7 +797,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 limit
     ) external onlyOwner nonReentrant {
         if (_binaryDistributed) revert BinaryAlreadyDistributed();
-        require(binaryPool > 0, "Empty binary pool");
+        if (binaryPool == 0) revert EmptyPool();
 
         uint256 pool = binaryPool;
         binaryPool   = 0;
@@ -882,7 +912,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      */
     function withdrawAdminPool(address to, uint256 amount) external onlyOwner {
         if (to == address(0)) revert ZeroAddress();
-        require(adminPool >= amount, "Exceeds admin pool");
+        if (adminPool < amount) revert ExceedsPool();
         adminPool               -= amount;
         users[to].mvtBalance    += amount;
         users[to].totalReceived += amount;
@@ -894,7 +924,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      */
     function withdrawReservePool(address to, uint256 amount) external onlyOwner {
         if (to == address(0)) revert ZeroAddress();
-        require(reservePool >= amount, "Exceeds reserve pool");
+        if (reservePool < amount) revert ExceedsPool();
         reservePool             -= amount;
         users[to].mvtBalance    += amount;
         users[to].totalReceived += amount;
@@ -918,19 +948,19 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      *                    true  = locked  (no cap, 10-month lock, bonus token distribution to uplines)
      */
     function stake(uint256 usdtAmount, bool isLocked) external nonReentrant {
-        require(usdtAmount >= MIN_STAKE_USDT, "Below $50 minimum");
-        require(users[msg.sender].isRegistered, "Not registered");
-        require(users[msg.sender].isActive,     "Not activated");
+        if (usdtAmount < MIN_STAKE_USDT) revert BelowMinStake();
+        if (!users[msg.sender].isRegistered) revert NotRegistered();
+        if (!users[msg.sender].isActive) revert NotActive();
 
         bool ok = usdtToken.transferFrom(msg.sender, address(this), usdtAmount);
-        require(ok, "USDT transfer failed");
+        if (!ok) revert TransferFailed();
 
         // 100% USDT → MVT (token mints 90% of theoretical = "gross MVT")
         usdtToken.approve(address(mvaultToken), usdtAmount);
         uint256 balBefore = mvaultToken.balanceOf(address(this));
         mvaultToken.addLiquidityAndMint(address(this), usdtAmount);
         uint256 grossMvt = mvaultToken.balanceOf(address(this)) - balBefore;
-        require(grossMvt > 0, "No MVT minted");
+        if (grossMvt == 0) revert NoMvtMinted();
 
         // Level income in MVT: rates [10,2,1,1,1] per 90 units of grossMvt  (sums to 15/90)
         // Unqualified upline shares accumulate to levelToAdmin
@@ -962,7 +992,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         // Staked: grossMvt minus all level alloc (15/90) and admin alloc (5/90) = 70/90
         uint256 levelTotal = levelDistributed + levelToAdmin;
         uint256 stakedMvt  = grossMvt - levelTotal - adminAmt;
-        require(stakedMvt > 0, "No tokens to stake");
+        if (stakedMvt == 0) revert NoMvtMinted();
 
         uint256 stakeIndex = _stakes[msg.sender].length;
         _stakes[msg.sender].push(StakePosition({
@@ -974,6 +1004,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         }));
 
         emit Staked(msg.sender, stakeIndex, usdtAmount, stakedMvt, isLocked);
+        _recordTx(msg.sender, TX_STAKE, usdtAmount, 0, address(0));
     }
 
     /**
@@ -993,41 +1024,42 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      *  NO BTC pool deduction in either case.
      */
     function unstake(uint256 stakeIndex) external nonReentrant {
-        require(stakeIndex < _stakes[msg.sender].length, "Invalid index");
+        if (stakeIndex >= _stakes[msg.sender].length) revert InvalidIndex();
         StakePosition storage pos = _stakes[msg.sender][stakeIndex];
-        require(pos.active, "Already unstaked");
+        if (!pos.active) revert AlreadyUnstaked();
 
         bool isLocked = pos.lockedSince > 0;
         if (isLocked) {
-            require(
-                block.timestamp >= pos.lockedSince + LOCK_DURATION,
-                "Still locked: 10-month period not over"
-            );
+            if (block.timestamp < pos.lockedSince + LOCK_DURATION) revert StillLocked();
         }
 
         pos.active = false;
-        uint256 totalMvt  = pos.mvtAmount;
-        uint256 usdtCap   = pos.usdtInvested * FLEX_CAP_MULT; // only used for flexible
-        uint256 toSell    = totalMvt;
+        uint256 totalMvt = pos.mvtAmount;
+        uint256 usdtCap  = pos.usdtInvested * FLEX_CAP_MULT; // only used for flexible
+        uint256 toSell   = totalMvt;
 
         if (!isLocked) {
-            // ── Flexible: 5% to direct sponsor ──────────────────────────────
+            // ── Flexible: 5% virtual MVT to direct sponsor ───────────────────
             uint256 sponsorShare = (totalMvt * 5) / 100;
             address sponsor = users[msg.sender].sponsor;
-            if (sponsor != address(0) && users[sponsor].isActive) {
-                bool t = mvaultToken.transfer(sponsor, sponsorShare);
-                if (t) toSell -= sponsorShare;
+            if (sponsor != address(0) && users[sponsor].isActive && sponsorShare > 0) {
+                users[sponsor].mvtBalance    += sponsorShare;
+                users[sponsor].totalReceived += sponsorShare;
+                toSell -= sponsorShare;
+                _recordTx(sponsor, TX_LEVEL_INCOME, sponsorShare, 1, msg.sender);
             }
         } else {
-            // ── Locked: 5%+2%+1%+1%+1% tokens to 5 uplines ─────────────────
+            // ── Locked: 5%+2%+1%+1%+1% virtual MVT to 5 uplines ────────────
             uint8[5] memory rates = [5, 2, 1, 1, 1];
             address cur = users[msg.sender].sponsor;
             for (uint8 i = 0; i < 5; i++) {
                 uint256 share = (totalMvt * rates[i]) / 100;
                 if (share == 0) { if (cur != address(0)) cur = users[cur].sponsor; continue; }
                 if (cur != address(0) && users[cur].isActive) {
-                    bool t = mvaultToken.transfer(cur, share);
-                    if (t) toSell -= share;
+                    users[cur].mvtBalance    += share;
+                    users[cur].totalReceived += share;
+                    toSell -= share;
+                    _recordTx(cur, TX_LEVEL_INCOME, share, i + 1, msg.sender);
                 }
                 cur = users[cur].sponsor;
             }
@@ -1038,22 +1070,23 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         mvaultToken.sell(toSell);
         uint256 usdtGross = usdtToken.balanceOf(address(this)) - usdtBefore;
 
-        uint256 usdtToUser   = usdtGross;
-        uint256 adminCapCut  = 0;
+        uint256 usdtToUser  = usdtGross;
+        uint256 adminCapCut = 0;
 
         if (!isLocked && usdtGross > usdtCap) {
-            // Flexible 2× cap: excess goes to admin
+            // Flexible 2× cap: excess goes to adminPool
             adminCapCut = usdtGross - usdtCap;
             usdtToUser  = usdtCap;
             adminPool  += adminCapCut;
         }
 
+        // Credit USDT to user's in-contract balance (not direct wallet transfer)
         if (usdtToUser > 0) {
-            bool sent = usdtToken.transfer(msg.sender, usdtToUser);
-            require(sent, "USDT transfer failed");
+            users[msg.sender].usdtBalance += usdtToUser;
         }
 
         emit Unstaked(msg.sender, stakeIndex, totalMvt, usdtToUser, adminCapCut);
+        _recordTx(msg.sender, TX_UNSTAKE, usdtToUser, 0, address(0));
     }
 
     /**
@@ -1062,10 +1095,10 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      *         The 2× cap no longer applies once converted.
      */
     function convertToLocked(uint256 stakeIndex) external {
-        require(stakeIndex < _stakes[msg.sender].length, "Invalid index");
+        if (stakeIndex >= _stakes[msg.sender].length) revert InvalidIndex();
         StakePosition storage pos = _stakes[msg.sender][stakeIndex];
-        require(pos.active,          "Already unstaked");
-        require(pos.lockedSince == 0, "Already locked");
+        if (!pos.active) revert AlreadyUnstaked();
+        if (pos.lockedSince != 0) revert AlreadyLocked();
 
         pos.lockedSince = block.timestamp;
         emit ConvertedToLocked(msg.sender, stakeIndex, block.timestamp);
@@ -1231,7 +1264,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         string calldata _phone,
         string calldata _country
     ) external {
-        require(users[msg.sender].isRegistered, "Not registered");
+        if (!users[msg.sender].isRegistered) revert NotRegistered();
         User storage u = users[msg.sender];
         u.displayName = _displayName;
         u.email       = _email;

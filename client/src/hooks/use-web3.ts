@@ -374,70 +374,18 @@ export function useWeb3() {
              }},
         10: { type: "Board Entry",          isIncome: false, currency: "USDT", detail: (r) => `Entered Pool ${Number(r.level)}` },
         11: { type: "Board Reward",         isIncome: true,  currency: "USDT", detail: (r) => `Pool ${Number(r.level)} completed` },
+        12: { type: "Staked",               isIncome: false, currency: "USDT", detail: ()  => "USDT staked for MVT" },
+        13: { type: "Unstaked",             isIncome: true,  currency: "USDT", detail: ()  => "USDT credited from unstake" },
       };
 
-      // Fetch stored TX records
+      // Fetch stored TX records (includes Stake/Unstake since contract now records them)
       const [records, totalBn] = await contract.getTransactions(account, BigInt(offset), BigInt(limit));
       const total = Number(totalBn);
 
-      // Fetch MvtSold events for sell detail (token amount + breakdown)
-      let sellEventMap = new Map<number, { mvtAmount: bigint; btcCharge: bigint; toIncome: bigint; toRebirth: bigint }>();
-      try {
-        const sellFilter = contract.filters.MvtSold(account);
-        const sellEvents = await contract.queryFilter(sellFilter, 0, "latest");
-        for (const ev of sellEvents as any[]) {
-          const blk = ev.blockNumber;
-          sellEventMap.set(blk, {
-            mvtAmount:  BigInt(ev.args[1]),
-            btcCharge:  BigInt(ev.args[3]),
-            toIncome:   BigInt(ev.args[4]),
-            toRebirth:  BigInt(ev.args[5]),
-          });
-        }
-      } catch {}
-
-      // Fetch Staked events
-      let stakedTxs: any[] = [];
-      try {
-        const stakedFilter = contract.filters.Staked(account);
-        const stakedEvents = await contract.queryFilter(stakedFilter, 0, "latest");
-        for (const ev of stakedEvents as any[]) {
-          const block = await provider.getBlock(ev.blockNumber);
-          stakedTxs.push({
-            type: "Staked",
-            amount: BigInt(ev.args[2]),
-            detail: `$${(parseFloat(ethers.formatUnits(BigInt(ev.args[2]), 18))).toFixed(2)} USDT · ${ev.args[4] ? "Locked" : "Flexible"}`,
-            timestamp: block?.timestamp ?? 0,
-            isIncome: false,
-            currency: "USDT" as const,
-            mvtMinted: BigInt(ev.args[3]),
-          });
-        }
-      } catch {}
-
-      // Fetch Unstaked events
-      let unstakedTxs: any[] = [];
-      try {
-        const unstakedFilter = contract.filters.Unstaked(account);
-        const unstakedEvents = await contract.queryFilter(unstakedFilter, 0, "latest");
-        for (const ev of unstakedEvents as any[]) {
-          const block = await provider.getBlock(ev.blockNumber);
-          unstakedTxs.push({
-            type: "Unstaked",
-            amount: BigInt(ev.args[3]),
-            detail: `${(parseFloat(ethers.formatUnits(BigInt(ev.args[2]), 18))).toFixed(2)} MVT returned`,
-            timestamp: block?.timestamp ?? 0,
-            isIncome: false,
-            currency: "USDT" as const,
-            mvtReturned: BigInt(ev.args[2]),
-          });
-        }
-      } catch {}
-
-      const coreTxs = (records as any[]).map((r) => {
+      const transactions = (records as any[]).map((r) => {
         const txType = Number(r.txType);
         const meta = TX_META[txType] ?? { type: "Unknown", isIncome: false, currency: "USDT" as const, detail: () => "" };
-        const base: any = {
+        return {
           type:      meta.type,
           amount:    BigInt(r.amount),
           detail:    meta.detail(r),
@@ -445,14 +393,9 @@ export function useWeb3() {
           isIncome:  meta.isIncome,
           currency:  meta.currency,
         };
-        return base;
       });
 
-      // Merge all, sort newest-first
-      const all = [...coreTxs, ...stakedTxs, ...unstakedTxs]
-        .sort((a, b) => b.timestamp - a.timestamp);
-
-      return { transactions: all, total: all.length };
+      return { transactions, total };
     } catch (err) {
       console.error("getTransactionsFromContract error:", err);
       return { transactions: [], total: 0 };
@@ -465,6 +408,14 @@ export function useWeb3() {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
     const tx = await contract.enterBoardPool();
+    await tx.wait();
+    await fetchUserData();
+  }, [getSigner, fetchUserData]);
+
+  const activateFromBalance = useCallback(async () => {
+    const signer = await getSigner();
+    const contract = getMvaultContract(signer);
+    const tx = await contract.activateFromBalance();
     await tx.wait();
     await fetchUserData();
   }, [getSigner, fetchUserData]);
@@ -593,7 +544,7 @@ export function useWeb3() {
     incomeInfo, binaryInfo, slabInfo: null as SlabInfo | null,
     mvtPrice, binaryPairs,
     btcPoolBalance, tokenDecimals, totalUsers, profileOnChain,
-    connect, register, approveToken, activatePackage,
+    connect, register, approveToken, activatePackage, activateFromBalance,
     sellMvt, withdrawFunds, withdrawBtcPool, rebirth,
     enterBoardPool, claimBinaryIncome, saveProfileOnChain,
     reactivatePackage, repurchase,

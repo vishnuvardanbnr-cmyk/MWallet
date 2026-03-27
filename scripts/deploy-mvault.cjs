@@ -1,6 +1,7 @@
 const { ethers } = require("hardhat");
 
-const USDT_TESTNET = "0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3";
+const USDT_TESTNET   = "0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3";
+const ADMIN_WALLET   = "0x04E8c5B49dE683c5B44eF1269Bd5ee4f338868C4";
 
 async function main() {
   const [deployer] = await ethers.getSigners();
@@ -54,27 +55,43 @@ async function main() {
   await tx.wait();
   console.log("  ✓ MvaultBoardMatrix linked to MvaultContract");
 
-  // ── 5. Set liquidity/system address (deployer by default) ─────────────────
-  console.log("\n[5/5] Setting liquidity & system addresses (deployer default)...");
-  tx = await boardMatrix.setLiquidityAddress(deployer.address);
+  // ── 5. Set liquidity/system address + transfer ownership ──────────────────
+  console.log("\n[5/6] Setting liquidity & system addresses...");
+  tx = await boardMatrix.setLiquidityAddress(ADMIN_WALLET);
   await tx.wait();
-  tx = await boardMatrix.setSystemAddress(deployer.address);
+  tx = await boardMatrix.setSystemAddress(ADMIN_WALLET);
   await tx.wait();
-  console.log("  ✓ Addresses set (update these before mainnet!)");
+  console.log("  ✓ Liquidity + system address set to admin wallet");
+
+  console.log("\n[6/6] Transferring ownership to admin wallet:", ADMIN_WALLET);
+  tx = await mvaultToken.transferOwnership(ADMIN_WALLET);
+  await tx.wait();
+  console.log("  ✓ MvaultToken ownership transferred");
+
+  tx = await mvaultContract.transferOwnership(ADMIN_WALLET);
+  await tx.wait();
+  console.log("  ✓ MvaultContract ownership transferred");
+
+  tx = await boardMatrix.transferOwnership(ADMIN_WALLET);
+  await tx.wait();
+  console.log("  ✓ MvaultBoardMatrix ownership transferred");
 
   // ── Summary ──────────────────────────────────────────────────────────────
   console.log("\n══════════════════════════════════════════════════");
   console.log("  DEPLOYMENT COMPLETE");
   console.log("══════════════════════════════════════════════════");
-  console.log("  VITE_MVT_TOKEN_ADDRESS=" + tokenAddress);
   console.log("  VITE_MVAULT_CONTRACT_ADDRESS=" + contractAddress);
+  console.log("  VITE_MVT_TOKEN_ADDRESS=" + tokenAddress);
   console.log("  VITE_BOARD_MATRIX_ADDRESS=" + boardAddress);
   console.log("══════════════════════════════════════════════════\n");
 
   console.log("BSCScan links:");
-  console.log("  Token:   https://testnet.bscscan.com/address/" + tokenAddress);
-  console.log("  Contract:https://testnet.bscscan.com/address/" + contractAddress);
-  console.log("  Board:   https://testnet.bscscan.com/address/" + boardAddress);
+  console.log("  Token:    https://testnet.bscscan.com/address/" + tokenAddress);
+  console.log("  Contract: https://testnet.bscscan.com/address/" + contractAddress);
+  console.log("  Board:    https://testnet.bscscan.com/address/" + boardAddress);
+
+  // Return addresses for verification step
+  return { contractAddress, tokenAddress, boardAddress };
 }
 
 main().catch((err) => {
