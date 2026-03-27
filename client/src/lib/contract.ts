@@ -11,7 +11,11 @@ export const BSC_MAINNET = {
 export const BSC_TESTNET = {
   chainId: "0x61",
   chainName: "BSC Testnet",
-  rpcUrls: ["https://data-seed-prebsc-1-s1.binance.org:8545/"],
+  // publicnode is far more reliable than Binance's own testnet RPCs
+  rpcUrls: [
+    "https://bsc-testnet-rpc.publicnode.com",
+    "https://data-seed-prebsc-1-s1.binance.org:8545/",
+  ],
   blockExplorerUrls: ["https://testnet.bscscan.com/"],
   nativeCurrency: { name: "tBNB", symbol: "tBNB", decimals: 18 },
 };

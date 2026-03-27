@@ -109,12 +109,15 @@ export function useWeb3() {
   const switchNetwork = useCallback(async () => {
     const ethereum = (window as any).ethereum;
     if (!ethereum) return;
+    // Always call addEthereumChain — this adds it if new, or updates the RPC
+    // if already added, ensuring MetaMask uses our reliable publicnode endpoint.
     try {
-      await ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: NETWORK.chainId }] });
-    } catch (err: any) {
-      if (err.code === 4902) {
-        await ethereum.request({ method: "wallet_addEthereumChain", params: [NETWORK] });
-      }
+      await ethereum.request({ method: "wallet_addEthereumChain", params: [NETWORK] });
+    } catch (addErr: any) {
+      // addEthereumChain fails when user rejects; fall back to plain switch
+      try {
+        await ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: NETWORK.chainId }] });
+      } catch { /* ignore */ }
     }
   }, []);
 
