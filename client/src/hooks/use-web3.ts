@@ -325,23 +325,26 @@ export function useWeb3() {
     setProfileOnChain({ displayName, email, phone, country, profileSet: true });
   }, [account, getSigner]);
 
-  // ── Direct referrals (on-chain read via getDirectReferralsPaginated) ─────────
+  // ── Direct referrals (via Registered events filtered by sponsor == account) ───
   const getDirectReferrals = useCallback(async (offset: number, limit: number) => {
     if (!account) return { referrals: [], total: 0 };
     try {
-      const provider = getProvider();
+      const provider = getDirectProvider();
       const contract = getMvaultContract(provider);
-      // Direct on-chain read — no event scanning, no block-range limits
-      const [referrals, totalBn] = await contract.getDirectReferralsPaginated(account, BigInt(offset), BigInt(limit));
-      return {
-        referrals: (referrals as string[]).filter(Boolean),
-        total: Number(totalBn),
-      };
+      // `sponsor` is the 2nd indexed topic in Registered(user, sponsor, binaryParent, placeLeft)
+      // so filtering by it is efficient — no full scan needed
+      const filter = contract.filters.Registered(null, account);
+      const events = await contract.queryFilter(filter);
+      // events are oldest-first; reverse to newest-first for display
+      const allAddresses = events.map((e: any) => e.args[0] as string).reverse();
+      const total = allAddresses.length;
+      const referrals = allAddresses.slice(offset, offset + limit);
+      return { referrals, total };
     } catch (err) {
       console.error("getDirectReferrals error:", err);
       return { referrals: [], total: 0 };
     }
-  }, [account, getProvider]);
+  }, [account]);
 
   // ── Transactions (from on-chain events) ────────────────────────────────────
 

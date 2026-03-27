@@ -70,8 +70,10 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
 
   const urlParams = new URLSearchParams(window.location.search);
   const refParam = urlParams.get("ref") || "";
-  const sideParam = urlParams.get("side") || "left";
-  const placeLeft = sideParam === "left" || sideParam === "1";
+  const sideParam = urlParams.get("side") || "";
+  // If side came from the referral link, it's locked (the sponsor chose it)
+  const sideFromUrl = sideParam !== "";
+  const placeLeft = sideParam === "right" ? false : true; // default left if not specified
 
   const isFirstUser = totalUsers === 0;
 
@@ -97,9 +99,11 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
         const leftTaken  = !!leftChild  && leftChild  !== ZERO_ADDRESS;
         const rightTaken = !!rightChild && rightChild !== ZERO_ADDRESS;
         setSponsorInfo({ address: addr, displayName: dname, isActive: isAct, valid: true, leftTaken, rightTaken });
-        // Auto-select the open side when only one slot is available
-        if (!leftTaken && rightTaken)  setSelectedSide(true);
-        if (leftTaken  && !rightTaken) setSelectedSide(false);
+        // Only auto-select the open side when side was NOT locked from referral URL
+        if (!sideFromUrl) {
+          if (!leftTaken && rightTaken)  setSelectedSide(true);
+          if (leftTaken  && !rightTaken) setSelectedSide(false);
+        }
       }
     } catch { setSponsorInfo(null); }
     setValidating(false);
@@ -310,39 +314,60 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
                   )}
                 </div>
 
-                {/* Binary Side Picker */}
+                {/* Binary Tree Position */}
                 {sponsorInfo?.valid && (
                   <div className="space-y-2">
                     <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
                       Binary Tree Position
                     </label>
-                    <div className="grid grid-cols-2 gap-2">
-                      {([
-                        { side: true,  label: "Left",  Icon: ArrowDownLeft,  taken: sponsorInfo.leftTaken  },
-                        { side: false, label: "Right", Icon: ArrowDownRight, taken: sponsorInfo.rightTaken },
-                      ] as const).map(({ side, label, Icon, taken }) => (
-                        <button
-                          key={label}
-                          type="button"
-                          onClick={() => setSelectedSide(side)}
-                          className={`flex flex-col items-center gap-1.5 py-3 px-3 rounded-xl border transition-all ${
-                            selectedSide === side
-                              ? "bg-amber-500/15 border-amber-500/40 ring-1 ring-amber-500/30"
-                              : "bg-white/[0.03] border-white/[0.08] hover:border-white/[0.15]"
-                          }`}
-                          data-testid={`button-side-${label.toLowerCase()}`}
-                        >
-                          <Icon className={`h-4 w-4 ${selectedSide === side ? "text-amber-400" : "text-muted-foreground"}`} />
-                          <span className={`text-xs font-semibold ${selectedSide === side ? "text-amber-300" : "text-muted-foreground"}`}>
-                            {label}
-                          </span>
-                          <span className={`text-[9px] ${taken ? "text-amber-400/60" : "text-emerald-400/80"}`}>
-                            {taken ? "Will spill over" : "Direct slot open"}
-                          </span>
-                        </button>
-                      ))}
-                    </div>
-                    {/* Info when both slots are full */}
+
+                    {sideFromUrl ? (
+                      /* Locked — side was set by sponsor's referral link */
+                      <div className="flex items-center gap-3 px-4 py-3 rounded-xl bg-amber-500/8 border border-amber-500/25" data-testid="card-side-locked">
+                        {selectedSide
+                          ? <ArrowDownLeft className="h-5 w-5 text-amber-400 shrink-0" />
+                          : <ArrowDownRight className="h-5 w-5 text-amber-400 shrink-0" />}
+                        <div className="flex-1 min-w-0">
+                          <p className="text-sm font-bold text-amber-300">{selectedSide ? "Left" : "Right"} Side</p>
+                          <p className="text-[10px] text-amber-300/60 mt-0.5">
+                            {sponsorInfo[selectedSide ? "leftTaken" : "rightTaken"]
+                              ? "Direct slot filled — you'll spill over to the deepest open position"
+                              : "Direct slot open on this side"}
+                          </p>
+                        </div>
+                        <span className="text-[9px] font-semibold text-amber-400/50 uppercase tracking-wider shrink-0">Set by sponsor</span>
+                      </div>
+                    ) : (
+                      /* Choosable — no side param in URL, user can pick */
+                      <div className="grid grid-cols-2 gap-2">
+                        {([
+                          { side: true,  label: "Left",  Icon: ArrowDownLeft,  taken: sponsorInfo.leftTaken  },
+                          { side: false, label: "Right", Icon: ArrowDownRight, taken: sponsorInfo.rightTaken },
+                        ] as const).map(({ side, label, Icon, taken }) => (
+                          <button
+                            key={label}
+                            type="button"
+                            onClick={() => setSelectedSide(side)}
+                            className={`flex flex-col items-center gap-1.5 py-3 px-3 rounded-xl border transition-all ${
+                              selectedSide === side
+                                ? "bg-amber-500/15 border-amber-500/40 ring-1 ring-amber-500/30"
+                                : "bg-white/[0.03] border-white/[0.08] hover:border-white/[0.15]"
+                            }`}
+                            data-testid={`button-side-${label.toLowerCase()}`}
+                          >
+                            <Icon className={`h-4 w-4 ${selectedSide === side ? "text-amber-400" : "text-muted-foreground"}`} />
+                            <span className={`text-xs font-semibold ${selectedSide === side ? "text-amber-300" : "text-muted-foreground"}`}>
+                              {label}
+                            </span>
+                            <span className={`text-[9px] ${taken ? "text-amber-400/60" : "text-emerald-400/80"}`}>
+                              {taken ? "Will spill over" : "Direct slot open"}
+                            </span>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Spillover info */}
                     {sponsorInfo.leftTaken && sponsorInfo.rightTaken && (
                       <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-amber-500/8 border border-amber-500/20">
                         <AlertCircle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
