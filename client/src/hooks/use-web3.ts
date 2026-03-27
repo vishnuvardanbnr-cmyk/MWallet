@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import {
   getMvaultContract, getTokenContract,
   MVAULT_CONTRACT_ADDRESS, TOKEN_ADDRESS,
-  NETWORK, formatTokenAmount,
+  NETWORK, formatTokenAmount, getDirectProvider,
 } from "@/lib/contract";
 
 // ── Type definitions ──────────────────────────────────────────────────────────
@@ -217,17 +217,23 @@ export function useWeb3() {
   }, [switchNetwork, getProvider, fetchUserData]);
 
   // ── Registration (address-based) ────────────────────────────────────────────
-  // BSC testnet RPCs often don't return revert data from eth_estimateGas, causing
-  // "missing revert data" errors. Strategy:
-  //   1. staticCall() → uses eth_call, reliably surfaces revert reasons
-  //   2. If simulation passes, send with a fixed gasLimit to skip eth_estimateGas
+  // MetaMask's built-in RPC often returns "Internal JSON-RPC error" without any
+  // revert reason (eth_estimateGas is unreliable on BSC testnet).
+  // Strategy:
+  //   1. Simulate via a direct JsonRpcProvider (publicnode, not MetaMask) so we
+  //      get proper revert data from eth_call
+  //   2. If simulation passes, send through MetaMask with a fixed gasLimit to
+  //      skip eth_estimateGas entirely
   const register = useCallback(async (sponsor: string, binaryParent: string, placeLeft: boolean) => {
     const signer = await getSigner();
-    const contract = getMvaultContract(signer);
-    // Step 1 — simulate; throws a decoded custom error if the tx would revert
-    await contract.register.staticCall(sponsor, binaryParent, placeLeft);
-    // Step 2 — send for real, bypassing eth_estimateGas with a fixed gas cap
-    const tx = await contract.register(sponsor, binaryParent, placeLeft, { gasLimit: 500_000n });
+    // Step 1 — simulate through our own reliable RPC (not MetaMask)
+    const directProvider = getDirectProvider();
+    const signerAddress = await signer.getAddress();
+    const simContract = getMvaultContract(directProvider);
+    await simContract.register.staticCall(sponsor, binaryParent, placeLeft, { from: signerAddress });
+    // Step 2 — send through MetaMask with fixed gasLimit (bypasses eth_estimateGas)
+    const sendContract = getMvaultContract(signer);
+    const tx = await sendContract.register(sponsor, binaryParent, placeLeft, { gasLimit: 500_000n });
     await tx.wait();
     await fetchUserData();
   }, [getSigner, fetchUserData]);

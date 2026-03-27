@@ -16,6 +16,27 @@ export const BSC_TESTNET = {
   nativeCurrency: { name: "tBNB", symbol: "tBNB", decimals: 18 },
 };
 
+// Reliable public RPCs used for read-only simulation (staticCall),
+// bypassing whatever RPC MetaMask happens to use.
+export const BSC_TESTNET_RPC_LIST = [
+  "https://bsc-testnet-rpc.publicnode.com",
+  "https://data-seed-prebsc-1-s1.binance.org:8545/",
+  "https://data-seed-prebsc-2-s1.binance.org:8545/",
+];
+export const BSC_MAINNET_RPC_LIST = [
+  "https://bsc-rpc.publicnode.com",
+  "https://bsc-dataseed1.binance.org/",
+  "https://bsc-dataseed2.binance.org/",
+];
+
+// Returns a direct JsonRpcProvider (not MetaMask) for reliable eth_call simulation
+export function getDirectProvider(): ethers.JsonRpcProvider {
+  const rpcs = import.meta.env.VITE_BSC_NETWORK === "mainnet"
+    ? BSC_MAINNET_RPC_LIST
+    : BSC_TESTNET_RPC_LIST;
+  return new ethers.JsonRpcProvider(rpcs[0]);
+}
+
 const isMainnet = import.meta.env.VITE_BSC_NETWORK === "mainnet";
 export const NETWORK = isMainnet ? BSC_MAINNET : BSC_TESTNET;
 
