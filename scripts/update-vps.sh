@@ -53,11 +53,14 @@ echo "  ✓ Frontend built"
 
 # ── 2. Sync built files to VPS ────────────────────────────────────────────
 echo ""
-echo "[2/4] Syncing built files to VPS..."
+echo "[2/4] Syncing built files to VPS (clean wipe + copy)..."
 
-# Sync dist/ (built server+frontend)
-$SCP dist/ ${VPS_USER}@${VPS_IP}:${VPS_PATH}/dist/
-echo "  ✓ dist/ synced"
+# Wipe VPS dist/ entirely so stale hashed assets don't accumulate
+$SSH "rm -rf ${VPS_PATH}/dist && mkdir -p ${VPS_PATH}/dist"
+
+# Sync dist/ (built server+frontend) — clean slate guaranteed
+$SCP dist/public dist/index.cjs ${VPS_USER}@${VPS_IP}:${VPS_PATH}/dist/
+echo "  ✓ dist/ synced (clean)"
 
 # Sync server source (for any server-side changes)
 $SCP server/ ${VPS_USER}@${VPS_IP}:${VPS_PATH}/server/
