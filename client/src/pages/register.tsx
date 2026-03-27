@@ -3,7 +3,7 @@ import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, LogOut, UserPlus, Wallet, CheckCircle2, X,
-  AlertCircle, Shield, ArrowRight, Users,
+  AlertCircle, Shield, ArrowRight, Users, ArrowDownLeft, ArrowDownRight,
 } from "lucide-react";
 import { shortenAddress, getMvaultContract, MVAULT_CONTRACT_ADDRESS, decodeContractError } from "@/lib/contract";
 import { Logo } from "@/components/logo";
@@ -55,6 +55,8 @@ interface SponsorInfo {
   displayName: string;
   isActive: boolean;
   valid: boolean;
+  leftTaken: boolean;
+  rightTaken: boolean;
 }
 
 function isValidAddress(val: string) {
@@ -91,9 +93,19 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
       const info = await contract.getUserInfo(addr);
       const isReg = info[0];
       const isAct = info[1];
-      const dname = info.displayName || "";
+      const dname = info.displayName || info[0] || "";
       if (!isReg) { setSponsorInfo(null); }
-      else { setSponsorInfo({ address: addr, displayName: dname, isActive: isAct, valid: true }); }
+      else {
+        const leftChild  = info[6] as string;
+        const rightChild = info[7] as string;
+        const leftTaken  = !!leftChild  && leftChild  !== ZERO_ADDRESS;
+        const rightTaken = !!rightChild && rightChild !== ZERO_ADDRESS;
+        const si: SponsorInfo = { address: addr, displayName: dname, isActive: isAct, valid: true, leftTaken, rightTaken };
+        setSponsorInfo(si);
+        // Auto-select the first available side
+        if (leftTaken && !rightTaken) setSelectedSide(false);
+        else if (!leftTaken && rightTaken) setSelectedSide(true);
+      }
     } catch { setSponsorInfo(null); }
     setValidating(false);
   }, []);
@@ -118,6 +130,28 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
       }
       if (!sponsorInfo?.valid) {
         toast({ title: "Sponsor not found", description: "The sponsor address is not registered.", variant: "destructive" }); return;
+      }
+    }
+    // Pre-validate the binary position before sending the transaction
+    if (!isFirstUser && sponsorInfo) {
+      const positionTaken = selectedSide ? sponsorInfo.leftTaken : sponsorInfo.rightTaken;
+      if (positionTaken) {
+        const side = selectedSide ? "left" : "right";
+        const other = selectedSide ? "right" : "left";
+        toast({
+          title: "Position Already Taken",
+          description: `The ${side} side under this sponsor is already filled. Please select the ${other} side.`,
+          variant: "destructive",
+        });
+        return;
+      }
+      if (sponsorInfo.leftTaken && sponsorInfo.rightTaken) {
+        toast({
+          title: "No Available Position",
+          description: "Both sides under this sponsor are already filled. Contact your sponsor to find an open position.",
+          variant: "destructive",
+        });
+        return;
       }
     }
     setLoading(true);
@@ -302,6 +336,50 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
                   )}
                 </div>
 
+                {/* Binary Side Picker — shown once sponsor is validated */}
+                {sponsorInfo?.valid && (
+                  <div className="space-y-2">
+                    <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
+                      Binary Tree Position
+                    </label>
+                    <div className="grid grid-cols-2 gap-2">
+                      {([
+                        { side: true,  label: "Left",  Icon: ArrowDownLeft,  taken: sponsorInfo.leftTaken  },
+                        { side: false, label: "Right", Icon: ArrowDownRight, taken: sponsorInfo.rightTaken },
+                      ] as const).map(({ side, label, Icon, taken }) => (
+                        <button
+                          key={label}
+                          type="button"
+                          disabled={taken}
+                          onClick={() => !taken && setSelectedSide(side)}
+                          className={`flex flex-col items-center gap-1.5 py-3 px-3 rounded-xl border transition-all ${
+                            taken
+                              ? "bg-red-500/5 border-red-500/20 cursor-not-allowed opacity-60"
+                              : selectedSide === side
+                                ? "bg-amber-500/15 border-amber-500/40 ring-1 ring-amber-500/30"
+                                : "bg-white/[0.03] border-white/[0.08] hover:border-white/[0.15]"
+                          }`}
+                          data-testid={`button-side-${label.toLowerCase()}`}
+                        >
+                          <Icon className={`h-4 w-4 ${taken ? "text-red-400/60" : selectedSide === side ? "text-amber-400" : "text-muted-foreground"}`} />
+                          <span className={`text-xs font-semibold ${taken ? "text-red-400/60" : selectedSide === side ? "text-amber-300" : "text-muted-foreground"}`}>
+                            {label}
+                          </span>
+                          <span className={`text-[9px] ${taken ? "text-red-400/60" : "text-emerald-400/80"}`}>
+                            {taken ? "Position taken" : "Available"}
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                    {sponsorInfo.leftTaken && sponsorInfo.rightTaken && (
+                      <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/8 border border-red-500/20">
+                        <AlertCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />
+                        <p className="text-xs text-red-400">Both positions are taken. Please use a different sponsor.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
               </>
             )}
 
@@ -331,7 +409,7 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
             {/* Register Button */}
             <button
               onClick={handleRegister}
-              disabled={loading || (!isFirstUser && !sponsorInfo?.valid) || !agreedToTerms}
+              disabled={loading || (!isFirstUser && !sponsorInfo?.valid) || !agreedToTerms || (!isFirstUser && !!sponsorInfo && sponsorInfo.leftTaken && sponsorInfo.rightTaken)}
               className="w-full glow-button text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
               data-testid="button-register"
               style={{ fontFamily: "var(--font-display)" }}
