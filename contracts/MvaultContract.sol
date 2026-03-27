@@ -341,17 +341,19 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         } else {
             if (!users[sponsor].isRegistered) revert InvalidSponsor();
 
-            address parent = (binaryParent != address(0) && users[binaryParent].isRegistered)
+            // Start search from binaryParent if valid, otherwise from sponsor.
+            // _findSlotOnSide walks the tree on-chain to find the deepest open slot
+            // on the requested side — same logic used by rebirth().
+            address startFrom = (binaryParent != address(0) && users[binaryParent].isRegistered)
                 ? binaryParent
                 : sponsor;
 
-            if (placeLeft  && users[parent].leftChild  != address(0)) revert PositionTaken();
-            if (!placeLeft && users[parent].rightChild != address(0)) revert PositionTaken();
+            (address parent, bool actualLeft) = _findSlotOnSide(startFrom, placeLeft);
 
-            _createUser(msg.sender, sponsor, parent, placeLeft, address(0));
+            _createUser(msg.sender, sponsor, parent, actualLeft, address(0));
 
-            if (placeLeft) users[parent].leftChild  = msg.sender;
-            else           users[parent].rightChild = msg.sender;
+            if (actualLeft) users[parent].leftChild  = msg.sender;
+            else            users[parent].rightChild = msg.sender;
 
             users[sponsor].directCount++;
             _updateAncestorCounts(msg.sender);
@@ -430,22 +432,21 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (users[newUser].isRegistered)                  revert AlreadyRegistered();
         if (users[msg.sender].usdtBalance < PACKAGE_PRICE) revert InsufficientUsdtBalance();
 
-        // Determine binary parent (default = caller)
-        address parent = (binaryParent != address(0) && users[binaryParent].isRegistered)
+        // Determine binary parent (default = caller), then auto-find open slot on-chain
+        address startFrom = (binaryParent != address(0) && users[binaryParent].isRegistered)
             ? binaryParent
             : msg.sender;
 
-        if (placeLeft  && users[parent].leftChild  != address(0)) revert PositionTaken();
-        if (!placeLeft && users[parent].rightChild != address(0)) revert PositionTaken();
+        (address parent, bool actualLeft) = _findSlotOnSide(startFrom, placeLeft);
 
         // Deduct $130 from caller's virtual USDT balance (USDT already held by this contract)
         users[msg.sender].usdtBalance -= PACKAGE_PRICE;
 
         // Register newUser with caller as sponsor
-        _createUser(newUser, msg.sender, parent, placeLeft, address(0));
+        _createUser(newUser, msg.sender, parent, actualLeft, address(0));
 
-        if (placeLeft) users[parent].leftChild  = newUser;
-        else           users[parent].rightChild = newUser;
+        if (actualLeft) users[parent].leftChild  = newUser;
+        else            users[parent].rightChild = newUser;
 
         users[msg.sender].directCount++;
         _updateAncestorCounts(newUser);

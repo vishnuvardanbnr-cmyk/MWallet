@@ -17,10 +17,10 @@ M-Vault is a Web3 MLM/DeFi platform for BNB Smart Chain. Users connect MetaMask 
 ## Smart Contracts (BSC Testnet — ACTIVE)
 | Contract | Address |
 |---|---|
-| **MVault Main** | `0xa4E74AC04BD3EAdadA8728a117C691D850e7158C` |
-| **MVT Token** | `0x9FD2D859E55fE4245561E8EFdB10D500EF90f9eF` |
+| **MVault Main** | `0x08d7e03c29623d3eEcc2D53cF6D4A1edf7E5F57c` |
+| **MVT Token** | `0x50984Ea16b3F79bB9B280a1ddEd624080F146Ad4` |
 | **USDT (testnet)** | `0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3` |
-| **Board Handler** | same as Main (0xa4E74...) |
+| **Board Handler** | `0x9dBE6Ee45d93d223AAF515c76dB74FA63f48b474` |
 
 ## Deploying to VPS
 ```bash

@@ -7,7 +7,6 @@ import {
 } from "lucide-react";
 import { shortenAddress, getMvaultContract, MVAULT_CONTRACT_ADDRESS, decodeContractError, getDirectProvider } from "@/lib/contract";
 import { Logo } from "@/components/logo";
-import { Button } from "@/components/ui/button";
 import { ethers } from "ethers";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
@@ -59,11 +58,6 @@ interface SponsorInfo {
   rightTaken: boolean;
 }
 
-interface AutoPlacement {
-  parent: string;
-  placeLeft: boolean;
-}
-
 function isValidAddress(val: string) {
   return ethers.isAddress(val);
 }
@@ -77,105 +71,53 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
   const urlParams = new URLSearchParams(window.location.search);
   const refParam = urlParams.get("ref") || "";
   const sideParam = urlParams.get("side") || "left";
-  const parentParam = urlParams.get("parent") || "";
+  const placeLeft = sideParam === "left" || sideParam === "1";
 
   const isFirstUser = totalUsers === 0;
 
   const [sponsorAddress, setSponsorAddress] = useState(refParam);
-  const [binaryParentAddress, setBinaryParentAddress] = useState(parentParam || refParam);
-  const placeLeft = sideParam === "left" || sideParam === "1";
   const [selectedSide, setSelectedSide] = useState<boolean>(placeLeft);
+  const [sponsorInfo, setSponsorInfo] = useState<SponsorInfo | null>(null);
+  const [validating, setValidating] = useState(false);
 
-  const [sponsorInfo,    setSponsorInfo]    = useState<SponsorInfo | null>(null);
-  const [validating,     setValidating]     = useState(false);
-  const [autoPlacement,  setAutoPlacement]  = useState<AutoPlacement | null>(null);
-  const [bfsSearching,   setBfsSearching]   = useState(false);
-  const [spilloverLeg,   setSpilloverLeg]   = useState<boolean>(placeLeft); // which leg BFS searched
-
-  // BFS through the binary tree to find the first open slot starting from startAddr.
-  // Searches the subtree rooted at startAddr (left-first within that subtree).
-  // Uses a direct RPC provider (not MetaMask) for consistent chain state.
-  const findFirstOpenSlot = useCallback(async (startAddr: string): Promise<AutoPlacement | null> => {
-    if (!startAddr || startAddr === ZERO_ADDRESS) return null;
-    const contract = getMvaultContract(getDirectProvider());
-    const queue: string[] = [startAddr];
-    let checked = 0;
-    const MAX_NODES = 128;
-    while (queue.length > 0 && checked < MAX_NODES) {
-      const cur = queue.shift()!;
-      checked++;
-      try {
-        const info = await contract.getUserInfo(cur);
-        const left  = info[6] as string;
-        const right = info[7] as string;
-        const leftTaken  = !!left  && left  !== ZERO_ADDRESS;
-        const rightTaken = !!right && right !== ZERO_ADDRESS;
-        if (!leftTaken)  return { parent: cur, placeLeft: true  };
-        if (!rightTaken) return { parent: cur, placeLeft: false };
-        queue.push(left, right);
-      } catch { /* skip unreachable node */ }
-    }
-    return null;
-  }, []);
-
-  // Validate sponsor and, if both slots full, BFS only into the preferred leg.
-  // preferLeft = true → spill into sponsor's LEFT subtree (child B)
-  // preferLeft = false → spill into sponsor's RIGHT subtree (child C)
-  const validateSponsor = useCallback(async (addr: string, preferLeft: boolean) => {
-    if (!isValidAddress(addr)) { setSponsorInfo(null); setAutoPlacement(null); return; }
+  const validateSponsor = useCallback(async (addr: string) => {
+    if (!isValidAddress(addr)) { setSponsorInfo(null); return; }
     setValidating(true);
-    setAutoPlacement(null);
     try {
       const contract = getMvaultContract(getDirectProvider());
       const info = await contract.getUserInfo(addr);
       const isReg = info[0];
       const isAct = info[1];
       const dname = info.displayName || "";
-      if (!isReg) { setSponsorInfo(null); }
-      else {
+      if (!isReg) {
+        setSponsorInfo(null);
+      } else {
         const leftChild  = info[6] as string;
         const rightChild = info[7] as string;
         const leftTaken  = !!leftChild  && leftChild  !== ZERO_ADDRESS;
         const rightTaken = !!rightChild && rightChild !== ZERO_ADDRESS;
-        const si: SponsorInfo = { address: addr, displayName: dname, isActive: isAct, valid: true, leftTaken, rightTaken };
-        setSponsorInfo(si);
-        if (leftTaken && rightTaken) {
-          // Both direct slots full — spill into the REQUESTED leg only.
-          // preferLeft=true → start BFS from leftChild (B's subtree)
-          // preferLeft=false → start BFS from rightChild (C's subtree)
-          setValidating(false);
-          setBfsSearching(true);
-          setSpilloverLeg(preferLeft);
-          const legRoot = preferLeft ? leftChild : rightChild;
-          const placement = await findFirstOpenSlot(legRoot);
-          setAutoPlacement(placement);
-          setBfsSearching(false);
-        } else {
-          // Auto-select the available side
-          if (leftTaken && !rightTaken) setSelectedSide(false);
-          else if (!leftTaken && rightTaken) setSelectedSide(true);
-          setValidating(false);
-        }
-        return;
+        setSponsorInfo({ address: addr, displayName: dname, isActive: isAct, valid: true, leftTaken, rightTaken });
+        // Auto-select the open side when only one slot is available
+        if (!leftTaken && rightTaken)  setSelectedSide(true);
+        if (leftTaken  && !rightTaken) setSelectedSide(false);
       }
     } catch { setSponsorInfo(null); }
     setValidating(false);
-  }, [findFirstOpenSlot]);
+  }, []);
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (sponsorAddress.trim()) validateSponsor(sponsorAddress.trim(), placeLeft);
+      if (sponsorAddress.trim()) validateSponsor(sponsorAddress.trim());
       else setSponsorInfo(null);
     }, 600);
     return () => clearTimeout(timer);
-  }, [sponsorAddress, validateSponsor, placeLeft]);
+  }, [sponsorAddress, validateSponsor]);
 
   const handleRegister = async () => {
     if (!agreedToTerms) {
       toast({ title: "Please agree to Terms & Conditions", variant: "destructive" }); return;
     }
     const sponsor = isFirstUser ? ZERO_ADDRESS : sponsorAddress.trim();
-    const binaryParent = binaryParentAddress.trim() || sponsor;
     if (!isFirstUser) {
       if (!isValidAddress(sponsor)) {
         toast({ title: "Invalid sponsor address", description: "Please enter a valid wallet address.", variant: "destructive" }); return;
@@ -184,36 +126,12 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
         toast({ title: "Sponsor not found", description: "The sponsor address is not registered.", variant: "destructive" }); return;
       }
     }
-    // Determine the actual binary parent and side to use
-    let actualParent: string;
-    let actualSide: boolean;
-
-    if (!isFirstUser && sponsorInfo?.leftTaken && sponsorInfo.rightTaken) {
-      // Both direct slots full — use the BFS-found auto placement
-      if (!autoPlacement) {
-        toast({ title: "No Available Position", description: "Could not find an open slot in your sponsor's downline. Please contact your sponsor.", variant: "destructive" });
-        return;
-      }
-      actualParent = autoPlacement.parent;
-      actualSide   = autoPlacement.placeLeft;
-    } else {
-      // Direct slot available — use sponsor as parent with selected side
-      if (!isFirstUser && sponsorInfo) {
-        const positionTaken = selectedSide ? sponsorInfo.leftTaken : sponsorInfo.rightTaken;
-        if (positionTaken) {
-          const side = selectedSide ? "left" : "right";
-          const other = selectedSide ? "right" : "left";
-          toast({ title: "Position Already Taken", description: `The ${side} side is filled. Please select the ${other} side.`, variant: "destructive" });
-          return;
-        }
-      }
-      actualParent = binaryParentAddress.trim() || sponsor;
-      actualSide   = selectedSide;
-    }
 
     setLoading(true);
     try {
-      await register(sponsor, actualParent, actualSide);
+      // Pass ZERO_ADDRESS as binaryParent — the contract auto-finds the deepest
+      // open slot on the requested side via _findSlotOnSide (same as rebirth logic).
+      await register(sponsor, ZERO_ADDRESS, isFirstUser ? false : selectedSide);
       toast({ title: "Registered!", description: "You are now registered. Please activate your account." });
     } catch (err: any) {
       toast({ title: "Registration Failed", description: decodeContractError(err), variant: "destructive" });
@@ -222,7 +140,6 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
 
   return (
     <div className="min-h-screen flex flex-col items-center justify-center p-4 relative overflow-hidden">
-      {/* Background glows */}
       <div className="absolute top-[-15%] right-[-10%] w-[600px] h-[600px] rounded-full bg-amber-500/[0.05] blur-[200px] pointer-events-none" />
       <div className="absolute bottom-[-10%] left-[-15%] w-[500px] h-[500px] rounded-full bg-yellow-600/[0.04] blur-[180px] pointer-events-none" />
 
@@ -393,7 +310,7 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
                   )}
                 </div>
 
-                {/* Binary Side Picker — shown once sponsor is validated */}
+                {/* Binary Side Picker */}
                 {sponsorInfo?.valid && (
                   <div className="space-y-2">
                     <label className="text-[10px] uppercase tracking-wider text-muted-foreground font-semibold">
@@ -407,55 +324,38 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
                         <button
                           key={label}
                           type="button"
-                          disabled={taken}
-                          onClick={() => !taken && setSelectedSide(side)}
+                          onClick={() => setSelectedSide(side)}
                           className={`flex flex-col items-center gap-1.5 py-3 px-3 rounded-xl border transition-all ${
-                            taken
-                              ? "bg-red-500/5 border-red-500/20 cursor-not-allowed opacity-60"
-                              : selectedSide === side
-                                ? "bg-amber-500/15 border-amber-500/40 ring-1 ring-amber-500/30"
-                                : "bg-white/[0.03] border-white/[0.08] hover:border-white/[0.15]"
+                            selectedSide === side
+                              ? "bg-amber-500/15 border-amber-500/40 ring-1 ring-amber-500/30"
+                              : "bg-white/[0.03] border-white/[0.08] hover:border-white/[0.15]"
                           }`}
                           data-testid={`button-side-${label.toLowerCase()}`}
                         >
-                          <Icon className={`h-4 w-4 ${taken ? "text-red-400/60" : selectedSide === side ? "text-amber-400" : "text-muted-foreground"}`} />
-                          <span className={`text-xs font-semibold ${taken ? "text-red-400/60" : selectedSide === side ? "text-amber-300" : "text-muted-foreground"}`}>
+                          <Icon className={`h-4 w-4 ${selectedSide === side ? "text-amber-400" : "text-muted-foreground"}`} />
+                          <span className={`text-xs font-semibold ${selectedSide === side ? "text-amber-300" : "text-muted-foreground"}`}>
                             {label}
                           </span>
-                          <span className={`text-[9px] ${taken ? "text-red-400/60" : "text-emerald-400/80"}`}>
-                            {taken ? "Position taken" : "Available"}
+                          <span className={`text-[9px] ${taken ? "text-amber-400/60" : "text-emerald-400/80"}`}>
+                            {taken ? "Will spill over" : "Direct slot open"}
                           </span>
                         </button>
                       ))}
                     </div>
+                    {/* Info when both slots are full */}
                     {sponsorInfo.leftTaken && sponsorInfo.rightTaken && (
-                      bfsSearching ? (
-                        <div className="flex items-center gap-2.5 px-3 py-2.5 rounded-lg bg-amber-500/8 border border-amber-500/20">
-                          <Loader2 className="h-3.5 w-3.5 text-amber-400 animate-spin shrink-0" />
-                          <p className="text-xs text-amber-300">Searching for next available slot in downline...</p>
+                      <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-amber-500/8 border border-amber-500/20">
+                        <AlertCircle className="h-3.5 w-3.5 text-amber-400 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs text-amber-300 font-semibold">Spillover placement</p>
+                          <p className="text-[10px] text-amber-300/70 mt-0.5">
+                            Both direct slots are filled. You'll be placed in the deepest open position on the {selectedSide ? "Left" : "Right"} leg automatically.
+                          </p>
                         </div>
-                      ) : autoPlacement ? (
-                        <div className="flex items-start gap-2.5 px-3 py-2.5 rounded-lg bg-emerald-500/8 border border-emerald-500/20">
-                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
-                          <div>
-                            <p className="text-xs text-emerald-400 font-semibold">
-                              Auto-placed in sponsor's {spilloverLeg ? "Left" : "Right"} leg
-                            </p>
-                            <p className="text-[10px] text-emerald-400/70 font-mono mt-0.5">
-                              Under {shortenAddress(autoPlacement.parent)} · {autoPlacement.placeLeft ? "Left" : "Right"} slot
-                            </p>
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/8 border border-red-500/20">
-                          <AlertCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />
-                          <p className="text-xs text-red-400">No open slot found in downline. Contact your sponsor.</p>
-                        </div>
-                      )
+                      </div>
                     )}
                   </div>
                 )}
-
               </>
             )}
 
@@ -485,7 +385,7 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
             {/* Register Button */}
             <button
               onClick={handleRegister}
-              disabled={loading || bfsSearching || validating || (!isFirstUser && !sponsorInfo?.valid) || !agreedToTerms || (!isFirstUser && !!sponsorInfo && sponsorInfo.leftTaken && sponsorInfo.rightTaken && !autoPlacement)}
+              disabled={loading || validating || (!isFirstUser && !sponsorInfo?.valid) || !agreedToTerms}
               className="w-full glow-button text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-40 disabled:cursor-not-allowed"
               data-testid="button-register"
               style={{ fontFamily: "var(--font-display)" }}

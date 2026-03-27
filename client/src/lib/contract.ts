@@ -46,9 +46,9 @@ export const NETWORK = isMainnet ? BSC_MAINNET : BSC_TESTNET;
 
 // ── New MvaultContract + MvaultToken ──────────────────────────────────────────
 export const MVAULT_CONTRACT_ADDRESS =
-  import.meta.env.VITE_MVAULT_CONTRACT_ADDRESS || "0xa4E74AC04BD3EAdadA8728a117C691D850e7158C";
+  import.meta.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x08d7e03c29623d3eEcc2D53cF6D4A1edf7E5F57c";
 export const MVT_TOKEN_ADDRESS =
-  import.meta.env.VITE_MVT_TOKEN_ADDRESS || "0x9FD2D859E55fE4245561E8EFdB10D500EF90f9eF";
+  import.meta.env.VITE_MVT_TOKEN_ADDRESS || "0x50984Ea16b3F79bB9B280a1ddEd624080F146Ad4";
 // USDT token address (same for both old and new contracts)
 export const TOKEN_ADDRESS =
   import.meta.env.VITE_PAYMENT_TOKEN_ADDRESS || "0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3";

@@ -227,16 +227,21 @@ export function useWeb3() {
   //      get proper revert data from eth_call
   //   2. If simulation passes, send through MetaMask with a fixed gasLimit to
   //      skip eth_estimateGas entirely
-  const register = useCallback(async (sponsor: string, binaryParent: string, placeLeft: boolean) => {
+  const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
+
+  const register = useCallback(async (sponsor: string, _binaryParent: string, placeLeft: boolean) => {
     const signer = await getSigner();
-    // Step 1 — simulate through our own reliable RPC (not MetaMask)
+    // The contract now handles placement on-chain via _findSlotOnSide.
+    // Always pass ZERO_ADDRESS as binaryParent → contract defaults to sponsor and
+    // walks the tree to find the deepest open slot on the requested side.
+    // Step 1 — simulate via direct RPC to catch any revert reason before sending
     const directProvider = getDirectProvider();
     const signerAddress = await signer.getAddress();
     const simContract = getMvaultContract(directProvider);
-    await simContract.register.staticCall(sponsor, binaryParent, placeLeft, { from: signerAddress });
+    await simContract.register.staticCall(sponsor, ZERO_ADDRESS, placeLeft, { from: signerAddress });
     // Step 2 — send through MetaMask with fixed gasLimit (bypasses eth_estimateGas)
     const sendContract = getMvaultContract(signer);
-    const tx = await sendContract.register(sponsor, binaryParent, placeLeft, { gasLimit: 500_000n });
+    const tx = await sendContract.register(sponsor, ZERO_ADDRESS, placeLeft, { gasLimit: 600_000n });
     await tx.wait();
     await fetchUserData();
   }, [getSigner, fetchUserData]);
