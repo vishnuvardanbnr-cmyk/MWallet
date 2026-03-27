@@ -217,11 +217,17 @@ export function useWeb3() {
   }, [switchNetwork, getProvider, fetchUserData]);
 
   // ── Registration (address-based) ────────────────────────────────────────────
-
+  // BSC testnet RPCs often don't return revert data from eth_estimateGas, causing
+  // "missing revert data" errors. Strategy:
+  //   1. staticCall() → uses eth_call, reliably surfaces revert reasons
+  //   2. If simulation passes, send with a fixed gasLimit to skip eth_estimateGas
   const register = useCallback(async (sponsor: string, binaryParent: string, placeLeft: boolean) => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
-    const tx = await contract.register(sponsor, binaryParent, placeLeft);
+    // Step 1 — simulate; throws a decoded custom error if the tx would revert
+    await contract.register.staticCall(sponsor, binaryParent, placeLeft);
+    // Step 2 — send for real, bypassing eth_estimateGas with a fixed gas cap
+    const tx = await contract.register(sponsor, binaryParent, placeLeft, { gasLimit: 500_000n });
     await tx.wait();
     await fetchUserData();
   }, [getSigner, fetchUserData]);
