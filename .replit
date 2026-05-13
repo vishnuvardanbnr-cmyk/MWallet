@@ -48,3 +48,4 @@ VITE_BOARD_HANDLER_ADDRESS = "0x6b3280d57159e2Cac30777b437291900cA3ba1C0"
 
 [agent]
 expertMode = true
+stack = "FULLSTACK_JS"
