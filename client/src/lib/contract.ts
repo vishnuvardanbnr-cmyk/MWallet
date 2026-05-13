@@ -46,9 +46,9 @@ export const NETWORK = isMainnet ? BSC_MAINNET : BSC_TESTNET;
 
 // ── New MvaultContract + MvaultToken ──────────────────────────────────────────
 export const MVAULT_CONTRACT_ADDRESS =
-  import.meta.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x08d7e03c29623d3eEcc2D53cF6D4A1edf7E5F57c";
+  import.meta.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x164E4c01958c623CeF48C7DF8C66deFbB5eB4f57";
 export const MVT_TOKEN_ADDRESS =
-  import.meta.env.VITE_MVT_TOKEN_ADDRESS || "0x50984Ea16b3F79bB9B280a1ddEd624080F146Ad4";
+  import.meta.env.VITE_MVT_TOKEN_ADDRESS || "0x80fBC04347c8a163902C9D7E2daE8B2474b01f5e";
 // USDT token address (same for both old and new contracts)
 export const TOKEN_ADDRESS =
   import.meta.env.VITE_PAYMENT_TOKEN_ADDRESS || "0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3";
@@ -89,6 +89,7 @@ export const MVAULT_ABI = [
   "function withdrawBtcPool(uint256 amount) external",
   // Rebirth
   "function rebirth(address subAccount, bool placeLeft) external",
+  "function claimRebirthBalance() external",
   // Profile
   "function setProfile(string _displayName, string _email, string _phone, string _country) external",
   "function getProfile(address _user) view returns (string displayName, string email, string phone, string country, bool profileSet)",
@@ -110,7 +111,7 @@ export const MVAULT_ABI = [
   "function INCOME_LIMIT() view returns (uint256)",
   // Board pool
   "function enterBoardPool() external",
-  "function canEnterBoard(address user) view returns (bool)",
+  "function canEnterBoard(address user) view returns (bool eligible, uint256 btcBalance, uint256 boardPrice)",
   "function getBoardPrice(uint256 level) view returns (uint256)",
   "function getBoardQueueLength(uint256 level) view returns (uint256)",
   "function getBoardCurrentIndex(uint256 level) view returns (uint256)",
@@ -194,7 +195,7 @@ export const MLM_ABI = [
 ];
 
 export const BOARD_HANDLER_ADDRESS =
-  import.meta.env.VITE_BOARD_HANDLER_ADDRESS || "0x9dBE6Ee45d93d223AAF515c76dB74FA63f48b474";
+  import.meta.env.VITE_BOARD_HANDLER_ADDRESS || "0xcA0Cc4A6236b4Af41E5588B70679DF9E9B8625Dc";
 export const DEPOSIT_VAULT_ADDRESS =
   import.meta.env.VITE_DEPOSIT_VAULT_ADDRESS || "0xD307FB39d7d42B59AC46e28D71ef72019E9D5e38";
 export const PANCAKE_ROUTER_ADDRESS =

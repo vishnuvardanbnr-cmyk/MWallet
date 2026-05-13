@@ -1167,19 +1167,22 @@ export async function registerRoutes(
 
   // ── BTC Swap via backend liquidity wallet ──────────────────────────────────
 
-  const BOARD_HANDLER_TESTNET = process.env.VITE_BOARD_HANDLER_ADDRESS || "0xAFDf34f6e2FBa1D1E9b1E4e180821b463c3cB72D";
-  const BOARD_HANDLER_SYNC_ABI = ["function totalVirtualRewards(address) view returns (uint256)"];
+  // MvaultContract on BSC testnet — source of truth for board rewards
+  const MVAULT_CONTRACT_TESTNET = process.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x164E4c01958c623CeF48C7DF8C66deFbB5eB4f57";
+  const MVAULT_BOARD_REWARD_ABI = [
+    "function totalBoardRewardsEarned(address user) view returns (uint256)",
+  ];
 
   // POST /api/btcswap/sync/:walletAddress — sync on-chain board rewards to backend virtual balance
-  // Reads totalVirtualRewards from BoardMatrixHandler (BSC testnet) and credits any new earnings
+  // Reads totalBoardRewardsEarned from MvaultContract and credits any new earnings to the BTC swap balance
   app.post("/api/btcswap/sync/:walletAddress", async (req, res) => {
     try {
       const addr = req.params.walletAddress.toLowerCase();
       const { ethers } = await import("ethers");
       const provider = new ethers.JsonRpcProvider(BSC_TESTNET_RPC);
-      const boardContract = new ethers.Contract(BOARD_HANDLER_TESTNET, BOARD_HANDLER_SYNC_ABI, provider);
+      const mvaultContract = new ethers.Contract(MVAULT_CONTRACT_TESTNET, MVAULT_BOARD_REWARD_ABI, provider);
 
-      const onChainTotalWei: bigint = await boardContract.totalVirtualRewards(addr);
+      const onChainTotalWei: bigint = await mvaultContract.totalBoardRewardsEarned(addr);
       const onChainTotal = parseFloat(ethers.formatUnits(onChainTotalWei, 18));
 
       const vBalance = await storage.getVirtualBtcBalance(addr);
@@ -1357,6 +1360,47 @@ export async function registerRoutes(
       const [txn] = await db.select().from(txnTable).where(eq(txnTable.id, parseInt(req.params.id)));
       if (!txn) return res.status(404).json({ message: "Transaction not found" });
       res.json(txn);
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
+  // ── Admin: trigger binary + power leg distribution from backend ─────────────
+  const ADMIN_WALLET = (process.env.VITE_ADMIN_WALLET || "0x04E8c5B49dE683c5B44eF1269Bd5ee4f338868C4").toLowerCase();
+
+  app.post("/api/admin/distribute", async (req, res) => {
+    const caller = (req.body?.callerAddress || "").toLowerCase();
+    if (caller !== ADMIN_WALLET) {
+      return res.status(403).json({ message: "Forbidden" });
+    }
+    const { runDistribution } = await import("./distributor");
+    // Run async — don't block the HTTP response
+    runDistribution().catch(() => {});
+    res.json({ ok: true, message: "Distribution started on the backend" });
+  });
+
+  app.get("/api/admin/pool-status", async (_req, res) => {
+    try {
+      const { ethers } = await import("ethers");
+      const MVAULT_CONTRACT_ADDRESS =
+        process.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x164E4c01958c623CeF48C7DF8C66deFbB5eB4f57";
+      const ABI = [
+        "function getPoolBalances() view returns (uint256 binary, uint256 reserve, uint256 admin)",
+        "function getAllUsersCount() view returns (uint256)",
+      ];
+      const rpc = process.env.VITE_BSC_NETWORK === "mainnet"
+        ? "https://bsc-rpc.publicnode.com"
+        : "https://bsc-testnet-rpc.publicnode.com";
+      const provider = new ethers.JsonRpcProvider(rpc);
+      const contract = new ethers.Contract(MVAULT_CONTRACT_ADDRESS, ABI, provider);
+      const [binary, reserve, admin] = await contract.getPoolBalances() as [bigint, bigint, bigint];
+      const totalUsers = Number(await contract.getAllUsersCount());
+      res.json({
+        binaryPool: binary.toString(),
+        powerLegReserve: reserve.toString(),
+        adminPool: admin.toString(),
+        totalUsers,
+      });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

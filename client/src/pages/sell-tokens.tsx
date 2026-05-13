@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Coins, DollarSign, ArrowDownUp, Loader2, TrendingDown, Flame, Info, Bitcoin, Shield } from "lucide-react";
+import { Coins, DollarSign, ArrowDownUp, Loader2, TrendingDown, Flame, Info, Bitcoin, Shield, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { formatTokenAmount } from "@/lib/contract";
@@ -13,29 +13,32 @@ interface SellTokensPageProps {
   sellMvt: (amount: string) => Promise<void>;
   approveToken: (amount?: string) => Promise<void>;
   fetchUserData: () => Promise<void>;
+  contractMvtBalance: bigint;
 }
 
-export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmount, sellMvt, approveToken, fetchUserData }: SellTokensPageProps) {
+export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmount, sellMvt, approveToken, fetchUserData, contractMvtBalance }: SellTokensPageProps) {
   const { toast } = useToast();
   const [sellAmount, setSellAmount] = useState("");
   const [selling, setSelling] = useState(false);
 
-  const mvtBalance = parseFloat(formatTokenAmount(userInfo.mvtBalance, 18));
-  const buyPrice = parseFloat(formatTokenAmount(mvtPrice.buyPrice, 18));
-  const sellPrice = parseFloat(formatTokenAmount(mvtPrice.sellPrice, 18));
-  const incomeLimit = parseFloat(formatTokenAmount(userInfo.incomeLimit, 18));
-  const rebirthPool = parseFloat(formatTokenAmount(userInfo.rebirthPool, 18));
+  const mvtBalance    = parseFloat(formatTokenAmount(userInfo.mvtBalance, 18));
+  const contractMvt   = parseFloat(formatTokenAmount(contractMvtBalance, 18));
+  const sellPrice     = parseFloat(formatTokenAmount(mvtPrice.sellPrice, 18));
+  const buyPrice      = parseFloat(formatTokenAmount(mvtPrice.buyPrice, 18));
+  const incomeLimit   = parseFloat(formatTokenAmount(userInfo.incomeLimit, 18));
+
+  // Sellable is capped by what the contract actually holds (real ERC20 tokens)
+  const sellableMvt = Math.min(mvtBalance, contractMvt);
+  const hasPendingMvt = mvtBalance > contractMvt + 0.0001;
 
   const sellAmt = parseFloat(sellAmount) || 0;
 
   function estimateSell(tokens: number) {
-    if (tokens <= 0 || sellPrice <= 0) return { grossUsdt: 0, btcDeduction: 0, netUsdt: 0, toIncome: 0, toRebirth: 0 };
-    const grossUsdt = tokens * sellPrice;
+    if (tokens <= 0 || sellPrice <= 0) return { grossUsdt: 0, btcDeduction: 0, netUsdt: 0 };
+    const grossUsdt    = tokens * sellPrice;
     const btcDeduction = grossUsdt * 0.1;
-    const netUsdt = grossUsdt * 0.9;
-    const toIncome = Math.min(netUsdt, incomeLimit);
-    const toRebirth = netUsdt - toIncome;
-    return { grossUsdt, btcDeduction, netUsdt, toIncome, toRebirth };
+    const netUsdt      = grossUsdt * 0.9;
+    return { grossUsdt, btcDeduction, netUsdt };
   }
 
   const preview = sellAmt > 0 ? estimateSell(sellAmt) : null;
@@ -43,7 +46,11 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
   const handleSell = async () => {
     if (!sellAmount || sellAmt <= 0) return;
     if (sellAmt > mvtBalance) {
-      toast({ title: "Exceeds balance", description: `You only have ${mvtBalance.toFixed(4)} MVT`, variant: "destructive" });
+      toast({ title: "Exceeds balance", description: `You only have ${mvtBalance.toFixed(2)} MVT`, variant: "destructive" });
+      return;
+    }
+    if (sellAmt > contractMvt && contractMvt > 0) {
+      toast({ title: "Exceeds sellable amount", description: `Only ${sellableMvt.toFixed(2)} MVT is currently backed and sellable`, variant: "destructive" });
       return;
     }
     setSelling(true);
@@ -51,7 +58,7 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
       await sellMvt(sellAmount);
       toast({
         title: "MVT Sold!",
-        description: `${sellAmt.toFixed(4)} MVT sold. USDT credited to your balance.`,
+        description: `${sellAmt.toFixed(2)} MVT sold. USDT credited to your balance.`,
       });
       setSellAmount("");
       await fetchUserData();
@@ -92,25 +99,36 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
           <Coins className="w-4 h-4 mx-auto text-yellow-300 mb-1" />
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">MVT Balance</p>
           <p className="text-sm font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-mvt-balance">
-            {mvtBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })}
+            {mvtBalance.toFixed(2)}
           </p>
         </div>
-        <div className="premium-card rounded-xl p-3 text-center" data-testid="card-income-limit">
-          <Shield className="w-4 h-4 mx-auto text-yellow-300 mb-1" />
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Income Limit</p>
-          <p className="text-sm font-bold text-yellow-300" style={{ fontFamily: "var(--font-display)" }} data-testid="text-income-limit">
-            ${incomeLimit.toFixed(2)}
+        <div className="premium-card rounded-xl p-3 text-center" data-testid="card-sellable">
+          <Shield className="w-4 h-4 mx-auto text-emerald-400 mb-1" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Sellable Now</p>
+          <p className="text-sm font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-sellable-balance">
+            {sellableMvt.toFixed(2)}
           </p>
         </div>
       </div>
+
+      {/* Pending MVT warning */}
+      {hasPendingMvt && (
+        <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-orange-500/10 border border-orange-500/20">
+          <AlertTriangle className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
+          <div className="text-[11px] text-muted-foreground leading-relaxed space-y-1">
+            <p><span className="text-orange-400 font-medium">Some MVT is pending:</span> {(mvtBalance - contractMvt).toFixed(2)} MVT from level/binary income is credited virtually but not yet backed by contract tokens.</p>
+            <p>You can sell up to <span className="text-foreground font-medium">{sellableMvt.toFixed(2)} MVT</span> right now. Pending MVT becomes sellable as more users activate.</p>
+          </div>
+        </div>
+      )}
 
       {/* How it works */}
       <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
         <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
         <div className="text-[11px] text-muted-foreground leading-relaxed space-y-1">
           <p><span className="text-foreground font-medium">Sell routing:</span> 10% of sale value → your BTC pool.</p>
-          <p>Of remaining 90%: fills your income limit first → any excess goes to rebirth pool.</p>
-          <p>Income limit: <span className="text-amber-400 font-medium">${incomeLimit.toFixed(2)} remaining</span> (resets to $390 on rebirth).</p>
+          <p>Remaining 90% fills your income limit first → any excess goes to rebirth pool.</p>
+          <p>Income limit remaining: <span className="text-amber-400 font-medium">${incomeLimit.toFixed(2)}</span></p>
         </div>
       </div>
 
@@ -125,7 +143,7 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
             <p className="text-[10px] text-muted-foreground">Virtual MVT → USDT balance in contract → withdraw anytime</p>
           </div>
           <Badge className="ml-auto bg-yellow-600/10 text-yellow-300 border-yellow-600/20 text-[10px]">
-            {mvtBalance.toLocaleString(undefined, { maximumFractionDigits: 2 })} MVT
+            {sellableMvt.toFixed(2)} MVT available
           </Badge>
         </div>
 
@@ -136,16 +154,16 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
               type="number"
               value={sellAmount}
               onChange={(e) => setSellAmount(e.target.value)}
-              placeholder="0.0000"
+              placeholder="0.00"
               min={0}
-              max={mvtBalance}
+              max={sellableMvt}
               className="flex-1 bg-transparent text-xl font-bold text-foreground outline-none placeholder:text-muted-foreground/30"
               style={{ fontFamily: "var(--font-display)" }}
               data-testid="input-sell-amount"
               disabled={selling}
             />
             <button
-              onClick={() => setSellAmount(mvtBalance.toFixed(4))}
+              onClick={() => setSellAmount(sellableMvt > 0 ? sellableMvt.toFixed(4) : "0")}
               className="text-[10px] text-yellow-300 hover:text-yellow-200 font-semibold uppercase tracking-wider px-2 py-1 rounded-md bg-yellow-600/10 hover:bg-yellow-600/15 transition-colors shrink-0"
               data-testid="button-sell-max"
             >
@@ -162,36 +180,25 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
         {preview && preview.grossUsdt > 0 && (
           <div className="space-y-2 p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
             <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Gross USDT (at sell price)</span>
-              <span className="font-medium">${preview.grossUsdt.toFixed(4)}</span>
+              <span className="text-muted-foreground">Total USDT (at sell price)</span>
+              <span className="font-medium">${preview.grossUsdt.toFixed(2)}</span>
             </div>
             <div className="flex items-center justify-between text-xs">
               <span className="flex items-center gap-1 text-orange-400/80"><Bitcoin className="h-3 w-3" /> BTC pool (10%)</span>
-              <span className="font-bold text-orange-400">−${preview.btcDeduction.toFixed(4)}</span>
+              <span className="font-bold text-orange-400">−${preview.btcDeduction.toFixed(2)}</span>
             </div>
             <div className="h-px bg-white/[0.06]" />
             <div className="flex items-center justify-between text-xs">
-              <span className="text-muted-foreground">Net USDT (90%)</span>
-              <span className="font-medium">${preview.netUsdt.toFixed(4)}</span>
+              <span className="text-emerald-400 font-medium">You receive (USDT balance)</span>
+              <span className="font-bold text-emerald-400">+${preview.netUsdt.toFixed(2)}</span>
             </div>
-            {preview.toIncome > 0 && (
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-emerald-400/80">→ USDT balance (income limit)</span>
-                <span className="font-bold text-emerald-400">+${preview.toIncome.toFixed(4)}</span>
-              </div>
-            )}
-            {preview.toRebirth > 0 && (
-              <div className="flex items-center justify-between text-xs">
-                <span className="text-purple-400/80">→ Rebirth pool (over limit)</span>
-                <span className="font-bold text-purple-400">+${preview.toRebirth.toFixed(4)}</span>
-              </div>
-            )}
+            <p className="text-[10px] text-muted-foreground/60">Contract routes 90% through your income limit automatically</p>
           </div>
         )}
 
         <button
           onClick={handleSell}
-          disabled={selling || !sellAmount || sellAmt <= 0 || sellAmt > mvtBalance || mvtBalance === 0}
+          disabled={selling || !sellAmount || sellAmt <= 0 || sellAmt > mvtBalance || sellableMvt === 0}
           className="w-full glow-button text-white font-bold py-3.5 px-6 rounded-xl transition-all flex items-center justify-center gap-2 disabled:opacity-50 disabled:cursor-not-allowed"
           style={{ fontFamily: "var(--font-display)" }}
           data-testid="button-sell-mvt"
@@ -200,9 +207,11 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
           {selling ? "Processing..." : "Sell MVT → USDT"}
         </button>
 
-        {mvtBalance === 0 && (
+        {sellableMvt === 0 && (
           <p className="text-[10px] text-center text-muted-foreground">
-            No MVT balance. Earn MVT by referring users (level income) or from binary distribution.
+            {mvtBalance > 0
+              ? "Your MVT is pending — no backed tokens available to sell yet."
+              : "No MVT balance. Earn MVT by referring users (level income) or from binary distribution."}
           </p>
         )}
       </div>
@@ -212,9 +221,9 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
         <h2 className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>How Selling Works</h2>
         <div className="space-y-3">
           {[
-            { step: "1", title: "Burn Virtual MVT", desc: "Your virtual MVT balance (held by the contract) is burned via the bonding curve." },
-            { step: "2", title: "10% to BTC Pool", desc: "10% of USDT proceeds go to your personal BTC pool — withdraw anytime via the BTC Swap page." },
-            { step: "3", title: "90% Routes Through Income Limit", desc: "Net USDT fills your $390 income limit → credited to USDT balance. Excess goes to rebirth pool." },
+            { step: "1", title: "Burn MVT Tokens", desc: "Your virtual MVT balance is burned via the bonding curve using the contract's real token pool." },
+            { step: "2", title: "10% to BTC Pool", desc: "10% of USDT proceeds go to your personal BTC pool — used exclusively to fund your board pool entries." },
+            { step: "3", title: "90% to Your USDT Balance", desc: "Net USDT fills your $390 income limit → credited to USDT balance. Excess goes to rebirth pool." },
             { step: "4", title: "Withdraw Anytime", desc: "Pull your USDT balance to your wallet from the Wallet page whenever you're ready." },
           ].map((item) => (
             <div key={item.step} className="flex items-start gap-3">

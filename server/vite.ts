@@ -17,7 +17,7 @@ export async function setupVite(server: Server, app: Express) {
         host: process.env.REPLIT_DEV_DOMAIN,
         protocol: "wss" as const,
       }
-    : { server, path: "/vite-hmr" };
+    : { server };
 
   const serverOptions = {
     middlewareMode: true,

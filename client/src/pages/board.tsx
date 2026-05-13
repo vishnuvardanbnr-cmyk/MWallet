@@ -183,7 +183,7 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
               </defs>
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
-              <span className="text-2xl font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-btc-pool-amount">${btcPoolFormatted}</span>
+              <span className="text-2xl font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-btc-pool-amount">${btcPoolNum.toFixed(2)}</span>
               <span className="text-[10px] text-muted-foreground">of $50 required</span>
             </div>
           </div>
@@ -192,7 +192,7 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
             <h2 className="text-lg font-bold mb-1" style={{ fontFamily: 'var(--font-display)' }}>
               <span className="gradient-text">Your BTC Pool Balance</span>
             </h2>
-            <p className="text-xs text-muted-foreground mb-4">10% of every withdrawal is added to your BTC pool. Once you reach $50, you can enter Pool 1.</p>
+            <p className="text-xs text-muted-foreground mb-4">10% of every MVT sell is added to your BTC pool. Once you reach $50, you can enter Pool 1.</p>
             <button
               onClick={handleEnterPool}
               disabled={!canEnter || entering}
@@ -412,7 +412,7 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
             <div className="h-5 w-5 rounded-md bg-amber-500/10 flex items-center justify-center shrink-0 mt-0.5">
               <span className="text-[10px] font-bold text-amber-400">1</span>
             </div>
-            <p className="text-xs text-muted-foreground">10% of every withdrawal is added to your BTC pool balance</p>
+            <p className="text-xs text-muted-foreground">10% of every MVT sell is added to your BTC pool balance</p>
           </div>
           <div className="flex items-start gap-2.5">
             <div className="h-5 w-5 rounded-md bg-yellow-600/10 flex items-center justify-center shrink-0 mt-0.5">

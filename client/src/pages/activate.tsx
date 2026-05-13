@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, LogOut, Zap, CheckCircle2, AlertCircle,
-  RefreshCw, ArrowRight, Shield, TrendingUp, Users, Wallet,
+  RefreshCw, ArrowRight, Shield, TrendingUp, Users, Wallet, Coins,
 } from "lucide-react";
 import { shortenAddress, getTokenContract, MVAULT_CONTRACT_ADDRESS, formatTokenAmount } from "@/lib/contract";
 import { Logo } from "@/components/logo";
@@ -13,8 +13,10 @@ interface ActivatePageProps {
   account: string;
   approveToken: (amount?: string) => Promise<void>;
   activatePackage: (pkg?: number) => Promise<void>;
+  activateFromBalance: () => Promise<void>;
   fetchUserData: () => Promise<void>;
   disconnect: () => void;
+  virtualUsdtBalance?: bigint;
 }
 
 function parseContractError(err: any): string {
@@ -34,16 +36,21 @@ const DISTRIBUTION = [
   { icon: Shield,     label: "Reserve",      sub: "Ecosystem growth fund",   pct: 30, color: "text-violet-300", bar: "bg-violet-500",  bg: "bg-violet-500/10", border: "border-violet-500/20" },
 ];
 
-export default function ActivatePage({ account, approveToken, activatePackage, fetchUserData, disconnect }: ActivatePageProps) {
+export default function ActivatePage({ account, approveToken, activatePackage, activateFromBalance, fetchUserData, disconnect, virtualUsdtBalance }: ActivatePageProps) {
   const { toast } = useToast();
   const [approved,   setApproved]   = useState(false);
   const [approving,  setApproving]  = useState(false);
   const [activating, setActivating] = useState(false);
+  const [activatingInternal, setActivatingInternal] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [usdtBalance, setUsdtBalance] = useState<bigint | null>(null);
   const [allowance,   setAllowance]   = useState<bigint>(0n);
+  const [activeMethod, setActiveMethod] = useState<"wallet" | "internal">("wallet");
 
   const PACKAGE_PRICE = ethers.parseUnits("130", 18);
+
+  const virtualBalanceNum = virtualUsdtBalance ? parseFloat(formatTokenAmount(virtualUsdtBalance, 18)) : 0;
+  const hasVirtualFunds = virtualUsdtBalance !== undefined && virtualUsdtBalance >= PACKAGE_PRICE;
 
   const fetchBalances = async () => {
     try {
@@ -88,6 +95,17 @@ export default function ActivatePage({ account, approveToken, activatePackage, f
     } finally { setActivating(false); }
   };
 
+  const handleActivateFromBalance = async () => {
+    setActivatingInternal(true);
+    try {
+      await activateFromBalance();
+      toast({ title: "Account Activated!", description: "Activated using your contract balance. Welcome to M-Vault!" });
+      await fetchUserData();
+    } catch (err: any) {
+      toast({ title: "Activation Failed", description: parseContractError(err), variant: "destructive" });
+    } finally { setActivatingInternal(false); }
+  };
+
   const handleRefresh = async () => {
     setRefreshing(true);
     await fetchBalances();
@@ -112,135 +130,203 @@ export default function ActivatePage({ account, approveToken, activatePackage, f
           </button>
         </div>
 
-        {/* Hero card */}
-        <div className="glass-card rounded-2xl p-6 space-y-6">
-
-          {/* Header */}
-          <div className="text-center space-y-2">
-            <div className="h-14 w-14 mx-auto rounded-2xl bg-gradient-to-br from-amber-500/25 to-yellow-400/10 border border-amber-400/15 flex items-center justify-center mb-3">
-              <Zap className="h-7 w-7 text-yellow-300" />
-            </div>
-            <h1 className="text-2xl font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }}
-              data-testid="text-page-title">Activate Account</h1>
-            <p className="text-xs text-muted-foreground">One-time $130 USDT · Earn up to $390 (3×)</p>
-          </div>
-
-          {/* Balance row */}
-          <div className="rounded-xl bg-white/[0.03] border border-white/[0.07] p-4 space-y-3">
-            <div className="flex justify-between items-center">
-              <span className="text-xs text-muted-foreground flex items-center gap-1.5">
-                <Wallet className="h-3.5 w-3.5" /> Your USDT Balance
-              </span>
-              {usdtBalance === null ? (
-                <span className="text-xs text-muted-foreground animate-pulse">Loading…</span>
-              ) : (
-                <span className={`text-sm font-bold ${hasFunds ? "text-emerald-400" : "text-red-400"}`}
-                  data-testid="text-usdt-balance" style={{ fontFamily: "var(--font-display)" }}>
-                  ${balanceNum?.toLocaleString(undefined, { maximumFractionDigits: 2 })}
-                </span>
-              )}
-            </div>
-
-            {usdtBalance !== null && (
-              <>
-                <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
-                  <div
-                    className={`h-full rounded-full transition-all duration-700 ${hasFunds
-                      ? "bg-gradient-to-r from-emerald-600 to-emerald-400"
-                      : "bg-gradient-to-r from-red-600 to-orange-400"}`}
-                    style={{ width: `${Math.min(100, (balanceNum ?? 0) / 130 * 100)}%` }}
-                  />
-                </div>
-                <div className="flex justify-between items-center">
-                  <span className="text-[10px] text-muted-foreground/60">
-                    {hasFunds ? "Sufficient to activate" : `Need $${Math.max(0, 130 - (balanceNum ?? 0)).toFixed(2)} more`}
-                  </span>
-                  <span className="text-[10px] font-mono text-muted-foreground/50">
-                    {shortenAddress(account)}
-                  </span>
-                </div>
-              </>
-            )}
-          </div>
-
-          {/* Low balance warning */}
-          {!hasFunds && usdtBalance !== null && (
-            <div className="flex items-start gap-2.5 p-3 rounded-xl bg-red-500/8 border border-red-500/15">
-              <AlertCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
-              <p className="text-xs text-red-400/90 leading-relaxed">
-                You need at least <strong>$130 USDT</strong> in your wallet to activate. Please top up and refresh.
-              </p>
-            </div>
-          )}
-
-          {/* Step indicator */}
-          <div className="flex items-center gap-3">
-            <div className={`flex-1 h-px ${step >= 1 ? "bg-amber-400/40" : "bg-white/[0.06]"}`} />
-            <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all ${
-              approved
-                ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
-                : "bg-amber-500/10 border-amber-500/25 text-amber-300"
-            }`}>
-              {approved
-                ? <><CheckCircle2 className="h-3.5 w-3.5" /> Approved</>
-                : <><span className="h-3.5 w-3.5 rounded-full bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-[9px]">1</span> Approve first</>
-              }
-            </div>
-            <div className={`flex-1 h-px ${step >= 2 ? "bg-amber-400/40" : "bg-white/[0.06]"}`} />
-          </div>
-
-          {/* Action buttons */}
-          <div className="space-y-2.5">
-            {/* Step 1 — Approve */}
-            {!approved ? (
-              <button
-                onClick={handleApprove}
-                disabled={approving || !hasFunds}
-                className="w-full glow-button text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed text-sm"
-                data-testid="button-approve-token"
-                style={{ fontFamily: "var(--font-display)" }}
-              >
-                {approving
-                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Approving USDT…</>
-                  : <><CheckCircle2 className="h-4 w-4" /> Step 1 — Approve $130 USDT</>
-                }
-              </button>
-            ) : (
-              <div className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-emerald-500/8 border border-emerald-500/20 text-sm font-semibold text-emerald-400">
-                <CheckCircle2 className="h-4 w-4" /> USDT Approved
-              </div>
-            )}
-
-            {/* Step 2 — Activate */}
+        {/* Method tabs */}
+        {hasVirtualFunds && (
+          <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06]">
             <button
-              onClick={handleActivate}
-              disabled={activating || !approved || !hasFunds}
-              className={`w-full font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2.5 text-sm disabled:opacity-40 disabled:cursor-not-allowed ${
-                approved
-                  ? "glow-button text-white"
-                  : "bg-white/[0.03] border border-white/[0.07] text-muted-foreground"
-              }`}
-              data-testid="button-activate-package"
+              onClick={() => setActiveMethod("wallet")}
+              className={`flex-1 py-2 rounded-lg text-[11px] font-semibold transition-all ${activeMethod === "wallet" ? "bg-amber-500/20 border border-amber-500/25 text-amber-300" : "text-muted-foreground"}`}
+              data-testid="tab-wallet-activation"
+            >
+              From Wallet USDT
+            </button>
+            <button
+              onClick={() => setActiveMethod("internal")}
+              className={`flex-1 py-2 rounded-lg text-[11px] font-semibold transition-all ${activeMethod === "internal" ? "bg-emerald-500/20 border border-emerald-500/25 text-emerald-300" : "text-muted-foreground"}`}
+              data-testid="tab-internal-activation"
+            >
+              From Contract Balance
+            </button>
+          </div>
+        )}
+
+        {/* Internal Activation */}
+        {activeMethod === "internal" && hasVirtualFunds && (
+          <div className="glass-card rounded-2xl p-6 space-y-5">
+            <div className="text-center space-y-2">
+              <div className="h-14 w-14 mx-auto rounded-2xl bg-gradient-to-br from-emerald-500/25 to-green-400/10 border border-emerald-400/15 flex items-center justify-center mb-3">
+                <Coins className="h-7 w-7 text-emerald-300" />
+              </div>
+              <h1 className="text-2xl font-bold text-emerald-300" style={{ fontFamily: "var(--font-display)" }}>
+                Internal Activation
+              </h1>
+              <p className="text-xs text-muted-foreground">Use your contract USDT balance to activate</p>
+            </div>
+
+            <div className="rounded-xl bg-white/[0.03] border border-white/[0.07] p-4">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Coins className="h-3.5 w-3.5" /> Contract USDT Balance
+                </span>
+                <span className="text-sm font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }}>
+                  ${virtualBalanceNum.toFixed(2)}
+                </span>
+              </div>
+              <div className="mt-2 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                <div
+                  className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-700"
+                  style={{ width: `${Math.min(100, (virtualBalanceNum / 130) * 100)}%` }}
+                />
+              </div>
+              <p className="text-[10px] text-emerald-400/70 mt-1">Sufficient to activate ($130 required)</p>
+            </div>
+
+            <button
+              onClick={handleActivateFromBalance}
+              disabled={activatingInternal}
+              className="w-full bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-emerald-300 font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2.5 text-sm disabled:opacity-40"
+              data-testid="button-activate-from-balance"
               style={{ fontFamily: "var(--font-display)" }}
             >
-              {activating
+              {activatingInternal
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Activating…</>
-                : <><ArrowRight className="h-4 w-4" /> Step 2 — Activate Account</>
+                : <><ArrowRight className="h-4 w-4" /> Activate Using Contract Balance</>
               }
             </button>
           </div>
+        )}
 
-          {/* Refresh */}
-          <button
-            onClick={handleRefresh}
-            disabled={refreshing}
-            className="w-full flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground/60 hover:text-muted-foreground py-1 transition-colors"
-            data-testid="button-refresh-balance"
-          >
-            <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
-            Refresh balance
-          </button>
-        </div>
+        {/* Wallet Activation */}
+        {(activeMethod === "wallet" || !hasVirtualFunds) && (
+          <div className="glass-card rounded-2xl p-6 space-y-6">
+
+            {/* Header */}
+            <div className="text-center space-y-2">
+              <div className="h-14 w-14 mx-auto rounded-2xl bg-gradient-to-br from-amber-500/25 to-yellow-400/10 border border-amber-400/15 flex items-center justify-center mb-3">
+                <Zap className="h-7 w-7 text-yellow-300" />
+              </div>
+              <h1 className="text-2xl font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }}
+                data-testid="text-page-title">Activate Account</h1>
+              <p className="text-xs text-muted-foreground">One-time $130 USDT · Earn up to $390 (3×)</p>
+            </div>
+
+            {/* Balance row */}
+            <div className="rounded-xl bg-white/[0.03] border border-white/[0.07] p-4 space-y-3">
+              <div className="flex justify-between items-center">
+                <span className="text-xs text-muted-foreground flex items-center gap-1.5">
+                  <Wallet className="h-3.5 w-3.5" /> Your Wallet USDT Balance
+                </span>
+                {usdtBalance === null ? (
+                  <span className="text-xs text-muted-foreground animate-pulse">Loading…</span>
+                ) : (
+                  <span className={`text-sm font-bold ${hasFunds ? "text-emerald-400" : "text-red-400"}`}
+                    data-testid="text-usdt-balance" style={{ fontFamily: "var(--font-display)" }}>
+                    ${balanceNum?.toFixed(2)}
+                  </span>
+                )}
+              </div>
+
+              {usdtBalance !== null && (
+                <>
+                  <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                    <div
+                      className={`h-full rounded-full transition-all duration-700 ${hasFunds
+                        ? "bg-gradient-to-r from-emerald-600 to-emerald-400"
+                        : "bg-gradient-to-r from-red-600 to-orange-400"}`}
+                      style={{ width: `${Math.min(100, (balanceNum ?? 0) / 130 * 100)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center">
+                    <span className="text-[10px] text-muted-foreground/60">
+                      {hasFunds ? "Sufficient to activate" : `Need $${Math.max(0, 130 - (balanceNum ?? 0)).toFixed(2)} more`}
+                    </span>
+                    <span className="text-[10px] font-mono text-muted-foreground/50">
+                      {shortenAddress(account)}
+                    </span>
+                  </div>
+                </>
+              )}
+            </div>
+
+            {/* Low balance warning */}
+            {!hasFunds && usdtBalance !== null && (
+              <div className="flex items-start gap-2.5 p-3 rounded-xl bg-red-500/8 border border-red-500/15">
+                <AlertCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+                <p className="text-xs text-red-400/90 leading-relaxed">
+                  You need at least <strong>$130 USDT</strong> in your wallet to activate. Please top up and refresh.
+                </p>
+              </div>
+            )}
+
+            {/* Step indicator */}
+            <div className="flex items-center gap-3">
+              <div className={`flex-1 h-px ${step >= 1 ? "bg-amber-400/40" : "bg-white/[0.06]"}`} />
+              <div className={`flex items-center gap-2 px-3 py-1.5 rounded-full text-[11px] font-semibold border transition-all ${
+                approved
+                  ? "bg-emerald-500/10 border-emerald-500/25 text-emerald-400"
+                  : "bg-amber-500/10 border-amber-500/25 text-amber-300"
+              }`}>
+                {approved
+                  ? <><CheckCircle2 className="h-3.5 w-3.5" /> Approved</>
+                  : <><span className="h-3.5 w-3.5 rounded-full bg-amber-400/20 border border-amber-400/40 flex items-center justify-center text-[9px]">1</span> Approve first</>
+                }
+              </div>
+              <div className={`flex-1 h-px ${step >= 2 ? "bg-amber-400/40" : "bg-white/[0.06]"}`} />
+            </div>
+
+            {/* Action buttons */}
+            <div className="space-y-2.5">
+              {/* Step 1 — Approve */}
+              {!approved ? (
+                <button
+                  onClick={handleApprove}
+                  disabled={approving || !hasFunds}
+                  className="w-full glow-button text-white font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2.5 disabled:opacity-40 disabled:cursor-not-allowed text-sm"
+                  data-testid="button-approve-token"
+                  style={{ fontFamily: "var(--font-display)" }}
+                >
+                  {approving
+                    ? <><Loader2 className="h-4 w-4 animate-spin" /> Approving USDT…</>
+                    : <><CheckCircle2 className="h-4 w-4" /> Step 1 — Approve $130 USDT</>
+                  }
+                </button>
+              ) : (
+                <div className="w-full flex items-center justify-center gap-2 py-3.5 rounded-xl bg-emerald-500/8 border border-emerald-500/20 text-sm font-semibold text-emerald-400">
+                  <CheckCircle2 className="h-4 w-4" /> USDT Approved
+                </div>
+              )}
+
+              {/* Step 2 — Activate */}
+              <button
+                onClick={handleActivate}
+                disabled={activating || !approved || !hasFunds}
+                className={`w-full font-bold py-4 rounded-xl transition-all flex items-center justify-center gap-2.5 text-sm disabled:opacity-40 disabled:cursor-not-allowed ${
+                  approved
+                    ? "glow-button text-white"
+                    : "bg-white/[0.03] border border-white/[0.07] text-muted-foreground"
+                }`}
+                data-testid="button-activate-package"
+                style={{ fontFamily: "var(--font-display)" }}
+              >
+                {activating
+                  ? <><Loader2 className="h-4 w-4 animate-spin" /> Activating…</>
+                  : <><ArrowRight className="h-4 w-4" /> Step 2 — Activate Account</>
+                }
+              </button>
+            </div>
+
+            {/* Refresh */}
+            <button
+              onClick={handleRefresh}
+              disabled={refreshing}
+              className="w-full flex items-center justify-center gap-1.5 text-[11px] text-muted-foreground/60 hover:text-muted-foreground py-1 transition-colors"
+              data-testid="button-refresh-balance"
+            >
+              <RefreshCw className={`h-3 w-3 ${refreshing ? "animate-spin" : ""}`} />
+              Refresh balance
+            </button>
+          </div>
+        )}
 
         {/* Distribution card */}
         <div className="glass-card rounded-2xl p-5 space-y-4">

@@ -2,8 +2,9 @@ import { useState, useEffect, useCallback } from "react";
 import {
   Coins, Lock, Unlock, DollarSign, Loader2, TrendingUp,
   Info, CheckCircle, AlertCircle, RefreshCw, Zap, Shield,
-  ArrowRight, Clock, Ban, ChevronDown, ChevronUp
+  ArrowRight, Clock, Ban, ChevronDown, ChevronUp, ExternalLink
 } from "lucide-react";
+import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { getMvaultContract, getTokenContract, MVAULT_CONTRACT_ADDRESS, formatTokenAmount } from "@/lib/contract";
@@ -47,6 +48,7 @@ export default function PaidStakingPage({
   getActiveStakesOnChain, approveToken, tokenDecimals = 18,
 }: Props) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
   const [activeTab, setActiveTab]         = useState<"flexible" | "locked">("flexible");
   const [usdtInput, setUsdtInput]         = useState("");
   const [staking, setStaking]             = useState(false);
@@ -179,9 +181,14 @@ export default function PaidStakingPage({
   const handleUnstake = async (pos: StakePosition) => {
     if (!unstakePosition) return;
     setUnstakingIndex(pos.index);
+    const preview = getUnstakePreview(pos);
+    const userUsdt = preview.userUsdt;
     try {
       await unstakePosition(pos.index);
-      toast({ title: "Unstaked!", description: "USDT has been sent to your wallet." });
+      toast({
+        title: "Unstaked Successfully!",
+        description: `~$${userUsdt.toFixed(2)} USDT credited to your Wallet balance — go to Wallet page to withdraw.`,
+      });
       await loadPositions(); await loadWalletData();
     } catch (e: any) {
       toast({ title: "Unstake Failed", description: e?.message ?? "Transaction failed.", variant: "destructive" });
@@ -297,12 +304,14 @@ export default function PaidStakingPage({
               <p><strong className="text-amber-300">Flexible Staking:</strong> Unstake anytime, no lock.</p>
               <p>• On unstake: 5% MVT → direct sponsor; 95% sold for USDT.</p>
               <p className="font-semibold text-amber-400">• 2× sell cap: max USDT = 2× your invested amount. Excess → admin.</p>
+              <p className="text-emerald-400/80">• USDT proceeds are credited to your Wallet balance — withdraw from the Wallet page.</p>
             </>
           ) : (
             <>
               <p><strong className="text-violet-300">Locked Staking:</strong> 10-month lock. Unstake after 300 days.</p>
               <p>• On unstake: 5%/2%/1%/1%/1% MVT → 5 sponsor levels; 90% sold for USDT.</p>
               <p className="font-semibold text-violet-400">• No sell cap: receive full sell value of your tokens.</p>
+              <p className="text-emerald-400/80">• USDT proceeds are credited to your Wallet balance — withdraw from the Wallet page.</p>
             </>
           )}
         </div>
@@ -548,60 +557,69 @@ export default function PaidStakingPage({
 
                   {/* Expanded unstake preview */}
                   {expanded && (
-                    <div className={`p-3.5 rounded-xl border space-y-1.5 text-[11px] ${
-                      flex ? "bg-amber-500/5 border-amber-500/15" : "bg-violet-500/5 border-violet-500/15"
+                    <div className={`rounded-xl border space-y-3 text-[11px] overflow-hidden ${
+                      flex ? "border-amber-500/20" : "border-violet-500/20"
                     }`}>
-                      <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">Unstake Preview</p>
-                      {preview.type === "flexible" ? (
-                        <>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Sponsor (5%)</span>
-                            <span className="text-amber-300">{fmt(preview.sponsorMvt, 2)} MVT</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Tokens sold (95%)</span>
-                            <span className="font-medium">{fmt(preview.toSell, 2)} MVT</span>
-                          </div>
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Gross USDT</span>
-                            <span>${fmt(preview.grossUsdt, 4)}</span>
-                          </div>
-                          {preview.adminCut > 0 && (
-                            <div className="flex justify-between text-orange-400/80">
-                              <span>Admin cut (above 2× cap)</span>
-                              <span>-${fmt(preview.adminCut, 4)}</span>
+                      <div className={`px-3.5 pt-3 pb-0 ${flex ? "bg-amber-500/5" : "bg-violet-500/5"}`}>
+                        <p className="text-[10px] uppercase tracking-wider text-muted-foreground font-medium mb-2">Unstake Breakdown</p>
+                        {preview.type === "flexible" ? (
+                          <div className="space-y-1.5 pb-3">
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Direct sponsor (5%)</span>
+                              <span className="text-amber-300">{fmt(preview.sponsorMvt, 2)} MVT</span>
                             </div>
-                          )}
-                          <div className="h-px bg-white/[0.06] my-1" />
-                          <div className="flex justify-between font-semibold">
-                            <span className="text-muted-foreground">You receive</span>
-                            <span className="text-emerald-400">~${fmt(preview.userUsdt, 4)} USDT</span>
-                          </div>
-                          {curVal > cap && (
-                            <p className="text-[10px] text-orange-400/80 mt-1">
-                              ⚠ Current value exceeds 2× cap. Convert to Locked to remove cap limit.
-                            </p>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          {LOCKED_FEE_RATES.map((r, i) => (
-                            <div key={i} className="flex justify-between">
-                              <span className="text-muted-foreground">L{i + 1} upline ({r}%)</span>
-                              <span className="text-violet-300">{fmt(preview.distrib[i], 2)} MVT</span>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Your tokens sold (95%)</span>
+                              <span className="font-medium">{fmt(preview.toSell, 2)} MVT</span>
                             </div>
-                          ))}
-                          <div className="flex justify-between">
-                            <span className="text-muted-foreground">Tokens sold (90%)</span>
-                            <span className="font-medium">{fmt(preview.toSell, 2)} MVT</span>
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Gross USDT from sell</span>
+                              <span>${fmt(preview.grossUsdt, 2)}</span>
+                            </div>
+                            {preview.adminCut > 0 && (
+                              <div className="flex justify-between text-orange-400/80">
+                                <span>Admin cut (above 2× cap)</span>
+                                <span>−${fmt(preview.adminCut, 2)}</span>
+                              </div>
+                            )}
+                            {curVal > cap && (
+                              <p className="text-[10px] text-orange-400/80">
+                                ⚠ Value exceeds 2× cap. Convert to Locked to remove limit.
+                              </p>
+                            )}
                           </div>
-                          <div className="h-px bg-white/[0.06] my-1" />
-                          <div className="flex justify-between font-semibold">
-                            <span className="text-muted-foreground">You receive (full value)</span>
-                            <span className="text-emerald-400">~${fmt(preview.userUsdt, 4)} USDT</span>
+                        ) : (
+                          <div className="space-y-1.5 pb-3">
+                            {LOCKED_FEE_RATES.map((r, i) => (
+                              <div key={i} className="flex justify-between">
+                                <span className="text-muted-foreground">L{i + 1} upline ({r}%)</span>
+                                <span className="text-violet-300">{fmt(preview.distrib[i], 2)} MVT</span>
+                              </div>
+                            ))}
+                            <div className="flex justify-between">
+                              <span className="text-muted-foreground">Your tokens sold (90%)</span>
+                              <span className="font-medium">{fmt(preview.toSell, 2)} MVT</span>
+                            </div>
                           </div>
-                        </>
-                      )}
+                        )}
+                      </div>
+
+                      {/* "You receive" highlight row */}
+                      <div className="mx-0 bg-emerald-500/10 border-t border-emerald-500/20 px-3.5 py-3 flex items-center justify-between">
+                        <div>
+                          <p className="text-[10px] text-muted-foreground">You receive (credited to Wallet balance)</p>
+                          <p className="text-base font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }}>
+                            ~${fmt(preview.userUsdt, 2)} USDT
+                          </p>
+                        </div>
+                        <button
+                          onClick={() => setLocation("/wallet")}
+                          className="flex items-center gap-1 text-[10px] text-emerald-400 hover:text-emerald-300 transition-colors shrink-0"
+                          data-testid="button-go-wallet-from-staking"
+                        >
+                          Wallet <ExternalLink className="h-3 w-3" />
+                        </button>
+                      </div>
                     </div>
                   )}
 
@@ -679,6 +697,13 @@ export default function PaidStakingPage({
               <p>90% sold for USDT</p>
               <p className="text-violet-400 font-medium">No cap — full value</p>
             </div>
+          </div>
+
+          <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/15 flex items-start gap-2">
+            <ExternalLink className="h-3.5 w-3.5 text-emerald-400 shrink-0 mt-0.5" />
+            <p className="text-[11px] text-emerald-400/80">
+              <strong className="text-emerald-400">Unstake proceeds</strong> are credited to your contract USDT balance (visible on the Wallet page). From there you can withdraw to your MetaMask wallet anytime.
+            </p>
           </div>
         </div>
       </div>

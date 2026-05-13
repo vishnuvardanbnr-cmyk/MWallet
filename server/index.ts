@@ -60,10 +60,12 @@ app.use((req, res, next) => {
 });
 
 import { setupWebSocket } from "./websocket";
+import { startDistributor } from "./distributor";
 setupWebSocket(httpServer);
 
 (async () => {
   await registerRoutes(httpServer, app);
+  startDistributor();
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

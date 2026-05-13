@@ -18,7 +18,6 @@ interface DashboardProps {
   profileOnChain: ProfileOnChain | null;
   sellMvt: (amount: string) => Promise<void>;
   withdrawFunds: (amount: string) => Promise<void>;
-  withdrawBtcPool: (amount: string) => Promise<void>;
   rebirth: (subAccount: string, placeLeft: boolean) => Promise<void>;
   fetchUserData: () => Promise<void>;
   approveToken: (amount?: string) => Promise<void>;
@@ -38,7 +37,7 @@ function mvtFmt(val: bigint) {
 
 export default function Dashboard({
   userInfo, mvtPrice, binaryPairs, formatAmount, account,
-  profileOnChain, sellMvt, withdrawFunds, withdrawBtcPool, rebirth, fetchUserData, approveToken,
+  profileOnChain, sellMvt, withdrawFunds, rebirth, fetchUserData, approveToken,
 }: DashboardProps) {
   const [, setLocation] = useLocation();
   const { toast } = useToast();
@@ -307,7 +306,7 @@ export default function Dashboard({
             <div className="mt-2 space-y-2">
               <p className="text-[10px] text-purple-300/80">$130 reached — create a new sub-account to continue earning beyond your $390 limit.</p>
               <button
-                onClick={() => setLocation("/register-for")}
+                onClick={() => setLocation("/rebirth")}
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-purple-500/15 border border-purple-500/30 text-sm font-semibold text-purple-300 hover:bg-purple-500/20 transition-all"
                 data-testid="button-trigger-rebirth"
               >

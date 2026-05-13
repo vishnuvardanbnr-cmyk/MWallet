@@ -94,6 +94,7 @@ export function useWeb3() {
   const [btcPoolBalance, setBtcPoolBalance] = useState<bigint>(0n);
   const [totalUsers, setTotalUsers] = useState<number>(0);
   const [profileOnChain, setProfileOnChain] = useState<ProfileOnChain | null>(null);
+  const [contractMvtBalance, setContractMvtBalance] = useState<bigint>(0n);
   const tokenDecimals = 18;
 
   const getProvider = useCallback(() => {
@@ -185,6 +186,12 @@ export function useWeb3() {
         try {
           const [curr, newP] = await contract.getCurrentBinaryPairs(address);
           setBinaryPairs({ currentPairs: curr, newPairs: newP });
+        } catch { }
+
+        // Actual MVT ERC20 tokens held by the contract (caps sellable amount)
+        try {
+          const bal = await contract.getMvtContractBalance();
+          setContractMvtBalance(bal);
         } catch { }
 
         // Profile from new MvaultContract (on-chain)
@@ -312,6 +319,14 @@ export function useWeb3() {
     await fetchUserData();
   }, [getSigner, fetchUserData]);
 
+  const claimRebirthBalance = useCallback(async () => {
+    const signer = await getSigner();
+    const contract = getMvaultContract(signer);
+    const tx = await contract.claimRebirthBalance();
+    await tx.wait();
+    await fetchUserData();
+  }, [getSigner, fetchUserData]);
+
   // ── Profile (on-chain via MvaultContract) ──────────────────────────────────
 
   const saveProfileOnChain = useCallback(async (
@@ -328,13 +343,30 @@ export function useWeb3() {
   // ── Direct referrals (via Registered events filtered by sponsor == account) ───
   const getDirectReferrals = useCallback(async (offset: number, limit: number) => {
     if (!account) return { referrals: [], total: 0 };
-    try {
-      const provider = getDirectProvider();
+    const tryQuery = async (provider: ethers.Provider, fromBlock: number | "earliest", toBlock: number | "latest") => {
       const contract = getMvaultContract(provider);
       const filter = contract.filters.Registered(null, account);
-      // Explicit block range avoids RPC timeout on BSC
-      const events = await contract.queryFilter(filter, 0, "latest");
-      const allAddresses = events.map((e: any) => e.args[0] as string).reverse();
+      return await contract.queryFilter(filter, fromBlock, toBlock);
+    };
+    try {
+      // Try direct provider first (avoids MetaMask proxy limitations)
+      let events: any[];
+      const directProvider = getDirectProvider();
+      try {
+        events = await tryQuery(directProvider, 0, "latest");
+      } catch {
+        // Fall back to recent block range (last 200,000 blocks ≈ ~7 days on BSC)
+        try {
+          const currentBlock = await directProvider.getBlockNumber();
+          events = await tryQuery(directProvider, Math.max(0, currentBlock - 200_000), currentBlock);
+        } catch {
+          // Last resort: use MetaMask provider
+          const mmProvider = getProvider();
+          const currentBlock = await mmProvider.getBlockNumber();
+          events = await tryQuery(mmProvider, Math.max(0, currentBlock - 200_000), currentBlock);
+        }
+      }
+      const allAddresses = events.map((e: any) => (e.args?.[0] ?? e.args?.user) as string).filter(Boolean).reverse();
       const total = allAddresses.length;
       const referrals = allAddresses.slice(offset, offset + limit);
       return { referrals, total };
@@ -342,7 +374,7 @@ export function useWeb3() {
       console.error("getDirectReferrals error:", err);
       return { referrals: [], total: 0 };
     }
-  }, [account]);
+  }, [account, getProvider]);
 
   // ── Transactions (from on-chain events) ────────────────────────────────────
 
@@ -376,6 +408,7 @@ export function useWeb3() {
         11: { type: "Board Reward",         isIncome: true,  currency: "USDT", detail: (r) => `Pool ${Number(r.level)} completed` },
         12: { type: "Staked",               isIncome: false, currency: "USDT", detail: ()  => "USDT staked for MVT" },
         13: { type: "Unstaked",             isIncome: true,  currency: "USDT", detail: ()  => "USDT credited from unstake" },
+        14: { type: "Rebirth Claim",        isIncome: true,  currency: "USDT", detail: ()  => "Partial rebirth pool claimed to wallet" },
       };
 
       // Fetch stored TX records (includes Stake/Unstake since contract now records them)
@@ -385,7 +418,7 @@ export function useWeb3() {
       const transactions = (records as any[]).map((r) => {
         const txType = Number(r.txType);
         const meta = TX_META[txType] ?? { type: "Unknown", isIncome: false, currency: "USDT" as const, detail: () => "" };
-        return {
+        const base: any = {
           type:      meta.type,
           amount:    BigInt(r.amount),
           detail:    meta.detail(r),
@@ -393,7 +426,67 @@ export function useWeb3() {
           isIncome:  meta.isIncome,
           currency:  meta.currency,
         };
+        // For sell transactions, try to extract MVT amount from r.level if stored
+        if (txType === 5) {
+          const lvlBn = r.level ? BigInt(r.level) : 0n;
+          if (lvlBn > 0n) base.mvtAmount = lvlBn;
+          // sellPrice can be inferred if we have both mvtAmount and usdtReceived
+          if (lvlBn > 0n && BigInt(r.amount) > 0n) {
+            // total USDT = amount / 0.9; sell price = totalUsdt / mvtAmount
+            // we'll compute in UI instead; just pass what we have
+          }
+        }
+        return base;
       });
+
+      // Supplement with Staked/Unstaked events if no staking records found in stored TXs
+      const hasStakingRecords = transactions.some(t => t.type === "Staked" || t.type === "Unstaked");
+      if (!hasStakingRecords && offset === 0) {
+        try {
+          const currentBlock = await provider.getBlockNumber();
+          const fromBlock = Math.max(0, currentBlock - 200_000);
+
+          // Try to find Staked events
+          const stakedFilter = contract.filters.Staked?.(account);
+          const unstakedFilter = contract.filters.Unstaked?.(account);
+          const [stakedEvts, unstakedEvts] = await Promise.all([
+            stakedFilter ? contract.queryFilter(stakedFilter, fromBlock, currentBlock).catch(() => []) : Promise.resolve([]),
+            unstakedFilter ? contract.queryFilter(unstakedFilter, fromBlock, currentBlock).catch(() => []) : Promise.resolve([]),
+          ]);
+
+          for (const evt of stakedEvts as any[]) {
+            const block = await provider.getBlock(evt.blockNumber);
+            // Event: Staked(address user, uint256 stakeIndex, uint256 usdtAmount, uint256 mvtMinted, bool isLocked)
+            const isLocked = evt.args?.isLocked ?? false;
+            transactions.unshift({
+              type: "Staked",
+              amount: evt.args?.usdtAmount ?? evt.args?.[2] ?? 0n,
+              detail: isLocked ? "USDT staked for MVT (Locked)" : "USDT staked for MVT (Flexible)",
+              timestamp: block?.timestamp ?? 0,
+              isIncome: false,
+              currency: "USDT",
+              mvtMinted: evt.args?.mvtMinted ?? evt.args?.[3] ?? 0n,
+            } as any);
+          }
+          for (const evt of unstakedEvts as any[]) {
+            const block = await provider.getBlock(evt.blockNumber);
+            // Event: Unstaked(address user, uint256 stakeIndex, uint256 mvtReturned, uint256 usdtReceived, uint256 adminCapCut)
+            transactions.unshift({
+              type: "Unstaked",
+              amount: evt.args?.usdtReceived ?? evt.args?.[3] ?? 0n,
+              detail: "USDT credited from unstake",
+              timestamp: block?.timestamp ?? 0,
+              isIncome: true,
+              currency: "USDT",
+              mvtReturned: evt.args?.mvtReturned ?? evt.args?.[2] ?? 0n,
+            } as any);
+          }
+          // sort by timestamp desc
+          transactions.sort((a, b) => b.timestamp - a.timestamp);
+        } catch {
+          // Staked/Unstaked events not available — continue without them
+        }
+      }
 
       return { transactions, total };
     } catch (err) {
@@ -513,7 +606,7 @@ export function useWeb3() {
   ) => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
-    const tx = await contract.registerAndActivateFor(newUser, binaryParent, placeLeft);
+    const tx = await contract.registerAndActivateFor(newUser, binaryParent, placeLeft, { gasLimit: 800000 });
     await tx.wait();
     await fetchUserData();
   }, [getSigner, fetchUserData]);
@@ -539,18 +632,59 @@ export function useWeb3() {
     }
   }, []);
 
+  // ── Admin: pool balances + distribution ────────────────────────────────────
+  const getAdminPoolBalances = useCallback(async () => {
+    const provider = getProvider();
+    const contract = getMvaultContract(provider);
+    const [binary, reserve, admin] = await contract.getPoolBalances();
+    const userCount = await contract.getAllUsersCount();
+    return {
+      binaryPool: binary as bigint,
+      powerLegReserve: reserve as bigint,
+      adminPool: admin as bigint,
+      totalUsers: Number(userCount),
+    };
+  }, []);
+
+  const distributeBinaryIncome = useCallback(async (totalUserCount: number) => {
+    const signer = await getSigner();
+    const contract = getMvaultContract(signer);
+    const BATCH = 200;
+    for (let offset = 0; offset < totalUserCount; offset += BATCH) {
+      const limit = Math.min(BATCH, totalUserCount - offset);
+      const tx = await contract.distributeBinaryIncome(offset, limit);
+      await tx.wait();
+      // Only first batch resets binaryPool; subsequent batches are no-ops on already-distributed pools
+      // but the contract's _binaryDistributed flag prevents double distribution
+      if (offset === 0) break; // contract processes all in first call if limit is large enough
+    }
+  }, [getSigner]);
+
+  const distributePowerLeg = useCallback(async (totalUserCount: number) => {
+    const signer = await getSigner();
+    const contract = getMvaultContract(signer);
+    const BATCH = 200;
+    for (let offset = 0; offset < totalUserCount; offset += BATCH) {
+      const limit = Math.min(BATCH, totalUserCount - offset);
+      const tx = await contract.distributePowerLeg(offset, limit);
+      await tx.wait();
+      if (offset === 0) break;
+    }
+  }, [getSigner]);
+
   return {
     account, loading, initialLoaded, isRegistered, userInfo,
     incomeInfo, binaryInfo, slabInfo: null as SlabInfo | null,
     mvtPrice, binaryPairs,
-    btcPoolBalance, tokenDecimals, totalUsers, profileOnChain,
+    btcPoolBalance, tokenDecimals, totalUsers, profileOnChain, contractMvtBalance,
     connect, register, approveToken, activatePackage, activateFromBalance,
-    sellMvt, withdrawFunds, withdrawBtcPool, rebirth,
+    sellMvt, withdrawFunds, withdrawBtcPool, rebirth, claimRebirthBalance,
     enterBoardPool, claimBinaryIncome, saveProfileOnChain,
     reactivatePackage, repurchase,
     getDirectReferrals, getTokenBalance,
     getTransactionsFromContract, getBinaryFlushedEvents, fetchUserData,
     stakeUsdt, unstakePosition, convertStakeToLocked, getActiveStakesOnChain, registerAndActivateFor,
+    getAdminPoolBalances, distributeBinaryIncome, distributePowerLeg,
     formatAmount: (val: bigint) => formatTokenAmount(val, tokenDecimals),
   };
 }

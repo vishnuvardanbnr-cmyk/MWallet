@@ -175,6 +175,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint8 internal constant TX_BOARD_REWARD   = 11;
     uint8 internal constant TX_STAKE          = 12;
     uint8 internal constant TX_UNSTAKE        = 13;
+    uint8 internal constant TX_REBIRTH_CLAIM  = 14;
 
     struct TxRecord {
         uint8   txType;    // one of TX_* constants above
@@ -699,19 +700,23 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (u.rebirthPool < PACKAGE_PRICE) revert InsufficientRebirthPool();
         if (users[subAccount].isRegistered) revert SubAccountAlreadyRegistered();
 
-        // ── 1. Deduct $130 for activation ────────────────────────────────────
+        // ── 1. Deduct $130 for sub-account activation ────────────────────────
         u.rebirthPool -= PACKAGE_PRICE;
 
-        // ── 2. Credit $130 to main wallet (capped at what remains in pool) ───
-        uint256 mainCredit = u.rebirthPool >= PACKAGE_PRICE
-            ? PACKAGE_PRICE
-            : u.rebirthPool;
-        u.rebirthPool     -= mainCredit;
-        u.usdtBalance     += mainCredit;
-        u.totalUsdtEarned += mainCredit;
-
-        // ── 3. Reset income limit ─────────────────────────────────────────────
+        // ── 2. Reset income limit to full ─────────────────────────────────────
         u.incomeLimit = INCOME_LIMIT;
+
+        // ── 3. Move remaining rebirth pool → main wallet through income limit ──
+        // Credits the remainder to usdtBalance up to the newly reset income limit.
+        // Excess beyond the income limit stays in rebirthPool (toward next rebirth).
+        uint256 remaining = u.rebirthPool;
+        if (remaining > 0) {
+            uint256 toMain    = remaining > u.incomeLimit ? u.incomeLimit : remaining;
+            u.rebirthPool    -= toMain;
+            u.usdtBalance    += toMain;
+            u.incomeLimit    -= toMain;
+            u.totalUsdtEarned += toMain;
+        }
 
         // ── 4. Register sub-account ───────────────────────────────────────────
         // Sponsor = main account's sponsor → sub-account's L1 income goes to
@@ -737,6 +742,26 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
         emit Reborn(msg.sender, subAccount, u.rebirthCount);
         _recordTx(msg.sender, TX_REBIRTH, 0, 0, subAccount);
+    }
+
+    /**
+     * @notice Claim a partial rebirth pool balance (< $130) back to USDT balance.
+     *         If rebirthPool >= $130 the user must use rebirth() instead.
+     *         This allows users to recover small overflow amounts that are not
+     *         enough to trigger a full rebirth.
+     */
+    function claimRebirthBalance() external nonReentrant {
+        User storage u = users[msg.sender];
+        if (!u.isActive)               revert NotActive();
+        if (u.rebirthPool == 0)        revert("No rebirth balance to claim");
+        if (u.rebirthPool >= PACKAGE_PRICE) revert("Use rebirth() - pool is >= $130");
+
+        uint256 claim    = u.rebirthPool;
+        u.rebirthPool    = 0;
+        u.usdtBalance   += claim;
+        u.totalUsdtEarned += claim;
+
+        _recordTx(msg.sender, TX_REBIRTH_CLAIM, claim, 0, address(0));
     }
 
     /**
@@ -962,8 +987,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 grossMvt = mvaultToken.balanceOf(address(this)) - balBefore;
         if (grossMvt == 0) revert NoMvtMinted();
 
-        // Level income in MVT: rates [10,2,1,1,1] per 90 units of grossMvt  (sums to 15/90)
-        // Unqualified upline shares accumulate to levelToAdmin
+        // Level income in MVT: rates [10,2,1,1,1] per 90 units of grossMvt (sums to 15/90).
+        // Credited to sponsors' virtual MVT balance — subject to income limit when they sell.
+        // Unqualified upline shares accumulate to levelToAdmin (MVT).
         uint8[5] memory levelRates = [10, 2, 1, 1, 1];
         address cur = users[msg.sender].sponsor;
         uint256 levelDistributed = 0;
@@ -981,11 +1007,12 @@ contract MvaultContract is Ownable, ReentrancyGuard {
                 users[cur].totalReceived += share;
                 levelDistributed         += share;
                 emit StakeLevelIncomePaid(cur, msg.sender, i + 1, share);
+                _recordTx(cur, TX_LEVEL_INCOME, share, i + 1, msg.sender);
             }
             cur = users[cur].sponsor;
         }
 
-        // Admin alloc: 5/90 of grossMvt + any unqualified level shares
+        // Admin alloc: 5/90 of grossMvt + any unqualified level shares (kept as MVT)
         uint256 adminAmt = grossMvt * 5 / 90;
         adminPool += adminAmt + levelToAdmin;
 
@@ -1039,26 +1066,28 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 toSell   = totalMvt;
 
         if (!isLocked) {
-            // ── Flexible: 5% virtual MVT to direct sponsor ───────────────────
+            // ── Flexible: 5% virtual MVT to direct sponsor (subject to income limit on sell) ─
             uint256 sponsorShare = (totalMvt * 5) / 100;
             address sponsor = users[msg.sender].sponsor;
             if (sponsor != address(0) && users[sponsor].isActive && sponsorShare > 0) {
                 users[sponsor].mvtBalance    += sponsorShare;
                 users[sponsor].totalReceived += sponsorShare;
                 toSell -= sponsorShare;
+                emit StakeLevelIncomePaid(sponsor, msg.sender, 1, sponsorShare);
                 _recordTx(sponsor, TX_LEVEL_INCOME, sponsorShare, 1, msg.sender);
             }
         } else {
-            // ── Locked: 5%+2%+1%+1%+1% virtual MVT to 5 uplines ────────────
+            // ── Locked: 5%+2%+1%+1%+1% virtual MVT to 5 uplines (subject to income limit on sell) ─
             uint8[5] memory rates = [5, 2, 1, 1, 1];
             address cur = users[msg.sender].sponsor;
             for (uint8 i = 0; i < 5; i++) {
+                if (cur == address(0)) break;
                 uint256 share = (totalMvt * rates[i]) / 100;
-                if (share == 0) { if (cur != address(0)) cur = users[cur].sponsor; continue; }
-                if (cur != address(0) && users[cur].isActive) {
+                if (share > 0 && users[cur].isActive) {
                     users[cur].mvtBalance    += share;
                     users[cur].totalReceived += share;
                     toSell -= share;
+                    emit StakeLevelIncomePaid(cur, msg.sender, i + 1, share);
                     _recordTx(cur, TX_LEVEL_INCOME, share, i + 1, msg.sender);
                 }
                 cur = users[cur].sponsor;

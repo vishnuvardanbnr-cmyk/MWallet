@@ -1,5 +1,5 @@
-import { useState, useRef, useEffect } from "react";
-import { HelpCircle, Mail, ChevronDown, Plus, Send, ArrowLeft, MessageCircle, Clock, CheckCircle2, AlertCircle, Loader2, Ticket } from "lucide-react";
+import { useState, useRef, useEffect, useCallback } from "react";
+import { HelpCircle, Mail, ChevronDown, Plus, Send, ArrowLeft, MessageCircle, Clock, CheckCircle2, AlertCircle, Loader2, Ticket, Zap, TrendingUp, RefreshCw } from "lucide-react";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
@@ -25,7 +25,7 @@ const faqs = [
   },
   {
     question: "What is the BTC Reward Pool?",
-    answer: "The BTC Reward Pool accumulates 10% from every withdrawal made by users. Once your BTC pool balance reaches the $50 threshold, you can enter Board Pool Level 1. The board pool operates a matrix system where participants earn rewards as the matrix fills up and cycles.",
+    answer: "The BTC Pool accumulates 10% from every MVT sell. This balance is used exclusively to enter Board Pool Level 1 — it cannot be directly withdrawn. Once you enter the board and the matrix fills, you earn rewards (40% of the pool) credited directly to your withdrawable USDT balance.",
   },
   {
     question: "How do withdrawals work?",
@@ -398,7 +398,159 @@ function TicketList({ tickets, onSelect, onNewTicket, isAdmin = false }: { ticke
   );
 }
 
-export default function Support({ account, isAdmin = false }: SupportProps) {
+function AdminDistribution({ getAdminPoolBalances, distributeBinaryIncome, distributePowerLeg }: {
+  getAdminPoolBalances: () => Promise<{ binaryPool: bigint; powerLegReserve: bigint; adminPool: bigint; totalUsers: number }>;
+  distributeBinaryIncome: (n: number) => Promise<void>;
+  distributePowerLeg: (n: number) => Promise<void>;
+}) {
+  const [pools, setPools] = useState<{ binaryPool: bigint; powerLegReserve: bigint; adminPool: bigint; totalUsers: number } | null>(null);
+  const [loadingPools, setLoadingPools] = useState(false);
+  const [step1Loading, setStep1Loading] = useState(false);
+  const [step2Loading, setStep2Loading] = useState(false);
+  const [step1Done, setStep1Done] = useState(false);
+  const [step2Done, setStep2Done] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const fmt = (v: bigint) => (Number(v) / 1e18).toFixed(2);
+
+  const load = useCallback(async () => {
+    setLoadingPools(true);
+    try {
+      const data = await getAdminPoolBalances();
+      setPools(data);
+      // If powerLegReserve > 0, step 1 was already done this cycle
+      if (data.powerLegReserve > 0n) setStep1Done(true);
+      else setStep1Done(false);
+    } catch (e: any) {
+      setError(e?.message || "Failed to load pool balances");
+    } finally {
+      setLoadingPools(false);
+    }
+  }, [getAdminPoolBalances]);
+
+  useEffect(() => { load(); }, [load]);
+
+  const handleStep1 = async () => {
+    if (!pools) return;
+    setStep1Loading(true);
+    setError(null);
+    try {
+      await distributeBinaryIncome(pools.totalUsers);
+      setStep1Done(true);
+      await load();
+    } catch (e: any) {
+      setError(e?.shortMessage || e?.reason || e?.message || "Transaction failed");
+    } finally {
+      setStep1Loading(false);
+    }
+  };
+
+  const handleStep2 = async () => {
+    if (!pools) return;
+    setStep2Loading(true);
+    setError(null);
+    try {
+      await distributePowerLeg(pools.totalUsers);
+      setStep1Done(false);
+      setStep2Done(true);
+      await load();
+    } catch (e: any) {
+      setError(e?.shortMessage || e?.reason || e?.message || "Transaction failed");
+    } finally {
+      setStep2Loading(false);
+    }
+  };
+
+  const binaryReady = pools && pools.binaryPool > 0n && !step1Done;
+  const powerReady  = pools && pools.powerLegReserve > 0n && step1Done;
+
+  return (
+    <div className="glass-card rounded-2xl p-5 slide-in gradient-border space-y-4" data-testid="card-admin-distribution">
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-9 w-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
+            <Zap className="h-4 w-4 text-purple-400" />
+          </div>
+          <div>
+            <h2 className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }}>Binary & Power Leg Distribution</h2>
+            <p className="text-xs text-muted-foreground">Run Step 1 then Step 2 each cycle</p>
+          </div>
+        </div>
+        <button onClick={load} disabled={loadingPools} className="h-8 w-8 rounded-lg bg-white/[0.05] flex items-center justify-center hover:bg-white/[0.08] transition-colors" data-testid="button-refresh-pools">
+          <RefreshCw className={`h-3.5 w-3.5 text-muted-foreground ${loadingPools ? "animate-spin" : ""}`} />
+        </button>
+      </div>
+
+      {/* Pool balances */}
+      <div className="grid grid-cols-3 gap-2">
+        <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15 text-center">
+          <p className="text-[10px] text-amber-300/70 uppercase tracking-wider mb-1">Binary Pool</p>
+          <p className="text-sm font-bold text-amber-300" data-testid="text-binary-pool">${pools ? fmt(pools.binaryPool) : "—"}</p>
+        </div>
+        <div className="p-3 rounded-xl bg-violet-500/5 border border-violet-500/15 text-center">
+          <p className="text-[10px] text-violet-300/70 uppercase tracking-wider mb-1">Power Leg Reserve</p>
+          <p className="text-sm font-bold text-violet-300" data-testid="text-power-reserve">${pools ? fmt(pools.powerLegReserve) : "—"}</p>
+        </div>
+        <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/15 text-center">
+          <p className="text-[10px] text-emerald-300/70 uppercase tracking-wider mb-1">Total Users</p>
+          <p className="text-sm font-bold text-emerald-300" data-testid="text-total-users">{pools ? pools.totalUsers : "—"}</p>
+        </div>
+      </div>
+
+      {error && (
+        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400" data-testid="text-distribution-error">{error}</div>
+      )}
+
+      {/* Step 1 */}
+      <div className="flex items-center gap-3">
+        <div className={`flex-shrink-0 h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold ${step1Done ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400"}`}>
+          {step1Done ? "✓" : "1"}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium">Distribute Binary Income</p>
+          <p className="text-[11px] text-muted-foreground">70% to matched pairs · sets Power Leg Points</p>
+        </div>
+        <button
+          onClick={handleStep1}
+          disabled={!binaryReady || step1Loading}
+          className="flex-shrink-0 px-4 py-2 rounded-xl text-xs font-semibold bg-amber-500/15 border border-amber-500/25 text-amber-300 hover:bg-amber-500/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+          data-testid="button-distribute-binary"
+        >
+          {step1Loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <TrendingUp className="h-3 w-3" />}
+          {step1Loading ? "Running…" : "Run Step 1"}
+        </button>
+      </div>
+
+      {/* Step 2 */}
+      <div className="flex items-center gap-3">
+        <div className={`flex-shrink-0 h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold ${step2Done ? "bg-emerald-500/20 text-emerald-400" : "bg-violet-500/20 text-violet-400"}`}>
+          {step2Done ? "✓" : "2"}
+        </div>
+        <div className="flex-1 min-w-0">
+          <p className="text-sm font-medium">Distribute Power Leg</p>
+          <p className="text-[11px] text-muted-foreground">30% proportional to Power Leg Points · resets cycle</p>
+        </div>
+        <button
+          onClick={handleStep2}
+          disabled={!powerReady || step2Loading}
+          className="flex-shrink-0 px-4 py-2 rounded-xl text-xs font-semibold bg-violet-500/15 border border-violet-500/25 text-violet-300 hover:bg-violet-500/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
+          data-testid="button-distribute-powerleg"
+        >
+          {step2Loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
+          {step2Loading ? "Running…" : "Run Step 2"}
+        </button>
+      </div>
+
+      {step2Done && (
+        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 text-center" data-testid="text-cycle-complete">
+          Cycle complete — both distributions done. Pool is ready for the next cycle.
+        </div>
+      )}
+    </div>
+  );
+}
+
+export default function Support({ account, isAdmin = false, getAdminPoolBalances, distributeBinaryIncome, distributePowerLeg }: SupportProps) {
   const [view, setView] = useState<"list" | "new" | "chat">("list");
   const ws = useSupportWs(account, isAdmin);
 
@@ -442,6 +594,14 @@ export default function Support({ account, isAdmin = false }: SupportProps) {
 
       {view === "list" && (
         <>
+          {isAdmin && getAdminPoolBalances && distributeBinaryIncome && distributePowerLeg && (
+            <AdminDistribution
+              getAdminPoolBalances={getAdminPoolBalances}
+              distributeBinaryIncome={distributeBinaryIncome}
+              distributePowerLeg={distributePowerLeg}
+            />
+          )}
+
           <TicketList
             tickets={ws.tickets}
             onSelect={handleSelectTicket}

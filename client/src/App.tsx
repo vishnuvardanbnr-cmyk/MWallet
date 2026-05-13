@@ -29,6 +29,7 @@ import StorePage from "@/pages/store";
 import SwapPage from "@/pages/swap";
 import PaidStakingPage from "@/pages/paid-staking";
 import RegisterForPage from "@/pages/register-for";
+import RebirthAccountPage from "@/pages/rebirth-account";
 import SellTokensPage from "@/pages/sell-tokens";
 
 function ScrollToTop() {
@@ -179,8 +180,10 @@ function App() {
           account={web3.account!}
           approveToken={web3.approveToken}
           activatePackage={web3.activatePackage}
+          activateFromBalance={web3.activateFromBalance}
           fetchUserData={web3.fetchUserData}
           disconnect={disconnect}
+          virtualUsdtBalance={web3.userInfo?.usdtBalance}
         />
       </ThemeProvider>
     );
@@ -246,7 +249,6 @@ function App() {
                         profileOnChain={web3.profileOnChain}
                         sellMvt={web3.sellMvt}
                         withdrawFunds={web3.withdrawFunds}
-                        withdrawBtcPool={web3.withdrawBtcPool}
                         rebirth={web3.rebirth}
                         fetchUserData={web3.fetchUserData}
                         approveToken={web3.approveToken}
@@ -274,7 +276,7 @@ function App() {
                         account={web3.account!}
                         formatAmount={web3.formatAmount}
                         withdrawFunds={web3.withdrawFunds}
-                        withdrawBtcPool={web3.withdrawBtcPool}
+                        claimRebirthBalance={web3.claimRebirthBalance}
                         getTransactionsFromContract={web3.getTransactionsFromContract}
                       />
                     </Route>
@@ -342,6 +344,14 @@ function App() {
                         tokenDecimals={web3.tokenDecimals}
                       />
                     </Route>
+                    <Route path="/rebirth">
+                      <RebirthAccountPage
+                        account={web3.account!}
+                        rebirth={web3.rebirth}
+                        rebirthPool={web3.userInfo?.rebirthPool}
+                        tokenDecimals={web3.tokenDecimals}
+                      />
+                    </Route>
                     <Route path="/sell-tokens">
                       <SellTokensPage
                         account={web3.account!}
@@ -351,6 +361,7 @@ function App() {
                         sellMvt={web3.sellMvt}
                         approveToken={web3.approveToken}
                         fetchUserData={web3.fetchUserData}
+                        contractMvtBalance={web3.contractMvtBalance}
                       />
                     </Route>
                     <Route path="/store">
@@ -360,6 +371,9 @@ function App() {
                       <SupportPage
                         account={web3.account!}
                         isAdmin={web3.account?.toLowerCase() === "0x04e8c5b49de683c5b44ef1269bd5ee4f338868c4"}
+                        getAdminPoolBalances={web3.getAdminPoolBalances}
+                        distributeBinaryIncome={web3.distributeBinaryIncome}
+                        distributePowerLeg={web3.distributePowerLeg}
                       />
                     </Route>
                   </Switch>
