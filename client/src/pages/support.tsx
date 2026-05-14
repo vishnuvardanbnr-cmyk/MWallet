@@ -86,21 +86,15 @@ interface SupportProps {
   distributePowerLeg?: (_totalUserCount: number) => Promise<void>;
 }
 
-function NewTicketForm({ onSubmit, onCancel }: { onSubmit: (subject: string, category: string, message: string, priority: string) => void; onCancel: () => void }) {
+function NewTicketForm({ onSubmit, onCancel, isCreating }: { onSubmit: (subject: string, category: string, message: string, priority: string) => void; onCancel: () => void; isCreating?: boolean }) {
   const [subject, setSubject] = useState("");
   const [category, setCategory] = useState("general");
   const [message, setMessage] = useState("");
   const [priority, setPriority] = useState("normal");
-  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = async () => {
-    if (!subject.trim() || !message.trim()) return;
-    setSubmitting(true);
-    try {
-      await onSubmit(subject.trim(), category, message.trim(), priority);
-    } finally {
-      setSubmitting(false);
-    }
+  const handleSubmit = () => {
+    if (!subject.trim() || !message.trim() || isCreating) return;
+    onSubmit(subject.trim(), category, message.trim(), priority);
   };
 
   return (
@@ -179,13 +173,13 @@ function NewTicketForm({ onSubmit, onCancel }: { onSubmit: (subject: string, cat
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!subject.trim() || !message.trim() || submitting}
+            disabled={!subject.trim() || !message.trim() || isCreating}
             className="flex-1 glow-button text-white font-bold py-2.5 px-4 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
             data-testid="button-submit-ticket"
             style={{ fontFamily: 'var(--font-display)' }}
           >
-            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
-            {submitting ? "Submitting…" : "Submit Ticket"}
+            {isCreating ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            {isCreating ? "Submitting…" : "Submit Ticket"}
           </button>
         </div>
       </div>
@@ -571,12 +565,14 @@ function AdminDistribution({ getAdminPoolBalances, distributeBinaryIncome, distr
 
 export default function Support({ account, isAdmin = false, getAdminPoolBalances, distributeBinaryIncome, distributePowerLeg }: SupportProps) {
   const [view, setView] = useState<"list" | "new" | "chat">("list");
+  const [isCreating, setIsCreating] = useState(false);
   const ws = useSupportWs(account, isAdmin);
 
   const activeTicket = ws.tickets.find(t => t.id === ws.activeTicketId);
 
   useEffect(() => {
     if (ws.ticketCreated && ws.activeTicketId) {
+      setIsCreating(false);
       setView("chat");
     }
   }, [ws.ticketCreated, ws.activeTicketId]);
@@ -589,10 +585,12 @@ export default function Support({ account, isAdmin = false, getAdminPoolBalances
   const handleBack = () => {
     ws.leaveTicket();
     ws.loadTickets();
+    setIsCreating(false);
     setView("list");
   };
 
   const handleCreateTicket = (subject: string, category: string, message: string, priority: string) => {
+    setIsCreating(true);
     ws.createTicket(subject, category, message, priority);
   };
 
@@ -655,7 +653,8 @@ export default function Support({ account, isAdmin = false, getAdminPoolBalances
       {view === "new" && (
         <NewTicketForm
           onSubmit={handleCreateTicket}
-          onCancel={() => setView("list")}
+          onCancel={() => { setIsCreating(false); setView("list"); }}
+          isCreating={isCreating}
         />
       )}
 
