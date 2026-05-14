@@ -41,6 +41,7 @@ interface IMvaultBoardMatrix {
 //     30% → level income   (10 upline levels)
 //     30% → binaryPool     (admin distributes per cycle)
 //     20% → adminPool      (admin free pool)
+//     10% → rank income    (M1–M5 sponsor-tree walk, unqualified → adminPool)
 //     10% → liquidity      (handled by MvaultToken internally)
 //
 // Income limit  = 3 × pkg price per user.
@@ -92,8 +93,17 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint256 public constant LEVEL_ALLOC    = 30;          // % of gross MVT → level income (10 levels)
     uint256 public constant BINARY_ALLOC   = 30;          // % of gross MVT → binary pool
     uint256 public constant ADMIN_ALLOC    = 20;          // % of gross MVT → admin free pool
+    uint256 public constant RANK_ALLOC     = 10;          // % of gross MVT → rank income pool
     // Liquidity 10% handled internally by MvaultToken (only 90% minted)
     uint256 public constant BTC_POOL_RATE  = 10;          // % of sell USDT → user BTC pool
+
+    // ── Rank qualification constants ──────────────────────────────────────────
+    // Team sales threshold for M1 ($2000 USDT, 18 decimals)
+    uint256 public constant M1_TEAM_SALES  = 2000 * 1e18;
+    // Minimum direct sponsors for M1
+    uint256 public constant M1_MIN_DIRECTS = 5;
+    // Minimum legs (sponsor-tree branches at depth 1) that must contain sales for M1
+    uint256 public constant M1_MIN_LEGS    = 2;
 
     // ── User record ───────────────────────────────────────────────────────────
     struct User {
@@ -130,6 +140,13 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         // Rebirth
         address mainAccount;      // if sub-account → points to main; else address(0)
         uint256 rebirthCount;
+        // Rank
+        uint8   rank;             // 0=none, 1=M1, 2=M2, 3=M3, 4=M4, 5=M5
+        uint256 teamSalesUsdt;    // cumulative USDT activated in sponsor-tree downline
+        uint256 m1Count;          // M1+ users anywhere in sponsor-tree downline
+        uint256 m2Count;          // M2+ users anywhere in sponsor-tree downline
+        uint256 m3Count;          // M3+ users anywhere in sponsor-tree downline
+        uint256 m4Count;          // M4+ users anywhere in sponsor-tree downline
         // Meta
         uint256 joinedAt;
         // Profile
@@ -148,6 +165,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint256 public binaryPool;
     uint256 public reservePool;
     uint256 public adminPool;
+    uint256 public rankPool;
 
     // Binary distribution state
     uint256 private _powerLeg30Reserve;
@@ -183,6 +201,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint8 internal constant TX_BTC_CREDITED   = 6;
     uint8 internal constant TX_USDT_WITHDRAW  = 7;
     uint8 internal constant TX_REACTIVATION   = 15;
+    uint8 internal constant TX_RANK_INCOME    = 16;
     uint8 internal constant TX_BTC_WITHDRAW   = 8;
     uint8 internal constant TX_REBIRTH        = 9;
     uint8 internal constant TX_BOARD_ENTRY    = 10;
@@ -226,6 +245,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     event UsdtWithdrawn(address indexed user, uint256 amount);
     event Reborn(address indexed mainAccount, address indexed subAccount, uint256 rebirthIndex);
     event Reactivated(address indexed user, uint256 pkgPrice, uint256 grossMvt, bool upgraded);
+    event RankIncomePaid(address indexed to, address indexed from, uint8 rank, uint256 amount);
+    event RankIncomeSkipped(address indexed upline, uint8 rank, uint256 amount);
+    event RankUpdated(address indexed user, uint8 oldRank, uint8 newRank);
     event ProfileUpdated(address indexed user);
     event MvaultTokenUpdated(address newToken);
     event RegisteredAndActivatedFor(address indexed payer, address indexed newUser, address indexed sponsor, bool placeLeft);
@@ -545,12 +567,13 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         mvaultToken.addLiquidityAndMint(address(this), pkgPrice);
         uint256 minted = mvaultToken.balanceOf(address(this)) - before; // actual 90%
 
-        // Split on GROSS basis: 30% level + 30% binary + 20% admin + 10% liquidity + 10% reserved (in MVT token)
+        // Split on GROSS basis: 30% level + 30% binary + 20% admin + 10% rank + 10% liquidity (in MVT token)
         uint256 levelAmt  = (grossMvt * LEVEL_ALLOC)  / 100;  // 30%
         uint256 binaryAmt = (grossMvt * BINARY_ALLOC) / 100;  // 30%
         uint256 adminAmt  = (grossMvt * ADMIN_ALLOC)  / 100;  // 20%
-        // Remaining ~20% (10% liquidity + 10% reserved) also accumulates as dust → adminPool until reassigned
-        uint256 dust = grossMvt - levelAmt - binaryAmt - adminAmt;
+        uint256 rankAmt   = (grossMvt * RANK_ALLOC)   / 100;  // 10%
+        // Remaining dust (rounding) → adminPool
+        uint256 dust = grossMvt - levelAmt - binaryAmt - adminAmt - rankAmt;
 
         binaryPool += binaryAmt;
         adminPool  += adminAmt + dust;
@@ -560,7 +583,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         users[user].packagePrice   = pkgPrice;
         users[user].incomeLimitCap = incomeCap;
 
+        _updateTeamStats(user, pkgPrice);
         _distributeLevelIncome(user, grossMvt, levelAmt);
+        _distributeRankIncome(user, rankAmt);
 
         emit Activated(user, minted, grossMvt, levelAmt, binaryAmt, adminAmt);
         _recordTx(user, TX_ACTIVATION, pkgPrice, 0, address(0));
@@ -624,6 +649,163 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (lvl == 1)  return 0;  // L1: no requirement — always paid to active sponsor
         if (lvl <= 4)  return 2;  // L2–L4: 2 direct sponsors
         return 5;                 // L5–L10: 5 direct sponsors
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // RANK SYSTEM
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @dev Walk up the sponsor tree from `from` and increment teamSalesUsdt on every ancestor.
+     *      Also re-evaluates and updates the rank of each ancestor.
+     *      Called on every activation / reactivation.
+     */
+    function _updateTeamStats(address from, uint256 pkgPrice) internal {
+        address cur = users[from].sponsor;
+        while (cur != address(0)) {
+            users[cur].teamSalesUsdt += pkgPrice;
+            _refreshRank(cur);
+            cur = users[cur].sponsor;
+        }
+    }
+
+    /**
+     * @dev Recompute rank for `u` based on current struct counters and emit RankUpdated if changed.
+     *      Rank rules:
+     *        M1: directCount >= 5 AND teamSalesUsdt >= $2000 AND >=2 different direct-leg subtrees have sales
+     *        M2: m1Count >= 2
+     *        M3: m2Count >= 4
+     *        M4: m3Count >= 4
+     *        M5: m4Count >= 4
+     *      When a user advances from rank N-1 to rank N their count is incremented on their sponsor.
+     */
+    function _refreshRank(address u) internal {
+        uint8 old = users[u].rank;
+        uint8 newRank = _computeRank(u);
+        if (newRank == old) return;
+
+        users[u].rank = newRank;
+        emit RankUpdated(u, old, newRank);
+
+        // Update ancestor count fields for the newly achieved rank(s).
+        // We walk from old+1 up to newRank to credit each newly earned rank step.
+        address sp = users[u].sponsor;
+        while (sp != address(0)) {
+            bool changed = false;
+            if (newRank >= 1 && old < 1) { users[sp].m1Count++; changed = true; }
+            if (newRank >= 2 && old < 2) { users[sp].m2Count++; changed = true; }
+            if (newRank >= 3 && old < 3) { users[sp].m3Count++; changed = true; }
+            if (newRank >= 4 && old < 4) { users[sp].m4Count++; changed = true; }
+            if (!changed) break;
+            // Ancestor's rank may now change too
+            _refreshRankNoPropagate(sp);
+            sp = users[sp].sponsor;
+        }
+    }
+
+    /**
+     * @dev Refresh rank of a single node without recursively propagating count changes upward.
+     *      Used inside the ancestor walk in _refreshRank to avoid double-propagation.
+     */
+    function _refreshRankNoPropagate(address u) internal {
+        uint8 old = users[u].rank;
+        uint8 newRank = _computeRank(u);
+        if (newRank == old) return;
+        users[u].rank = newRank;
+        emit RankUpdated(u, old, newRank);
+    }
+
+    /**
+     * @dev Pure rank computation from current User fields.
+     *      Checks ranks from highest to lowest and returns the best achieved.
+     */
+    function _computeRank(address u) internal view returns (uint8) {
+        User storage d = users[u];
+        if (!d.isActive) return 0;
+
+        // M5: 4x M4 in downline
+        if (d.m4Count >= 4) return 5;
+        // M4: 4x M3
+        if (d.m3Count >= 4) return 4;
+        // M3: 4x M2
+        if (d.m2Count >= 4) return 3;
+        // M2: 2x M1
+        if (d.m1Count >= 2) return 2;
+        // M1: 5 directs + $2000 team sales + 2 active legs
+        if (d.directCount >= M1_MIN_DIRECTS
+            && d.teamSalesUsdt >= M1_TEAM_SALES
+            && _activeLegCount(u) >= M1_MIN_LEGS) return 1;
+
+        return 0;
+    }
+
+    /**
+     * @dev Count how many of u's direct sponsor-children (u's direct referrals)
+     *      have at least one active user in their own subtree (or are themselves active).
+     *      A "leg" here is one direct referral of u.
+     */
+    function _activeLegCount(address u) internal view returns (uint256 count) {
+        // We iterate allUsers once and check sponsor == u; then check if that child
+        // or any of their downline is active. To keep gas reasonable we use the
+        // directCount already tracked — any direct of u who is active counts as a leg.
+        // We need at least M1_MIN_LEGS such directs.
+        for (uint256 i = 0; i < allUsers.length && count < M1_MIN_LEGS + 1; i++) {
+            address a = allUsers[i];
+            if (users[a].sponsor == u && users[a].isActive) {
+                count++;
+            }
+        }
+    }
+
+    /**
+     * @dev Walk up the sponsor tree from `from` and distribute rankAmt proportionally.
+     *      Each rank slot (M1=10%, M2=20%, M3=20%, M4=20%, M5=30%) is paid to the
+     *      NEAREST ancestor holding exactly that rank.  If no qualifier is found the
+     *      share goes to adminPool.
+     *
+     *      Because a higher-rank user also holds lower rank they would absorb all lower
+     *      slots below them — which is NOT the design.  Instead each slot goes to the
+     *      first ancestor whose rank == that target rank exactly (or the first to have
+     *      qualified for it — since ranks are strictly ascending we look for rank >= target
+     *      but stop at the first hit, meaning a M3 only absorbs the M3 slot, not M1/M2).
+     *
+     *      Implementation: walk sponsor tree once, tracking which rank slots are still
+     *      unclaimed.  When we meet a user whose rank == requiredRank, pay that slot.
+     *      A higher-rank user does NOT satisfy a lower-rank slot.
+     */
+    function _distributeRankIncome(address from, uint256 rankAmt) internal {
+        // Slot amounts: index 1=M1, 2=M2, 3=M3, 4=M4, 5=M5
+        uint256[6] memory slotPct = [uint256(0), 10, 20, 20, 20, 30];
+        bool[6] memory paid;      // tracks which slots have been filled
+        uint256 unpaid = 5;       // all 5 slots start unpaid
+
+        address cur = users[from].sponsor;
+        while (cur != address(0) && unpaid > 0) {
+            uint8 r = users[cur].rank;
+            if (r >= 1 && r <= 5 && !paid[r]) {
+                uint256 share = (rankAmt * slotPct[r]) / 100;
+                paid[r] = true;
+                unpaid--;
+                users[cur].mvtBalance    += share;
+                users[cur].totalReceived += share;
+                emit RankIncomePaid(cur, from, r, share);
+                _recordTx(cur, TX_RANK_INCOME, share, r, from);
+            }
+            cur = users[cur].sponsor;
+        }
+
+        // Any unpaid slots → adminPool
+        if (unpaid > 0) {
+            uint256 leftover = 0;
+            for (uint8 r = 1; r <= 5; r++) {
+                if (!paid[r]) {
+                    uint256 share = (rankAmt * slotPct[r]) / 100;
+                    leftover += share;
+                    emit RankIncomeSkipped(address(0), r, share);
+                }
+            }
+            adminPool += leftover;
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -875,7 +1057,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 levelAmt  = (grossMvt * LEVEL_ALLOC)  / 100;
         uint256 binaryAmt = (grossMvt * BINARY_ALLOC) / 100;
         uint256 adminAmt  = (grossMvt * ADMIN_ALLOC)  / 100;
-        uint256 dust      = grossMvt - levelAmt - binaryAmt - adminAmt;
+        uint256 rankAmt   = (grossMvt * RANK_ALLOC)   / 100;
+        uint256 dust      = grossMvt - levelAmt - binaryAmt - adminAmt - rankAmt;
 
         binaryPool += binaryAmt;
         adminPool  += adminAmt + dust;
@@ -885,7 +1068,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         users[user].incomeLimitCap = incomeCap;
         users[user].incomeLimit    = incomeCap;
 
+        _updateTeamStats(user, pkgPrice);
         _distributeLevelIncome(user, grossMvt, levelAmt);
+        _distributeRankIncome(user, rankAmt);
 
         emit Reactivated(user, pkgPrice, grossMvt, upgraded);
         _recordTx(user, TX_REACTIVATION, pkgPrice, 0, address(0));
