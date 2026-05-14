@@ -564,23 +564,25 @@ export async function registerRoutes(
       const { buyPrice } = await getTokenPrice();
 
       // ── Token distribution on Fixed staking invest ─────────────────────────
-      // From 100% theoretical tokens (usdtAmt / buyPrice):
-      //   15% → liquidity backing (no tokens minted for this portion)
+      // $100 USDT → 90% minted as grossMvt tokens. From grossMvt:
+      //   60% → user (locked in staking plan)
       //   20% → level rewards across 10 uplines (L1=10%, L2=5%, L3=2%, L4=1%, L5–L6=0.5%, L7–L8=0.3%, L9–L10=0.2%)
       //    5% → company/admin
-      //   60% → user (locked in staking plan)
+      //   15% → liquidity backing (stays in pool, not distributed)
       const theoreticalTokens = usdtAmt / buyPrice;
-      const userTokens   = theoreticalTokens * 0.60;  // 60% locked for user
-      const adminTokens  = theoreticalTokens * 0.05;  // 5% company
+      const grossMvt     = theoreticalTokens * 0.9;   // 90% minted by token contract
+      const userTokens   = grossMvt * 0.60;            // 60% of grossMvt → user
+      const adminTokens  = grossMvt * 0.05;            // 5% of grossMvt → company
+      const liquidityMvt = grossMvt * 0.15;            // 15% of grossMvt → liquidity pool (not circulating)
 
       await storage.deductVirtualUsdt(addr, usdtAmt.toString());
 
-      // Distribute 20% level income to 10 uplines (async, non-blocking after deduct)
+      // Distribute 20% of grossMvt to 10 uplines
       const { distributed: levelDistributed, toAdmin: levelToAdmin } =
-        await distributeStakingInvestLevelIncome(addr, theoreticalTokens, buyPrice);
+        await distributeStakingInvestLevelIncome(addr, grossMvt, buyPrice);
 
-      // Total minted into circulating supply = user + admin + successfully distributed level tokens
-      const totalMinted = userTokens + adminTokens + levelDistributed + levelToAdmin;
+      // Circulating supply = user + admin + level tokens (15% liquidity stays in pool, not circulating)
+      const totalMinted = userTokens + adminTokens + levelDistributed + levelToAdmin + liquidityMvt;
 
       const econ = await storage.getTokenEconomics();
       await storage.updateTokenEconomics({
@@ -650,23 +652,25 @@ export async function registerRoutes(
       const { buyPrice } = await getTokenPrice();
 
       // ── Token distribution on Flexi staking invest ─────────────────────────
-      // From 100% theoretical tokens (usdtAmt / buyPrice):
-      //   15% → liquidity backing (no tokens minted for this portion)
+      // $100 USDT → 90% minted as grossMvt tokens. From grossMvt:
+      //   60% → user (added to mainBalance immediately, no lock)
       //   20% → level rewards across 10 uplines (L1=10%, L2=5%, L3=2%, L4=1%, L5–L6=0.5%, L7–L8=0.3%, L9–L10=0.2%)
       //    5% → company/admin
-      //   60% → user (added to mainBalance immediately, no lock)
+      //   15% → liquidity backing (stays in pool, not distributed)
       const theoreticalTokens = usdtAmt / buyPrice;
-      const userTokens  = theoreticalTokens * 0.60;  // 60% to user
-      const adminTokens = theoreticalTokens * 0.05;  // 5% company
+      const grossMvt     = theoreticalTokens * 0.9;   // 90% minted by token contract
+      const userTokens   = grossMvt * 0.60;            // 60% of grossMvt → user
+      const adminTokens  = grossMvt * 0.05;            // 5% of grossMvt → company
+      const liquidityMvt = grossMvt * 0.15;            // 15% of grossMvt → liquidity pool (not circulating)
 
       await storage.deductVirtualUsdt(addr, usdtAmt.toString());
 
-      // Distribute 20% level income to 10 uplines (async, non-blocking after deduct)
+      // Distribute 20% of grossMvt to 10 uplines
       const { distributed: levelDistributed, toAdmin: levelToAdmin } =
-        await distributeStakingInvestLevelIncome(addr, theoreticalTokens, buyPrice);
+        await distributeStakingInvestLevelIncome(addr, grossMvt, buyPrice);
 
-      // Total minted into circulating supply = user + admin + level tokens
-      const totalMinted = userTokens + adminTokens + levelDistributed + levelToAdmin;
+      // Circulating supply = user + admin + level tokens + liquidity pool tokens (all 90% minted)
+      const totalMinted = userTokens + adminTokens + levelDistributed + levelToAdmin + liquidityMvt;
 
       const econ = await storage.getTokenEconomics();
       await storage.updateTokenEconomics({
