@@ -288,9 +288,7 @@ export const distributionCycles = pgTable("distribution_cycles", {
   merkleRoot:  varchar("merkle_root", { length: 66 }).notNull(),
   totalPool:   varchar("total_pool",  { length: 78 }).notNull(),
   committedAt: timestamp("committed_at").notNull().defaultNow(),
-  expiresAt:   timestamp("expires_at").notNull(),
   txHash:      varchar("tx_hash", { length: 70 }),
-  reclaimed:   boolean("reclaimed").notNull().default(false),
 });
 export type DistributionCycle = typeof distributionCycles.$inferSelect;
 

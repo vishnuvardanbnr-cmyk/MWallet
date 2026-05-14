@@ -88,7 +88,8 @@ export interface IStorage {
   deductFromBatch(batchId: number, amount: string): Promise<MTokenPurchaseBatch>;
   getBatchesByPlan(planId: number): Promise<MTokenPurchaseBatch[]>;
   // Merkle Distribution
-  saveDistributionCycle(cycle: number, merkleRoot: string, totalPool: string, expiresAt: Date, txHash?: string): Promise<DistributionCycle>;
+  saveDistributionCycle(cycle: number, merkleRoot: string, totalPool: string, txHash?: string): Promise<DistributionCycle>;
+  getDistributionProofsByUser(walletAddress: string): Promise<DistributionProof[]>;
   getLatestDistributionCycle(): Promise<DistributionCycle | undefined>;
   getDistributionCycle(cycle: number): Promise<DistributionCycle | undefined>;
   saveDistributionProof(cycle: number, walletAddress: string, binaryShare: string, powerLegShare: string, newMatchedVol: string, newPowerLegPts: string, proof: string[]): Promise<DistributionProof>;
@@ -672,15 +673,21 @@ export class DatabaseStorage implements IStorage {
       .orderBy(mTokenPurchaseBatches.purchasedAt);
   }
 
-  async saveDistributionCycle(cycle: number, merkleRoot: string, totalPool: string, expiresAt: Date, txHash?: string): Promise<DistributionCycle> {
+  async saveDistributionCycle(cycle: number, merkleRoot: string, totalPool: string, txHash?: string): Promise<DistributionCycle> {
     const [row] = await db.insert(distributionCycles)
-      .values({ cycle, merkleRoot, totalPool, expiresAt, txHash: txHash ?? null })
+      .values({ cycle, merkleRoot, totalPool, txHash: txHash ?? null })
       .onConflictDoUpdate({
         target: distributionCycles.cycle,
-        set: { merkleRoot, totalPool, expiresAt, txHash: txHash ?? null, reclaimed: false },
+        set: { merkleRoot, totalPool, txHash: txHash ?? null },
       })
       .returning();
     return row;
+  }
+
+  async getDistributionProofsByUser(walletAddress: string): Promise<DistributionProof[]> {
+    return db.select().from(distributionProofs)
+      .where(eq(distributionProofs.walletAddress, walletAddress.toLowerCase()))
+      .orderBy(distributionProofs.cycle);
   }
 
   async getLatestDistributionCycle(): Promise<DistributionCycle | undefined> {

@@ -54,8 +54,6 @@ const DISTRIBUTOR_ABI = [
 
 const INTERVAL_MS = parseInt(process.env.DISTRIBUTION_INTERVAL_MS || "") || 24 * 60 * 60 * 1000;
 const MIN_POOL_WEI = ethers.parseUnits("1", 18);
-const CLAIM_WINDOW_DAYS = 60;
-
 let isRunning = false;
 
 function getProvider(): ethers.JsonRpcProvider {
@@ -247,8 +245,7 @@ export async function runDistribution(): Promise<void> {
     log(`Commit confirmed in block ${receipt?.blockNumber} — cycle ${nextCycle} active`, "distributor");
 
     // ── Save cycle + proofs to DB ──────────────────────────────────────────────
-    const expiresAt = new Date(Date.now() + CLAIM_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-    await storage.saveDistributionCycle(nextCycle, root, totalPool.toString(), expiresAt, tx.hash);
+    await storage.saveDistributionCycle(nextCycle, root, totalPool.toString(), tx.hash);
 
     log(`Saving ${entries.length} proofs to DB…`, "distributor");
     for (const [i, leaf] of tree.entries()) {

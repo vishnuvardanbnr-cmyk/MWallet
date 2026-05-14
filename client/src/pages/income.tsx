@@ -1,11 +1,11 @@
 import { useState } from "react";
-import { Users, GitBranch, Coins, TrendingUp, Layers, Info, ArrowDownLeft, ArrowDownRight, ShieldCheck, Loader2, CheckCircle2 } from "lucide-react";
+import { Users, GitBranch, Coins, TrendingUp, Layers, Info, ArrowDownLeft, ArrowDownRight, ShieldCheck, Loader2, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatTokenAmount, getMvaultDistributorContract, DISTRIBUTOR_ADDRESS } from "@/lib/contract";
 import type { UserInfo, MvtPrice, BinaryPairs } from "@/hooks/use-web3";
 import { useLocation } from "wouter";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ethers } from "ethers";
 
 interface IncomeProps {
@@ -35,72 +35,97 @@ function mvtFmt(val: bigint) {
 
 function usdFmt(mvt: bigint, price: bigint) {
   if (price === 0n) return "—";
-  const mvtNum = parseFloat(formatTokenAmount(mvt, 18));
+  const mvtNum  = parseFloat(formatTokenAmount(mvt, 18));
   const priceNum = parseFloat(formatTokenAmount(price, 18));
   return `$${(mvtNum * priceNum).toFixed(2)}`;
 }
 
-interface DistProofResp {
+interface CycleEntry {
   cycle: number;
-  proof: string[] | null;
-  binaryShare?: string;
-  powerLegShare?: string;
-  newMatchedVol?: string;
-  newPowerLegPts?: string;
-  totalMvt?: string;
-  expiresAt?: string;
+  binaryShare: string;
+  powerLegShare: string;
+  newMatchedVol: string;
+  newPowerLegPts: string;
+  proof: string[];
+  totalMvt: string;
+}
+
+interface ProofsResp {
+  cycles: CycleEntry[];
+  totalMvt: string;
 }
 
 export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmount, walletAddress }: IncomeProps) {
   const [, setLocation] = useLocation();
-  const [claiming, setClaiming] = useState(false);
-  const [claimTx, setClaimTx]   = useState<string | null>(null);
-  const [claimErr, setClaimErr] = useState<string | null>(null);
+  const qc = useQueryClient();
 
-  const directCount = Number(userInfo.directCount);
-  const leftCount = Number(userInfo.leftSubUsers);
-  const rightCount = Number(userInfo.rightSubUsers);
-  const currentPairs = Number(binaryPairs.currentPairs);
-  const newPairs = Number(binaryPairs.newPairs);
+  // Claim state
+  const [claiming, setClaiming]       = useState(false);
+  const [claimedCycles, setClaimedCycles] = useState<Set<number>>(new Set());
+  const [claimErr, setClaimErr]       = useState<string | null>(null);
+  const [showCycles, setShowCycles]   = useState(false);
+
+  const directCount  = Number(userInfo.directCount);
+  const leftCount    = Number(userInfo.leftSubUsers);
+  const rightCount   = Number(userInfo.rightSubUsers);
+  const newPairs     = Number(binaryPairs.newPairs);
   const matchedPairs = Number(userInfo.matchedPairs);
-  const sellPriceNum = parseFloat(formatTokenAmount(mvtPrice.sellPrice, 18));
 
-  const totalReceivedMvt = parseFloat(formatTokenAmount(userInfo.totalReceived, 18));
-  const mvtBalanceMvt = parseFloat(formatTokenAmount(userInfo.mvtBalance, 18));
   const incomeLimitCapNum = parseFloat(formatTokenAmount(userInfo.incomeLimitCap, 18));
-  const incomeCap = incomeLimitCapNum > 0 ? incomeLimitCapNum : 390;
-  const incomeUsed = incomeCap - parseFloat(formatTokenAmount(userInfo.incomeLimit, 18));
+  const incomeCap     = incomeLimitCapNum > 0 ? incomeLimitCapNum : 390;
+  const incomeUsed    = incomeCap - parseFloat(formatTokenAmount(userInfo.incomeLimit, 18));
   const incomeProgress = Math.min(100, (incomeUsed / incomeCap) * 100);
 
-  // ── Fetch Merkle proof for wallet ─────────────────────────────────────────
-  const { data: distProof, isLoading: proofLoading } = useQuery<DistProofResp>({
-    queryKey: ["/api/distribution/proof", walletAddress],
+  // ── Fetch all Merkle proofs for this wallet ───────────────────────────────
+  const { data: proofsData, isLoading: proofLoading } = useQuery<ProofsResp>({
+    queryKey: ["/api/distribution/proofs", walletAddress],
     enabled:  !!walletAddress && !!DISTRIBUTOR_ADDRESS,
     refetchInterval: 60_000,
   });
 
-  const hasPendingClaim = !!(distProof?.proof && distProof.totalMvt && BigInt(distProof.totalMvt) > 0n && !claimTx);
-  const pendingMvt = distProof?.totalMvt ? parseFloat(formatTokenAmount(BigInt(distProof.totalMvt), 18)) : 0;
+  // Filter out already claimed cycles (tracked locally after claim)
+  const pendingCycles = (proofsData?.cycles ?? []).filter(c => !claimedCycles.has(c.cycle));
+  const totalPendingMvt = pendingCycles.reduce((sum, c) => sum + BigInt(c.totalMvt), 0n);
+  const hasPending = pendingCycles.length > 0 && totalPendingMvt > 0n;
 
-  async function handleClaim() {
-    if (!distProof?.proof || !walletAddress) return;
+  // ── Claim All — sequential MetaMask popups, one per unclaimed cycle ───────
+  async function handleClaimAll() {
+    if (!pendingCycles.length || !walletAddress) return;
     setClaimErr(null);
     setClaiming(true);
     try {
       const provider = new ethers.BrowserProvider((window as any).ethereum);
       const signer   = await provider.getSigner();
       const dist     = getMvaultDistributorContract(signer);
-      const tx = await dist.claimDistribution(
-        BigInt(distProof.cycle),
-        BigInt(distProof.binaryShare   ?? "0"),
-        BigInt(distProof.powerLegShare ?? "0"),
-        BigInt(distProof.newMatchedVol ?? "0"),
-        BigInt(distProof.newPowerLegPts ?? "0"),
-        distProof.proof,
-        { gasLimit: 250_000 },
-      );
-      const receipt = await tx.wait();
-      setClaimTx(receipt.hash as string);
+
+      for (const c of pendingCycles) {
+        try {
+          const tx = await dist.claimDistribution(
+            BigInt(c.cycle),
+            BigInt(c.binaryShare),
+            BigInt(c.powerLegShare),
+            BigInt(c.newMatchedVol),
+            BigInt(c.newPowerLegPts),
+            c.proof,
+            { gasLimit: 250_000 },
+          );
+          await tx.wait();
+          setClaimedCycles(prev => new Set(prev).add(c.cycle));
+        } catch (err: any) {
+          // AlreadyClaimed = skip silently; other errors = stop and report
+          const name = err?.errorName || "";
+          if (name === "AlreadyClaimed") {
+            setClaimedCycles(prev => new Set(prev).add(c.cycle));
+            continue;
+          }
+          const msg = err?.shortMessage || err?.reason || err?.message || "Claim failed";
+          setClaimErr(`Cycle #${c.cycle}: ${msg.slice(0, 100)}`);
+          break;
+        }
+      }
+
+      // Refresh query after claiming
+      qc.invalidateQueries({ queryKey: ["/api/distribution/proofs", walletAddress] });
     } catch (err: any) {
       const msg = err?.shortMessage || err?.reason || err?.message || "Claim failed";
       setClaimErr(msg.slice(0, 120));
@@ -108,6 +133,8 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
       setClaiming(false);
     }
   }
+
+  const allClaimed = pendingCycles.length === 0 && claimedCycles.size > 0;
 
   return (
     <div className="p-4 sm:p-6 space-y-6 relative z-10">
@@ -195,74 +222,104 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
               <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>
                 <span className="gradient-text">Binary Distribution Claim</span>
               </h2>
-              <p className="text-[10px] text-muted-foreground">Trustless Merkle-proof self-claim — no admin required</p>
+              <p className="text-[10px] text-muted-foreground">Trustless Merkle-proof — claim any time, no expiry</p>
             </div>
           </div>
 
           {proofLoading ? (
             <div className="flex items-center gap-2 py-3 text-muted-foreground text-xs">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Checking for pending distribution…
+              Checking for pending distributions…
             </div>
-          ) : claimTx ? (
-            <div className="flex flex-col gap-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-              <div className="flex items-center gap-2">
-                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-                <p className="text-xs text-emerald-400 font-medium">Claim confirmed — MVT credited to your account</p>
-              </div>
-              <p className="text-[10px] text-muted-foreground font-mono break-all">Tx: {claimTx}</p>
+          ) : allClaimed ? (
+            <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+              <p className="text-xs text-emerald-400 font-medium">All cycles claimed — MVT credited to your account</p>
             </div>
-          ) : hasPendingClaim ? (
+          ) : hasPending ? (
             <div className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Binary Share</p>
-                  <p className="text-sm font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-binary-share">
-                    {parseFloat(formatTokenAmount(BigInt(distProof!.binaryShare ?? "0"), 18)).toFixed(4)} MVT
-                  </p>
-                </div>
-                <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Power Leg Share</p>
-                  <p className="text-sm font-bold text-blue-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-power-leg-share">
-                    {parseFloat(formatTokenAmount(BigInt(distProof!.powerLegShare ?? "0"), 18)).toFixed(4)} MVT
-                  </p>
-                </div>
-              </div>
+              {/* Summary row */}
               <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/15">
                 <div>
                   <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Total Claimable</p>
                   <p className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-total-claimable">
-                    {pendingMvt.toFixed(4)} MVT
+                    {parseFloat(formatTokenAmount(totalPendingMvt, 18)).toFixed(4)} MVT
                   </p>
-                  <p className="text-[9px] text-muted-foreground mt-0.5">Cycle #{distProof!.cycle}</p>
+                  <p className="text-[9px] text-muted-foreground mt-0.5">
+                    {pendingCycles.length} cycle{pendingCycles.length !== 1 ? "s" : ""} — claim any time
+                  </p>
                 </div>
                 <Button
-                  onClick={handleClaim}
+                  onClick={handleClaimAll}
                   disabled={claiming}
-                  data-testid="button-claim-distribution"
+                  data-testid="button-claim-all"
                   className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4"
                 >
-                  {claiming ? <><Loader2 className="h-3 w-3 animate-spin mr-1.5" />Claiming…</> : "Claim MVT"}
+                  {claiming
+                    ? <><Loader2 className="h-3 w-3 animate-spin mr-1.5" />Claiming…</>
+                    : pendingCycles.length > 1 ? `Claim All (${pendingCycles.length})` : "Claim MVT"}
                 </Button>
               </div>
+
+              {/* Per-cycle breakdown toggle */}
+              {pendingCycles.length > 1 && (
+                <button
+                  onClick={() => setShowCycles(v => !v)}
+                  className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
+                  data-testid="button-toggle-cycles"
+                >
+                  {showCycles ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+                  {showCycles ? "Hide" : "Show"} cycle breakdown
+                </button>
+              )}
+
+              {(showCycles || pendingCycles.length === 1) && (
+                <div className="space-y-2">
+                  {pendingCycles.map(c => {
+                    const isClaimed = claimedCycles.has(c.cycle);
+                    return (
+                      <div
+                        key={c.cycle}
+                        className={`flex items-center justify-between px-3 py-2.5 rounded-xl border ${
+                          isClaimed
+                            ? "bg-emerald-500/5 border-emerald-500/15"
+                            : "bg-white/[0.02] border-white/[0.06]"
+                        }`}
+                        data-testid={`row-cycle-${c.cycle}`}
+                      >
+                        <div>
+                          <p className="text-xs font-semibold">Cycle #{c.cycle}</p>
+                          <p className="text-[10px] text-muted-foreground">
+                            Binary: {parseFloat(formatTokenAmount(BigInt(c.binaryShare), 18)).toFixed(4)} MVT
+                            &nbsp;·&nbsp;
+                            Power: {parseFloat(formatTokenAmount(BigInt(c.powerLegShare), 18)).toFixed(4)} MVT
+                          </p>
+                        </div>
+                        {isClaimed
+                          ? <CheckCircle2 className="h-4 w-4 text-emerald-400" />
+                          : (
+                            <Badge variant="outline" className="text-[9px] border-amber-500/30 text-amber-400">
+                              {parseFloat(formatTokenAmount(BigInt(c.totalMvt), 18)).toFixed(4)} MVT
+                            </Badge>
+                          )
+                        }
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+
               {claimErr && (
                 <div className="flex items-start gap-2 p-2.5 rounded-xl bg-red-500/[0.06] border border-red-500/15">
                   <Info className="h-3.5 w-3.5 text-red-400/70 shrink-0 mt-0.5" />
                   <p className="text-[10px] text-red-400">{claimErr}</p>
                 </div>
               )}
-              {distProof?.expiresAt && (
-                <p className="text-[10px] text-muted-foreground text-right">
-                  Claim expires: {new Date(distProof.expiresAt).toLocaleDateString()}
-                </p>
-              )}
             </div>
           ) : (
             <div className="py-3 text-center">
-              <p className="text-xs text-muted-foreground">No pending distribution for this cycle</p>
-              <p className="text-[10px] text-muted-foreground/60 mt-1">
-                {distProof?.cycle ? `Latest cycle: #${distProof.cycle}` : "Distribution runs every 24 hours"}
-              </p>
+              <p className="text-xs text-muted-foreground">No pending distributions for your wallet</p>
+              <p className="text-[10px] text-muted-foreground/60 mt-1">Distribution runs every 24 hours — claim any time after it runs</p>
             </div>
           )}
         </div>
@@ -300,18 +357,18 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
         {newPairs > 0 && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
             <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <p className="text-xs text-emerald-400 font-medium">{newPairs} new pair{newPairs !== 1 ? "s" : ""} pending — claim your binary income above when the next cycle commits</p>
+            <p className="text-xs text-emerald-400 font-medium">{newPairs} new pair{newPairs !== 1 ? "s" : ""} pending — claim your income above after the next daily cycle</p>
           </div>
         )}
 
         <div className="mt-4 grid grid-cols-2 gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
           <div className="text-center">
             <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Binary Pool (70%)</p>
-            <p className="text-xs font-medium">Of binary pool per cycle</p>
+            <p className="text-xs font-medium">Split by new pairs each cycle</p>
           </div>
           <div className="text-center">
             <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Power Leg (30%)</p>
-            <p className="text-xs font-medium">{Number(userInfo.powerLegPoints)} pts = {Number(userInfo.powerLegPoints) / 10} new pairs</p>
+            <p className="text-xs font-medium">{Number(userInfo.powerLegPoints)} pts accumulated</p>
           </div>
         </div>
       </div>

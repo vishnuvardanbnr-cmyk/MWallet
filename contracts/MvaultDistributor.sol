@@ -9,9 +9,8 @@ import "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
 // Minimal interface — only the callbacks we need
 // ─────────────────────────────────────────────
 interface IMvaultMain {
-    function distributor_lockPool()                                                  external returns (uint256 pool);
+    function distributor_lockPool()                                                                  external returns (uint256 pool);
     function distributor_creditUser(address user, uint256 mvtAmount, uint256 newMatchedVol, uint256 newPowerLegPts) external;
-    function distributor_returnToAdmin(uint256 amount)                               external;
 }
 
 /**
@@ -22,10 +21,16 @@ interface IMvaultMain {
  *           1. Admin computes shares off-chain, builds a Merkle tree
  *              where each leaf encodes (cycle, user, binaryShare, powerLegShare,
  *              newMatchedVol, newPowerLegPts).
- *           2. Admin calls commitDistribution(root, totalPool) — locks the pool.
- *           3. Each user calls claimDistribution(..., proof) at their own time.
+ *           2. Admin calls commitDistribution(root, totalPool) — locks only the
+ *              NEW pool for this cycle from MvaultContract.binaryPool.
+ *           3. Each user calls claimDistribution(..., proof) at ANY time — no expiry.
  *              The contract verifies the proof and credits their MVT balance.
- *           4. After CLAIM_WINDOW (60 days), admin can reclaim any unclaimed pool.
+ *
+ *         Carry-forward design:
+ *           • If a user skips claiming cycle N, cycle N+1 naturally includes their
+ *             unclaimed pairs because matchedVolume on-chain is only updated on claim.
+ *           • Each cycle is independently claimable; there is no expiry.
+ *           • Users can claim multiple cycles back-to-back without restriction.
  *
  *         Security guarantees:
  *           • Admin CANNOT alter individual payouts once the root is committed.
@@ -37,16 +42,13 @@ contract MvaultDistributor is Ownable, ReentrancyGuard {
 
     IMvaultMain public mvault;
 
-    uint256 public constant CLAIM_WINDOW = 60 days;
-
     uint256 public currentCycle;
 
     struct Distribution {
         bytes32 root;
-        uint256 totalPool;      // MVT committed — on-chain upper bound for all claims
+        uint256 totalPool;      // MVT locked this cycle — upper bound for all claims in this cycle
         uint256 claimedTotal;   // running sum of claimed amounts (≤ totalPool always)
-        uint256 committedAt;
-        bool    reclaimed;
+        uint256 committedAt;    // block.timestamp when committed (informational)
     }
 
     mapping(uint256 => Distribution)              public distributions;
@@ -55,8 +57,6 @@ contract MvaultDistributor is Ownable, ReentrancyGuard {
     // ── Errors ────────────────────────────────────────────────────────────────
     error AlreadyClaimed();
     error InvalidProof();
-    error NothingToReclaim();
-    error ClaimWindowOpen();
     error MvaultNotSet();
     error ZeroRoot();
     error ZeroPool();
@@ -65,7 +65,6 @@ contract MvaultDistributor is Ownable, ReentrancyGuard {
     // ── Events ────────────────────────────────────────────────────────────────
     event DistributionCommitted(uint256 indexed cycle, bytes32 root, uint256 totalPool);
     event DistributionClaimed(address indexed user, uint256 indexed cycle, uint256 mvtAmount);
-    event DistributionReclaimed(uint256 indexed cycle, uint256 unclaimed);
     event MvaultUpdated(address newMvault);
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -86,12 +85,13 @@ contract MvaultDistributor is Ownable, ReentrancyGuard {
 
     /**
      * @notice Commit a new distribution cycle.
-     *         Locks the binary pool from MvaultContract into this cycle.
-     *         `totalPool` must equal the declared sum of all leaf (binaryShare + powerLegShare).
-     *         The contract verifies that the pool it drains is ≥ totalPool.
+     *         Locks the FULL current binaryPool from MvaultContract into this cycle.
+     *         `totalPool` must equal the declared sum of all leaf (binaryShare + powerLegShare)
+     *         for NEW income this cycle. Any pool excess (rounding dust) stays in the locked
+     *         balance to cover future cycles.
      *
      * @param root       Merkle root (StandardMerkleTree, double-keccak leaf encoding)
-     * @param totalPool  Sum of all (binaryShare + powerLegShare) in the tree
+     * @param totalPool  Sum of all (binaryShare + powerLegShare) in the tree for this cycle
      */
     function commitDistribution(bytes32 root, uint256 totalPool) external onlyOwner {
         if (root      == bytes32(0)) revert ZeroRoot();
@@ -101,39 +101,32 @@ contract MvaultDistributor is Ownable, ReentrancyGuard {
         uint256 locked = mvault.distributor_lockPool();
         if (locked < totalPool) revert PoolMismatch();
 
-        // Return any excess (rounding dust) back to adminPool
-        if (locked > totalPool) {
-            mvault.distributor_returnToAdmin(locked - totalPool);
-        }
-
         currentCycle++;
         distributions[currentCycle] = Distribution({
             root:         root,
-            totalPool:    totalPool,
+            totalPool:    locked,   // store full locked amount (≥ totalPool, dust stays in contract)
             claimedTotal: 0,
-            committedAt:  block.timestamp,
-            reclaimed:    false
+            committedAt:  block.timestamp
         });
 
         emit DistributionCommitted(currentCycle, root, totalPool);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // CLAIM (users — at any time within CLAIM_WINDOW)
+    // CLAIM (users — at ANY time, no expiry)
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
      * @notice Claim your binary + power-leg income for a given cycle.
+     *         Can be called at any time — there is no expiry or time limit.
      *
      *         Caller must supply the exact values from the Merkle tree leaf
-     *         (available from the backend API: GET /api/distribution/proof/:address).
-     *         The contract verifies the proof against the committed root —
-     *         no trust in admin execution required.
+     *         (available from backend API: GET /api/distribution/proofs/:address).
      *
      * @param cycle          Distribution cycle number
      * @param binaryShare    Caller's binary income share (MVT wei)
      * @param powerLegShare  Caller's power-leg share (MVT wei)
-     * @param newMatchedVol  Caller's updated matched-volume watermark (USDT wei)
+     * @param newMatchedVol  Caller's updated matched-volume watermark after this cycle
      * @param newPowerLegPts Caller's updated power-leg points after this cycle
      * @param proof          Merkle proof (array of bytes32 siblings)
      */
@@ -156,40 +149,17 @@ contract MvaultDistributor is Ownable, ReentrancyGuard {
 
         if (!MerkleProof.verify(proof, d.root, leaf)) revert InvalidProof();
 
-        // On-chain safety: cumulative claims can never exceed committed pool
+        // On-chain safety: cumulative claims can never exceed this cycle's locked pool
         uint256 total = binaryShare + powerLegShare;
         d.claimedTotal += total;
         require(d.claimedTotal <= d.totalPool, "Exceeds pool");
 
         hasClaimed[cycle][msg.sender] = true;
 
-        // Credit user's MVT balance and update binary state in MvaultContract
+        // Credit user's MVT balance and update binary watermark in MvaultContract
         mvault.distributor_creditUser(msg.sender, total, newMatchedVol, newPowerLegPts);
 
         emit DistributionClaimed(msg.sender, cycle, total);
-    }
-
-    // ─────────────────────────────────────────────────────────────────────────
-    // RECLAIM EXPIRED (admin — after CLAIM_WINDOW)
-    // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * @notice Reclaim unclaimed pool back to adminPool after 60 days.
-     *         This prevents locked MVT from being stranded indefinitely.
-     */
-    function reclaimExpired(uint256 cycle) external onlyOwner {
-        Distribution storage d = distributions[cycle];
-        if (d.root == bytes32(0))                          revert NothingToReclaim();
-        if (d.reclaimed)                                   revert NothingToReclaim();
-        if (block.timestamp < d.committedAt + CLAIM_WINDOW) revert ClaimWindowOpen();
-
-        uint256 unclaimed = d.totalPool - d.claimedTotal;
-        if (unclaimed == 0) revert NothingToReclaim();
-
-        d.reclaimed = true;
-        mvault.distributor_returnToAdmin(unclaimed);
-
-        emit DistributionReclaimed(cycle, unclaimed);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -197,9 +167,9 @@ contract MvaultDistributor is Ownable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────────────────
 
     function getDistribution(uint256 cycle) external view returns (
-        bytes32 root, uint256 totalPool, uint256 claimedTotal, uint256 committedAt, bool reclaimed
+        bytes32 root, uint256 totalPool, uint256 claimedTotal, uint256 committedAt
     ) {
         Distribution storage d = distributions[cycle];
-        return (d.root, d.totalPool, d.claimedTotal, d.committedAt, d.reclaimed);
+        return (d.root, d.totalPool, d.claimedTotal, d.committedAt);
     }
 }

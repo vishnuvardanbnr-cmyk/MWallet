@@ -1319,29 +1319,29 @@ export async function registerRoutes(
     }
   });
 
-  // ── Distribution proof (Merkle claim) ─────────────────────────────────────
-  app.get("/api/distribution/proof/:address", async (req, res) => {
+  // ── Distribution proofs (all unclaimed cycles for a wallet) ───────────────
+  app.get("/api/distribution/proofs/:address", async (req, res) => {
     try {
       const walletAddress = req.params.address.toLowerCase();
-      const latestCycle = await storage.getLatestDistributionCycle();
-      if (!latestCycle) {
-        return res.json({ cycle: 0, proof: null });
+      const proofs = await storage.getDistributionProofsByUser(walletAddress);
+      if (!proofs.length) {
+        return res.json({ cycles: [], totalMvt: "0" });
       }
-      const proof = await storage.getDistributionProof(latestCycle.cycle, walletAddress);
-      if (!proof) {
-        return res.json({ cycle: latestCycle.cycle, proof: null });
-      }
-      res.json({
-        cycle:          proof.cycle,
-        binaryShare:    proof.binaryShare,
-        powerLegShare:  proof.powerLegShare,
-        newMatchedVol:  proof.newMatchedVol,
-        newPowerLegPts: proof.newPowerLegPts,
-        proof:          proof.proof,
-        expiresAt:      latestCycle.expiresAt,
-        merkleRoot:     latestCycle.merkleRoot,
-        totalMvt:       (BigInt(proof.binaryShare) + BigInt(proof.powerLegShare)).toString(),
+      let totalMvt = 0n;
+      const cycles = proofs.map(p => {
+        const amount = BigInt(p.binaryShare) + BigInt(p.powerLegShare);
+        totalMvt += amount;
+        return {
+          cycle:          p.cycle,
+          binaryShare:    p.binaryShare,
+          powerLegShare:  p.powerLegShare,
+          newMatchedVol:  p.newMatchedVol,
+          newPowerLegPts: p.newPowerLegPts,
+          proof:          p.proof,
+          totalMvt:       amount.toString(),
+        };
       });
+      res.json({ cycles, totalMvt: totalMvt.toString() });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
