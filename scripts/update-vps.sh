@@ -24,8 +24,12 @@ if [ -z "$VPS_SSH_KEY" ]; then
   exit 1
 fi
 
-# Write SSH private key to temp file
-printf '%s\n' "$VPS_SSH_KEY" > "$SSH_KEY"
+# Write SSH private key to temp file (reconstruct PEM with proper newlines)
+{
+  echo "-----BEGIN OPENSSH PRIVATE KEY-----"
+  echo "$VPS_SSH_KEY" | tr ' ' '\n'
+  echo "-----END OPENSSH PRIVATE KEY-----"
+} > "$SSH_KEY"
 chmod 600 "$SSH_KEY"
 trap "rm -f $SSH_KEY" EXIT
 
