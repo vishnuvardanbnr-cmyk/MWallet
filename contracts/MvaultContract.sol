@@ -117,9 +117,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         bool    placedLeft;
         address leftChild;
         address rightChild;
-        uint256 leftSubUsers;     // users in left subtree
-        uint256 rightSubUsers;    // users in right subtree
-        uint256 matchedPairs;     // watermark: cumulative pairs as of last distribution
+        uint256 leftSubVolume;    // cumulative USDT activated in left binary subtree
+        uint256 rightSubVolume;   // cumulative USDT activated in right binary subtree
+        uint256 matchedVolume;    // watermark: matched USDT volume as of last distribution
         // Virtual MVT
         uint256 mvtBalance;       // available to sell
         uint256 totalReceived;    // lifetime MVT credited
@@ -412,7 +412,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
             else            users[parent].rightChild = msg.sender;
 
             users[sponsor].directCount++;
-            _updateAncestorCounts(msg.sender);
+            // Volume update deferred to _doActivate (when pkgPrice is known)
         }
 
         emit Registered(msg.sender, sponsor, binaryParent, placeLeft);
@@ -436,15 +436,17 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Walk up the binary tree and increment subtree counters on each ancestor.
+     * @dev Walk up the binary tree and add `pkgPrice` (USDT) to the appropriate
+     *      side volume counter on every ancestor.  Called at activation time so
+     *      each activation contributes its real dollar value to binary volumes.
      */
-    function _updateAncestorCounts(address newUser) internal {
-        address cur    = users[newUser].binaryParent;
-        bool    isLeft = users[newUser].placedLeft;
+    function _updateAncestorVolumes(address user, uint256 pkgPrice) internal {
+        address cur    = users[user].binaryParent;
+        bool    isLeft = users[user].placedLeft;
 
         while (cur != address(0)) {
-            if (isLeft) users[cur].leftSubUsers++;
-            else        users[cur].rightSubUsers++;
+            if (isLeft) users[cur].leftSubVolume  += pkgPrice;
+            else        users[cur].rightSubVolume += pkgPrice;
             isLeft = users[cur].placedLeft;
             cur    = users[cur].binaryParent;
         }
@@ -540,7 +542,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         else            users[parent].rightChild = newUser;
 
         users[msg.sender].directCount++;
-        _updateAncestorCounts(newUser);
+        // Volume update deferred to _doActivate (when pkgPrice is known)
 
         emit Registered(newUser, msg.sender, parent, placeLeft);
 
@@ -583,6 +585,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         users[user].packagePrice   = pkgPrice;
         users[user].incomeLimitCap = incomeCap;
 
+        _updateAncestorVolumes(user, pkgPrice);
         _updateTeamStats(user, pkgPrice);
         _distributeLevelIncome(user, grossMvt, levelAmt);
         _distributeRankIncome(user, rankAmt);
@@ -958,7 +961,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         else            users[binParent].rightChild = subAccount;
 
         if (subSponsor != address(0)) users[subSponsor].directCount++;
-        _updateAncestorCounts(subAccount);
+        // Volume update handled in _doActivate below
 
         // ── 5 & 6. Activate sub-account (USDT already in contract) ───────────
         // Sub-account inherits the same package tier as the main account.
@@ -1068,6 +1071,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         users[user].incomeLimitCap = incomeCap;
         users[user].incomeLimit    = incomeCap;
 
+        _updateAncestorVolumes(user, pkgPrice);
         _updateTeamStats(user, pkgPrice);
         _distributeLevelIncome(user, grossMvt, levelAmt);
         _distributeRankIncome(user, rankAmt);
@@ -1146,46 +1150,46 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 end = offset + limit;
         if (end > allUsers.length) end = allUsers.length;
 
-        // First pass — count total new pairs in this batch
-        uint256 totalNewPairs = 0;
+        // First pass — count total new matched volume in this batch
+        uint256 totalNewVolume = 0;
         for (uint256 i = offset; i < end; i++) {
             address u = allUsers[i];
             if (!users[u].isActive) continue;
-            uint256 pairs = _minOf(users[u].leftSubUsers, users[u].rightSubUsers);
-            if (pairs > users[u].matchedPairs) {
-                totalNewPairs += pairs - users[u].matchedPairs;
+            uint256 matched = _minOf(users[u].leftSubVolume, users[u].rightSubVolume);
+            if (matched > users[u].matchedVolume) {
+                totalNewVolume += matched - users[u].matchedVolume;
             }
         }
 
-        if (totalNewPairs == 0) {
+        if (totalNewVolume == 0) {
             adminPool += binary70 + powerLeg30;
             _powerLeg30Reserve = 0;
             emit BinaryIncomeDistributed(pool, 0, 0, 0);
             return;
         }
 
-        // Second pass — distribute 70% and assign power leg points
+        // Second pass — distribute 70% and assign power leg points proportional to volume
         for (uint256 i = offset; i < end; i++) {
             address u = allUsers[i];
             if (!users[u].isActive) continue;
 
-            uint256 pairs    = _minOf(users[u].leftSubUsers, users[u].rightSubUsers);
-            uint256 newPairs = pairs > users[u].matchedPairs
-                ? pairs - users[u].matchedPairs : 0;
-            if (newPairs == 0) continue;
+            uint256 matched    = _minOf(users[u].leftSubVolume, users[u].rightSubVolume);
+            uint256 newVolume  = matched > users[u].matchedVolume
+                ? matched - users[u].matchedVolume : 0;
+            if (newVolume == 0) continue;
 
-            uint256 share = (binary70 * newPairs) / totalNewPairs;
+            uint256 share = (binary70 * newVolume) / totalNewVolume;
             users[u].mvtBalance      += share;
             users[u].totalReceived   += share;
-            uint256 ptsPerPair = users[u].packagePrice == PRICE_PRO ? 5 : 3;
-            users[u].powerLegPoints  += newPairs * ptsPerPair;
-            users[u].matchedPairs     = pairs;
-            emit BinaryIncomePaid(u, newPairs, share);
+            // Power leg points: 1 point per $1 of matched volume (volume in wei → divide by 1e18)
+            users[u].powerLegPoints  += newVolume / 1e18;
+            users[u].matchedVolume    = matched;
+            emit BinaryIncomePaid(u, newVolume, share);
             _recordTx(u, TX_BINARY_INCOME, share, 0, address(0));
         }
 
         _binaryDistributed = true;
-        emit BinaryIncomeDistributed(pool, binary70, powerLeg30, totalNewPairs);
+        emit BinaryIncomeDistributed(pool, binary70, powerLeg30, totalNewVolume);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1459,8 +1463,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         bool    placedLeft,
         address leftChild,
         address rightChild,
-        uint256 leftSubUsers,
-        uint256 rightSubUsers,
+        uint256 leftSubVolume,
+        uint256 rightSubVolume,
         uint256 mvtBalance,
         uint256 totalReceived,
         uint256 totalSold,
@@ -1469,7 +1473,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 rebirthPool,
         uint256 btcPoolBalance,
         uint256 powerLegPoints,
-        uint256 matchedPairs,
+        uint256 matchedVolume,
         address mainAccount,
         uint256 rebirthCount,
         uint256 joinedAt
@@ -1478,11 +1482,11 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         return (
             d.isRegistered, d.isActive, d.sponsor, d.directCount,
             d.binaryParent, d.placedLeft, d.leftChild, d.rightChild,
-            d.leftSubUsers, d.rightSubUsers,
+            d.leftSubVolume, d.rightSubVolume,
             d.mvtBalance, d.totalReceived, d.totalSold,
             d.incomeLimit, d.usdtBalance, d.rebirthPool,
             d.btcPoolBalance,
-            d.powerLegPoints, d.matchedPairs,
+            d.powerLegPoints, d.matchedVolume,
             d.mainAccount, d.rebirthCount, d.joinedAt
         );
     }
@@ -1505,10 +1509,17 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         eligible    = users[user].packagePrice > 0 && poolBalance >= users[user].packagePrice;
     }
 
-    function getCurrentBinaryPairs(address u) external view returns (uint256 currentPairs, uint256 newPairs) {
-        currentPairs = _minOf(users[u].leftSubUsers, users[u].rightSubUsers);
-        newPairs = currentPairs > users[u].matchedPairs
-            ? currentPairs - users[u].matchedPairs : 0;
+    function getCurrentBinaryVolume(address u) external view returns (
+        uint256 leftVolume,
+        uint256 rightVolume,
+        uint256 currentMatched,
+        uint256 newVolume
+    ) {
+        leftVolume     = users[u].leftSubVolume;
+        rightVolume    = users[u].rightSubVolume;
+        currentMatched = _minOf(leftVolume, rightVolume);
+        newVolume      = currentMatched > users[u].matchedVolume
+            ? currentMatched - users[u].matchedVolume : 0;
     }
 
     function getMvtPrice() external view returns (uint256 buyPrice, uint256 sellPrice) {
