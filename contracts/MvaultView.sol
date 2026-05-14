@@ -271,20 +271,27 @@ contract MvaultView {
         powerLegPoints = new uint256[](len);
 
         for (uint256 i = 0; i < len; i++) {
-            // Fetch full struct — all 33 fields — but only keep 5.
-            // Named vars for all fields: Solidity requires every return slot to be named
-            // or blank-skipped with commas (both are valid in 0.8+).
+            // All 33 fields must be named — Solidity does not allow anonymous
+            // positional skipping for non-value types (address, string).
+            // We name everything with short _ prefixes; only 5 are used.
             (
                 bool _reg, bool _act,
-                address, uint256, address, bool, address, address,
+                address _sp, uint256 _dc, address _bp, bool _pl, address _lc, address _rc,
                 uint256 _l, uint256 _r, uint256 _m,
-                uint256, uint256, uint256, uint256, uint256,
-                uint256, uint256, uint256, uint256,
+                uint256 _mb, uint256 _tr, uint256 _ts, uint256 _il, uint256 _ub,
+                uint256 _rp, uint256 _tue, uint256 _bb, uint256 _tbe,
                 uint256 _p,
-                uint256, uint256, address, uint256, uint8, uint256, uint256,
-                string memory, string memory, string memory, string memory,
-                bool
+                uint256 _pp, uint256 _ilc, address _ma, uint256 _rb,
+                uint8 _rk, uint256 _tsu, uint256 _ja,
+                string memory _dn, string memory _em, string memory _ph, string memory _co,
+                bool _prs
             ) = mvault.users(addrs[i]);
+
+            // Suppress unused-variable warnings
+            _sp; _dc; _bp; _pl; _lc; _rc;
+            _mb; _tr; _ts; _il; _ub; _rp; _tue; _bb; _tbe;
+            _pp; _ilc; _ma; _rb; _rk; _tsu; _ja;
+            _dn; _em; _ph; _co; _prs;
 
             if (!_reg) continue;   // unregistered — leave arrays at zero
             isActive[i]       = _act;

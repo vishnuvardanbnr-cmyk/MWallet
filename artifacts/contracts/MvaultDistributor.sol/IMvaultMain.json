@@ -1,0 +1,52 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "IMvaultMain",
+  "sourceName": "contracts/MvaultDistributor.sol",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "user",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "mvtAmount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "newMatchedVol",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "newPowerLegPts",
+          "type": "uint256"
+        }
+      ],
+      "name": "distributor_creditUser",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "distributor_lockPool",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "pool",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}
