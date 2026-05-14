@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# update-vps.sh — Build the app and deploy to VPS via sshpass
+# update-vps.sh — Build the app and deploy to VPS via SSH key
 # Usage: bash scripts/update-vps.sh
-# Requires: VPS_PASSWORD env secret
+# Requires: VPS_SSH_KEY env secret
 
 set -e
 
 VPS_IP="173.249.10.179"
 VPS_USER="root"
 VPS_PATH="/opt/mvault"
+SSH_KEY="/tmp/mvault_deploy_key"
 
 MVT_TOKEN="0x248984989669c6e0D817221A934ca899583c3836"
 MVAULT_CONTRACT="0xcF110A7D5D2D5e2Df14db910f137A9f6681247d2"
@@ -18,13 +19,18 @@ DISTRIBUTOR="0x46B7A3a9f21bC0baf942869d0Ba332fA0C652089"
 USDT="0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3"
 BSC_NETWORK="testnet"
 
-if [ -z "$VPS_PASSWORD" ]; then
-  echo "❌ VPS_PASSWORD env secret is not set"
+if [ -z "$VPS_SSH_KEY" ]; then
+  echo "❌ VPS_SSH_KEY env secret is not set"
   exit 1
 fi
 
-SSH="sshpass -p '$VPS_PASSWORD' ssh -o StrictHostKeyChecking=no ${VPS_USER}@${VPS_IP}"
-SCP="sshpass -p '$VPS_PASSWORD' scp -o StrictHostKeyChecking=no -r"
+# Write SSH private key to temp file
+printf '%s\n' "$VPS_SSH_KEY" > "$SSH_KEY"
+chmod 600 "$SSH_KEY"
+trap "rm -f $SSH_KEY" EXIT
+
+SSH="ssh -i $SSH_KEY -o StrictHostKeyChecking=no -o BatchMode=yes ${VPS_USER}@${VPS_IP}"
+SCP="scp -i $SSH_KEY -o StrictHostKeyChecking=no -r"
 
 echo ""
 echo "══════════════════════════════════════════════════"
@@ -56,30 +62,30 @@ echo "  ✓ Frontend built"
 # ── 2. Ensure VPS app directory exists ────────────────────────────────────
 echo ""
 echo "[2/5] Preparing VPS directory..."
-eval $SSH "mkdir -p ${VPS_PATH}/dist"
+$SSH "mkdir -p ${VPS_PATH}/dist"
 echo "  ✓ Directory ready"
 
 # ── 3. Sync built files to VPS ────────────────────────────────────────────
 echo ""
 echo "[3/5] Syncing files to VPS..."
 
-eval $SSH "rm -rf ${VPS_PATH}/dist && mkdir -p ${VPS_PATH}/dist"
-eval $SCP dist/public dist/index.cjs ${VPS_USER}@${VPS_IP}:${VPS_PATH}/dist/
+$SSH "rm -rf ${VPS_PATH}/dist && mkdir -p ${VPS_PATH}/dist"
+$SCP dist/public dist/index.cjs ${VPS_USER}@${VPS_IP}:${VPS_PATH}/dist/
 echo "  ✓ dist/ synced"
 
-eval $SCP server/ ${VPS_USER}@${VPS_IP}:${VPS_PATH}/server/
+$SCP server/ ${VPS_USER}@${VPS_IP}:${VPS_PATH}/server/
 echo "  ✓ server/ synced"
 
-eval $SCP shared/ ${VPS_USER}@${VPS_IP}:${VPS_PATH}/shared/
+$SCP shared/ ${VPS_USER}@${VPS_IP}:${VPS_PATH}/shared/
 echo "  ✓ shared/ synced"
 
-sshpass -p "$VPS_PASSWORD" scp -o StrictHostKeyChecking=no package.json ${VPS_USER}@${VPS_IP}:${VPS_PATH}/package.json
+scp -i $SSH_KEY -o StrictHostKeyChecking=no package.json ${VPS_USER}@${VPS_IP}:${VPS_PATH}/package.json
 echo "  ✓ package.json synced"
 
 # ── 4. Update VPS .env ────────────────────────────────────────────────────
 echo ""
 echo "[4/5] Updating VPS .env..."
-sshpass -p "$VPS_PASSWORD" ssh -o StrictHostKeyChecking=no ${VPS_USER}@${VPS_IP} bash <<EOF
+$SSH bash <<EOF
 touch ${VPS_PATH}/.env
 
 sed -i '/^VITE_MVT_TOKEN_ADDRESS=/d' ${VPS_PATH}/.env
@@ -105,7 +111,7 @@ echo "  ✓ VPS .env updated"
 # ── 5. Install deps and restart PM2 ───────────────────────────────────────
 echo ""
 echo "[5/5] Installing deps and restarting PM2..."
-sshpass -p "$VPS_PASSWORD" ssh -o StrictHostKeyChecking=no ${VPS_USER}@${VPS_IP} bash <<EOF
+$SSH bash <<EOF
 cd ${VPS_PATH}
 npm install --production --silent 2>/dev/null || true
 pm2 restart mvault --update-env || pm2 start dist/index.cjs --name mvault
