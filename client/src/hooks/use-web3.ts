@@ -33,7 +33,7 @@ export interface UserInfo {
   mainAccount: string;
   rebirthCount: bigint;
   joinedAt: bigint;
-  rank: number;             // 0=Member 1=Bronze 2=Silver 3=Gold 4=Platinum 5=Diamond 6=DoubleDiamond 7=Crown
+  rank: number;             // 0=Unranked 1=M1 2=M2 3=M3 4=M4 5=M5
   teamSalesUsdt: bigint;    // total team sales USDT (used for rank)
 }
 

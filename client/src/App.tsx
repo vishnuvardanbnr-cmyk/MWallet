@@ -369,7 +369,6 @@ function App() {
                     <Route path="/rank">
                       <RankPage
                         userInfo={web3.userInfo!}
-                        formatAmount={web3.formatAmount}
                       />
                     </Route>
                     <Route path="/store">
