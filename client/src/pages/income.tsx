@@ -88,7 +88,7 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
   const totalPendingMvt = pendingCycles.reduce((sum, c) => sum + BigInt(c.totalMvt), 0n);
   const hasPending = pendingCycles.length > 0 && totalPendingMvt > 0n;
 
-  // ── Claim All — sequential MetaMask popups, one per unclaimed cycle ───────
+  // ── Claim All — single batchClaim tx, one MetaMask popup ─────────────────
   async function handleClaimAll() {
     if (!pendingCycles.length || !walletAddress) return;
     setClaimErr(null);
@@ -98,33 +98,23 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
       const signer   = await provider.getSigner();
       const dist     = getMvaultDistributorContract(signer);
 
-      for (const c of pendingCycles) {
-        try {
-          const tx = await dist.claimDistribution(
-            BigInt(c.cycle),
-            BigInt(c.binaryShare),
-            BigInt(c.powerLegShare),
-            BigInt(c.newMatchedVol),
-            BigInt(c.newPowerLegPts),
-            c.proof,
-            { gasLimit: 250_000 },
-          );
-          await tx.wait();
-          setClaimedCycles(prev => new Set(prev).add(c.cycle));
-        } catch (err: any) {
-          // AlreadyClaimed = skip silently; other errors = stop and report
-          const name = err?.errorName || "";
-          if (name === "AlreadyClaimed") {
-            setClaimedCycles(prev => new Set(prev).add(c.cycle));
-            continue;
-          }
-          const msg = err?.shortMessage || err?.reason || err?.message || "Claim failed";
-          setClaimErr(`Cycle #${c.cycle}: ${msg.slice(0, 100)}`);
-          break;
-        }
-      }
+      // Sort ascending so newMatchedVol / newPowerLegPts are applied in order
+      const sorted = [...pendingCycles].sort((a, b) => a.cycle - b.cycle);
 
-      // Refresh query after claiming
+      const gasLimit = 150_000 + 120_000 * sorted.length;
+
+      const tx = await dist.batchClaim(
+        sorted.map(c => BigInt(c.cycle)),
+        sorted.map(c => BigInt(c.binaryShare)),
+        sorted.map(c => BigInt(c.powerLegShare)),
+        sorted.map(c => BigInt(c.newMatchedVol)),
+        sorted.map(c => BigInt(c.newPowerLegPts)),
+        sorted.map(c => c.proof),
+        { gasLimit },
+      );
+      await tx.wait();
+
+      setClaimedCycles(new Set(sorted.map(c => c.cycle)));
       qc.invalidateQueries({ queryKey: ["/api/distribution/proofs", walletAddress] });
     } catch (err: any) {
       const msg = err?.shortMessage || err?.reason || err?.message || "Claim failed";

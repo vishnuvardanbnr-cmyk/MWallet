@@ -335,6 +335,7 @@ export const DISTRIBUTOR_ABI = [
   "function hasClaimed(uint256 cycle, address user) view returns (bool)",
   "function distributions(uint256 cycle) view returns (bytes32 root, uint256 totalPool, uint256 claimedTotal, uint256 committedAt)",
   "function claimDistribution(uint256 cycle, uint256 binaryShare, uint256 powerLegShare, uint256 newMatchedVol, uint256 newPowerLegPts, bytes32[] calldata proof) external",
+  "function batchClaim(uint256[] cycles, uint256[] binaryShares, uint256[] powerLegShares, uint256[] newMatchedVols, uint256[] newPowerLegPts, bytes32[][] proofs) external",
   "function commitDistribution(bytes32 root, uint256 totalPool) external",
 ];
 

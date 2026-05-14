@@ -163,6 +163,71 @@ contract MvaultDistributor is Ownable, ReentrancyGuard {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
+    // BATCH CLAIM (users — all unclaimed cycles in one transaction)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Claim multiple cycles in a single transaction — one MetaMask popup.
+     *         Already-claimed cycles are silently skipped (no revert).
+     *         Arrays must all be the same length and ordered ascending by cycle
+     *         so that newMatchedVol / newPowerLegPts are applied in the correct order.
+     *
+     * @param cycles          Array of cycle numbers to claim
+     * @param binaryShares    Corresponding binary income shares (MVT wei)
+     * @param powerLegShares  Corresponding power-leg shares (MVT wei)
+     * @param newMatchedVols  Corresponding updated matched-volume watermarks
+     * @param newPowerLegPts  Corresponding updated power-leg points
+     * @param proofs          Corresponding Merkle proofs (2-D array)
+     */
+    function batchClaim(
+        uint256[]   calldata cycles,
+        uint256[]   calldata binaryShares,
+        uint256[]   calldata powerLegShares,
+        uint256[]   calldata newMatchedVols,
+        uint256[]   calldata newPowerLegPts,
+        bytes32[][] calldata proofs
+    ) external nonReentrant {
+        uint256 len = cycles.length;
+        require(
+            binaryShares.length == len &&
+            powerLegShares.length == len &&
+            newMatchedVols.length == len &&
+            newPowerLegPts.length == len &&
+            proofs.length == len,
+            "Length mismatch"
+        );
+
+        for (uint256 i = 0; i < len; i++) {
+            uint256 cycle = cycles[i];
+
+            // Skip already-claimed cycles silently
+            if (hasClaimed[cycle][msg.sender]) continue;
+
+            Distribution storage d = distributions[cycle];
+
+            bytes32 leaf = keccak256(bytes.concat(keccak256(abi.encode(
+                cycle, msg.sender,
+                binaryShares[i], powerLegShares[i],
+                newMatchedVols[i], newPowerLegPts[i]
+            ))));
+
+            if (!MerkleProof.verify(proofs[i], d.root, leaf)) revert InvalidProof();
+
+            uint256 total = binaryShares[i] + powerLegShares[i];
+            d.claimedTotal += total;
+            require(d.claimedTotal <= d.totalPool, "Exceeds pool");
+
+            hasClaimed[cycle][msg.sender] = true;
+
+            mvault.distributor_creditUser(
+                msg.sender, total, newMatchedVols[i], newPowerLegPts[i]
+            );
+
+            emit DistributionClaimed(msg.sender, cycle, total);
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
     // VIEW
     // ─────────────────────────────────────────────────────────────────────────
 
