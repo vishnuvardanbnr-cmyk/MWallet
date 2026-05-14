@@ -62,7 +62,7 @@ const PACKAGES = [
 
 export default function ActivatePage({ account, approveToken, activatePackage, activateFromBalance, fetchUserData, disconnect, virtualUsdtBalance }: ActivatePageProps) {
   const { toast } = useToast();
-  const [selectedPkg, setSelectedPkg]   = useState(2); // default Pro
+  const [selectedPkg, setSelectedPkg]   = useState<number | null>(null); // no default — user must choose
   const [approved,   setApproved]       = useState(false);
   const [approving,  setApproving]      = useState(false);
   const [activating, setActivating]     = useState(false);
@@ -72,13 +72,14 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
   const [allowance,   setAllowance]     = useState<bigint>(0n);
   const [activeMethod, setActiveMethod] = useState<"wallet" | "internal">("wallet");
 
-  const pkg = PACKAGES.find(p => p.pkg === selectedPkg)!;
-  const PACKAGE_PRICE = ethers.parseUnits(pkg.price.toString(), 18);
+  const pkg = selectedPkg !== null ? PACKAGES.find(p => p.pkg === selectedPkg) ?? null : null;
+  const PACKAGE_PRICE = pkg ? ethers.parseUnits(pkg.price.toString(), 18) : 0n;
 
   const virtualBalanceNum = virtualUsdtBalance ? parseFloat(formatTokenAmount(virtualUsdtBalance, 18)) : 0;
-  const hasVirtualFunds = virtualUsdtBalance !== undefined && virtualUsdtBalance >= PACKAGE_PRICE;
+  const hasVirtualFunds = pkg !== null && virtualUsdtBalance !== undefined && virtualUsdtBalance >= PACKAGE_PRICE;
 
   const fetchBalances = async () => {
+    if (!pkg) return;
     try {
       const provider = new ethers.BrowserProvider((window as any).ethereum);
       const token = getTokenContract(provider);
@@ -96,10 +97,11 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
   useEffect(() => { fetchBalances(); }, [account, selectedPkg]);
 
   const balanceNum = usdtBalance !== null ? parseFloat(formatTokenAmount(usdtBalance, 18)) : null;
-  const hasFunds   = usdtBalance !== null && usdtBalance >= PACKAGE_PRICE;
+  const hasFunds   = pkg !== null && usdtBalance !== null && usdtBalance >= PACKAGE_PRICE;
   const step       = approved ? 2 : 1;
 
   const handleApprove = async () => {
+    if (!pkg) return;
     setApproving(true);
     try {
       await approveToken(pkg.price.toString());
@@ -112,6 +114,7 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
   };
 
   const handleActivate = async () => {
+    if (!pkg || selectedPkg === null) return;
     setActivating(true);
     try {
       await activatePackage(selectedPkg);
@@ -123,6 +126,7 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
   };
 
   const handleActivateFromBalance = async () => {
+    if (!pkg || selectedPkg === null) return;
     setActivatingInternal(true);
     try {
       await activateFromBalance(selectedPkg);
@@ -259,8 +263,19 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
           </div>
         )}
 
+        {/* No package selected — prompt */}
+        {!pkg && (
+          <div className="glass-card rounded-2xl p-6 text-center space-y-3 border border-amber-500/20" data-testid="card-select-package-prompt">
+            <div className="h-12 w-12 mx-auto rounded-2xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-center">
+              <ArrowRight className="h-6 w-6 text-amber-400" />
+            </div>
+            <p className="text-sm font-semibold text-amber-300" style={{ fontFamily: "var(--font-display)" }}>Select a package above to continue</p>
+            <p className="text-xs text-muted-foreground">Choose Starter ($55) or Pro ($130) to see the approval steps</p>
+          </div>
+        )}
+
         {/* Wallet Activation */}
-        {(activeMethod === "wallet" || !hasVirtualFunds) && (
+        {pkg && (activeMethod === "wallet" || !hasVirtualFunds) && (
           <div className="glass-card rounded-2xl p-6 space-y-6">
             <div className="text-center space-y-2">
               <div className="h-14 w-14 mx-auto rounded-2xl bg-gradient-to-br from-amber-500/25 to-yellow-400/10 border border-amber-400/15 flex items-center justify-center mb-3">
@@ -384,30 +399,32 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
           </div>
         )}
 
-        {/* Distribution breakdown */}
-        <div className="glass-card rounded-2xl p-5 space-y-4">
-          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-            How ${pkg.price} Activation is Split
-          </p>
-          <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5">
-            {pkg.distribution.map(d => (
-              <div key={d.label} className={`${d.bar} opacity-75`} style={{ width: `${d.pct}%` }} />
-            ))}
-          </div>
-          <div className="space-y-2.5">
-            {pkg.distribution.map(d => (
-              <div key={d.label} className={`flex items-center gap-3 p-2.5 rounded-xl ${d.bg} border ${d.border}`}>
-                <div className="flex-1 min-w-0">
-                  <p className="text-xs font-semibold">{d.label}</p>
+        {/* Distribution breakdown — only when a package is selected */}
+        {pkg && (
+          <div className="glass-card rounded-2xl p-5 space-y-4">
+            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
+              How ${pkg.price} Activation is Split
+            </p>
+            <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5">
+              {pkg.distribution.map(d => (
+                <div key={d.label} className={`${d.bar} opacity-75`} style={{ width: `${d.pct}%` }} />
+              ))}
+            </div>
+            <div className="space-y-2.5">
+              {pkg.distribution.map(d => (
+                <div key={d.label} className={`flex items-center gap-3 p-2.5 rounded-xl ${d.bg} border ${d.border}`}>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-xs font-semibold">{d.label}</p>
+                  </div>
+                  <div className="text-right shrink-0">
+                    <p className={`text-sm font-bold ${d.color}`} style={{ fontFamily: "var(--font-display)" }}>{d.pct}%</p>
+                    <p className="text-[10px] text-muted-foreground">${pkg.price * d.pct / 100}</p>
+                  </div>
                 </div>
-                <div className="text-right shrink-0">
-                  <p className={`text-sm font-bold ${d.color}`} style={{ fontFamily: "var(--font-display)" }}>{d.pct}%</p>
-                  <p className="text-[10px] text-muted-foreground">${pkg.price * d.pct / 100}</p>
-                </div>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
-        </div>
+        )}
 
       </div>
     </div>
