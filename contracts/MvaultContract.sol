@@ -182,6 +182,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint8 internal constant TX_SELL_MVT       = 5;
     uint8 internal constant TX_BTC_CREDITED   = 6;
     uint8 internal constant TX_USDT_WITHDRAW  = 7;
+    uint8 internal constant TX_REACTIVATION   = 15;
     uint8 internal constant TX_BTC_WITHDRAW   = 8;
     uint8 internal constant TX_REBIRTH        = 9;
     uint8 internal constant TX_BOARD_ENTRY    = 10;
@@ -224,6 +225,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     event BtcPoolWithdrawn(address indexed user, uint256 amount);
     event UsdtWithdrawn(address indexed user, uint256 amount);
     event Reborn(address indexed mainAccount, address indexed subAccount, uint256 rebirthIndex);
+    event Reactivated(address indexed user, uint256 pkgPrice, uint256 grossMvt, bool upgraded);
     event ProfileUpdated(address indexed user);
     event MvaultTokenUpdated(address newToken);
     event RegisteredAndActivatedFor(address indexed payer, address indexed newUser, address indexed sponsor, bool placeLeft);
@@ -253,6 +255,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     error ZeroAmount();
     error TransferFailed();
     error InvalidPackage();
+    error NotEligibleForRebirth();
+    error IncomeNotExhausted();
+    error CannotDowngradePackage();
     error BinaryNotDistributed();
     error BinaryAlreadyDistributed();
     error BoardHandlerNotSet();
@@ -734,6 +739,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
         User storage u = users[msg.sender];
         if (!u.isActive) revert NotActive();
+        if (u.packagePrice != PRICE_PRO) revert NotEligibleForRebirth();
         if (u.rebirthPool < u.packagePrice) revert InsufficientRebirthPool();
         if (users[subAccount].isRegistered) revert SubAccountAlreadyRegistered();
 
@@ -800,6 +806,89 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         u.totalUsdtEarned += claim;
 
         _recordTx(msg.sender, TX_REBIRTH_CLAIM, claim, 0, address(0));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // REACTIVATION  (STARTER and PRO)
+    //
+    // When a user's incomeLimit reaches 0 they have two options:
+    //   A) Reactivate at their current pkg price → income limit resets.
+    //   B) Upgrade from STARTER → PRO by paying $130 → income limit resets
+    //      to $390, packagePrice updated to PRO, rebirth becomes eligible.
+    //
+    // Rules:
+    //   • Caller must be active and have incomeLimit == 0.
+    //   • Cannot downgrade from PRO (pkg=2) to STARTER (pkg=1).
+    //   • Same MVT minting and pool distributions as initial activation.
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Reactivate (or upgrade) by paying USDT from your wallet.
+     *         pkg=1 → STARTER $55  (resets limit to $165, no rebirth)
+     *         pkg=2 → PRO     $130 (resets limit to $390, rebirth eligible)
+     *         Caller must pre-approve the contract for the chosen pkg price.
+     */
+    function reactivate(uint8 pkg) external nonReentrant {
+        User storage u = users[msg.sender];
+        if (!u.isActive)        revert NotActive();
+        if (u.incomeLimit > 0)  revert IncomeNotExhausted();
+
+        (uint256 price, uint256 incomeCap) = _pkgParams(pkg);
+        if (u.packagePrice == PRICE_PRO && price < PRICE_PRO) revert CannotDowngradePackage();
+
+        bool ok = usdtToken.transferFrom(msg.sender, address(this), price);
+        if (!ok) revert TransferFailed();
+
+        _doReactivate(msg.sender, price, incomeCap);
+    }
+
+    /**
+     * @notice Reactivate (or upgrade) using your in-contract USDT balance.
+     *         pkg=1 → STARTER $55   pkg=2 → PRO $130
+     */
+    function reactivateFromBalance(uint8 pkg) external nonReentrant {
+        User storage u = users[msg.sender];
+        if (!u.isActive)        revert NotActive();
+        if (u.incomeLimit > 0)  revert IncomeNotExhausted();
+
+        (uint256 price, uint256 incomeCap) = _pkgParams(pkg);
+        if (u.packagePrice == PRICE_PRO && price < PRICE_PRO) revert CannotDowngradePackage();
+        if (u.usdtBalance < price) revert InsufficientUsdtBalance();
+
+        u.usdtBalance -= price;
+        _doReactivate(msg.sender, price, incomeCap);
+    }
+
+    /**
+     * @dev Core reactivation logic. Same MVT minting / distribution as activation.
+     *      Updates packagePrice and incomeLimitCap to reflect any upgrade.
+     */
+    function _doReactivate(address user, uint256 pkgPrice, uint256 incomeCap) internal {
+        bool upgraded = (users[user].packagePrice != pkgPrice);
+
+        uint256 buyPrice = mvaultToken.getBuyPrice();
+        uint256 grossMvt = (pkgPrice * 1e18) / buyPrice;
+
+        usdtToken.approve(address(mvaultToken), pkgPrice);
+        mvaultToken.addLiquidityAndMint(address(this), pkgPrice);
+
+        uint256 levelAmt  = (grossMvt * LEVEL_ALLOC)  / 100;
+        uint256 binaryAmt = (grossMvt * BINARY_ALLOC) / 100;
+        uint256 adminAmt  = (grossMvt * ADMIN_ALLOC)  / 100;
+        uint256 dust      = grossMvt - levelAmt - binaryAmt - adminAmt;
+
+        binaryPool += binaryAmt;
+        adminPool  += adminAmt + dust;
+
+        // Update package tier (handles both reactivation and upgrade)
+        users[user].packagePrice   = pkgPrice;
+        users[user].incomeLimitCap = incomeCap;
+        users[user].incomeLimit    = incomeCap;
+
+        _distributeLevelIncome(user, grossMvt, levelAmt);
+
+        emit Reactivated(user, pkgPrice, grossMvt, upgraded);
+        _recordTx(user, TX_REACTIVATION, pkgPrice, 0, address(0));
     }
 
     /**
