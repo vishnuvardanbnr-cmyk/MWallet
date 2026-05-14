@@ -206,6 +206,49 @@ export const MLM_ABI = [
 
 export const BOARD_HANDLER_ADDRESS =
   import.meta.env.VITE_BOARD_HANDLER_ADDRESS || "0xcA0Cc4A6236b4Af41E5588B70679DF9E9B8625Dc";
+
+// MvaultView — read-only helper that re-exposes functions removed from
+// MvaultContract to stay under the EIP-170 24 576-byte limit.
+// Set VITE_MVAULT_VIEW_ADDRESS in .env after deploying MvaultView.sol.
+export const MVAULT_VIEW_ADDRESS =
+  import.meta.env.VITE_MVAULT_VIEW_ADDRESS || "";
+
+export const MVAULT_VIEW_ABI = [
+  // Pool balances
+  "function getAllUsersCount() view returns (uint256)",
+  "function getPoolBalances() view returns (uint256 binary, uint256 reserve, uint256 admin)",
+  "function getAllPoolBalances() view returns (uint256 binary, uint256 reserve, uint256 admin, uint256 rank)",
+  // Token balances held by MvaultContract
+  "function getMvtContractBalance() view returns (uint256)",
+  "function getUsdtContractBalance() view returns (uint256)",
+  // Package / income constants
+  "function PACKAGE_PRICE() view returns (uint256)",
+  "function INCOME_LIMIT() view returns (uint256)",
+  "function PRICE_STARTER() view returns (uint256)",
+  "function INCOME_STARTER() view returns (uint256)",
+  "function PRICE_PRO() view returns (uint256)",
+  "function INCOME_PRO() view returns (uint256)",
+  "function getPackageParams(uint8 pkg) view returns (uint256 price, uint256 incomeCap)",
+  // Staking constants
+  "function getLockDuration() view returns (uint256)",
+  "function getMinStakeUsdt() view returns (uint256)",
+  "function getFlexCapMult() view returns (uint256)",
+  // Board handler delegates
+  "function getBoardPrice(uint256 boardLevel) view returns (uint256)",
+  "function getBoardQueueLength(uint256 boardLevel) view returns (uint256)",
+  "function getBoardCurrentIndex(uint256 boardLevel) view returns (uint256)",
+  "function getBoardMatrixInfo(uint256 boardLevel, uint256 index) view returns (address owner, uint256 filledCount, bool completed)",
+  "function getBoardSnapshot(uint256 fromLevel, uint256 toLevel) view returns (tuple(uint256 level, uint256 price, uint256 queueLength, uint256 currentIndex)[] tiers)",
+  // User-list helpers
+  "function getUserSlice(uint256 offset, uint256 limit) view returns (address[] slice)",
+  // Address lookups
+  "function getMvaultAddress() view returns (address)",
+  "function getMvtTokenAddress() view returns (address)",
+  "function getUsdtTokenAddress() view returns (address)",
+  "function getBoardHandlerAddress() view returns (address)",
+  "function getStakingAddress() view returns (address)",
+  "function mvault() view returns (address)",
+];
 export const DEPOSIT_VAULT_ADDRESS =
   import.meta.env.VITE_DEPOSIT_VAULT_ADDRESS || "0xD307FB39d7d42B59AC46e28D71ef72019E9D5e38";
 export const PANCAKE_ROUTER_ADDRESS =
@@ -272,6 +315,11 @@ export const getMlmContract = getContract;
 
 export function getBoardHandlerContract(signerOrProvider: ethers.Signer | ethers.Provider) {
   return new ethers.Contract(BOARD_HANDLER_ADDRESS, BOARD_HANDLER_ABI, signerOrProvider);
+}
+
+export function getMvaultViewContract(signerOrProvider: ethers.Signer | ethers.Provider) {
+  if (!MVAULT_VIEW_ADDRESS) throw new Error("VITE_MVAULT_VIEW_ADDRESS not set — deploy MvaultView.sol first");
+  return new ethers.Contract(MVAULT_VIEW_ADDRESS, MVAULT_VIEW_ABI, signerOrProvider);
 }
 
 export function getDepositVaultContract(signerOrProvider: ethers.Signer | ethers.Provider) {

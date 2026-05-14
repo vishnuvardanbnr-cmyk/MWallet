@@ -1,0 +1,326 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "IMvault",
+  "sourceName": "contracts/MvaultView.sol",
+  "abi": [
+    {
+      "inputs": [],
+      "name": "adminPool",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "uint256",
+          "name": "index",
+          "type": "uint256"
+        }
+      ],
+      "name": "allUsers",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "binaryPool",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "boardHandler",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "mvaultToken",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "rankPool",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "reservePool",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "stakingModule",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "totalUsers",
+      "outputs": [
+        {
+          "internalType": "uint256",
+          "name": "",
+          "type": "uint256"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [],
+      "name": "usdtToken",
+      "outputs": [
+        {
+          "internalType": "address",
+          "name": "",
+          "type": "address"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "u",
+          "type": "address"
+        }
+      ],
+      "name": "users",
+      "outputs": [
+        {
+          "internalType": "bool",
+          "name": "isRegistered",
+          "type": "bool"
+        },
+        {
+          "internalType": "bool",
+          "name": "isActive",
+          "type": "bool"
+        },
+        {
+          "internalType": "address",
+          "name": "sponsor",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "directCount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "binaryParent",
+          "type": "address"
+        },
+        {
+          "internalType": "bool",
+          "name": "placedLeft",
+          "type": "bool"
+        },
+        {
+          "internalType": "address",
+          "name": "leftChild",
+          "type": "address"
+        },
+        {
+          "internalType": "address",
+          "name": "rightChild",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "leftSubVolume",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "rightSubVolume",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "matchedVolume",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "mvtBalance",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "totalReceived",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "totalSold",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "incomeLimit",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "usdtBalance",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "rebirthPool",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "totalUsdtEarned",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "btcPoolBalance",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "totalBtcEarned",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "powerLegPoints",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "packagePrice",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "incomeLimitCap",
+          "type": "uint256"
+        },
+        {
+          "internalType": "address",
+          "name": "mainAccount",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "rebirthCount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint8",
+          "name": "rank",
+          "type": "uint8"
+        },
+        {
+          "internalType": "uint256",
+          "name": "teamSalesUsdt",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "joinedAt",
+          "type": "uint256"
+        },
+        {
+          "internalType": "string",
+          "name": "displayName",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "email",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "phone",
+          "type": "string"
+        },
+        {
+          "internalType": "string",
+          "name": "country",
+          "type": "string"
+        },
+        {
+          "internalType": "bool",
+          "name": "profileSet",
+          "type": "bool"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}

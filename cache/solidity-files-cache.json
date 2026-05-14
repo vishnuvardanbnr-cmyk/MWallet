@@ -672,6 +672,47 @@
         "IMvaultToken",
         "MvaultStaking"
       ]
+    },
+    "/home/runner/workspace/contracts/MvaultView.sol": {
+      "lastModificationDate": 1778751187344,
+      "contentHash": "984a0235bac4c14a854e0b295f91b7cc",
+      "sourceName": "contracts/MvaultView.sol",
+      "solcConfig": {
+        "version": "0.8.27",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 1
+          },
+          "viaIR": true,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [],
+      "versionPragmas": [
+        "^0.8.27"
+      ],
+      "artifacts": [
+        "IBoardHandler",
+        "IERC20Minimal",
+        "IMvault",
+        "IStaking",
+        "MvaultView"
+      ]
     }
   }
 }
