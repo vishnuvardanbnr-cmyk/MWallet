@@ -135,40 +135,40 @@ export function useWeb3() {
       try { total = Number(await contract.totalUsers()); } catch { }
       setTotalUsers(total);
 
-      // getUserInfo
+      // users() auto-getter replaces getUserInfo
       let info: any;
       try {
-        info = await contract.getUserInfo(address);
+        info = await contract.users(address);
       } catch (e) {
-        console.error("getUserInfo failed:", e);
+        console.error("users() failed:", e);
         setIsRegistered(false);
         setUserInfo(null);
         return;
       }
 
       const ui: UserInfo = {
-        isRegistered:    info[0],
-        isActive:        info[1],
-        sponsor:         info[2],
-        directCount:     info[3],
-        binaryParent:    info[4],
-        placedLeft:      info[5],
-        leftChild:       info[6],
-        rightChild:      info[7],
-        leftSubUsers:    info[8],
-        rightSubUsers:   info[9],
-        mvtBalance:      info[10],
-        totalReceived:   info[11],
-        totalSold:       info[12],
-        incomeLimit:     info[13],
-        usdtBalance:     info[14],
-        rebirthPool:     info[15],
-        btcPoolBalance:  info[16],
-        powerLegPoints:  info[17],
-        matchedPairs:    info[18],
-        mainAccount:     info[19],
-        rebirthCount:    info[20],
-        joinedAt:        info[21],
+        isRegistered:    info.isRegistered,
+        isActive:        info.isActive,
+        sponsor:         info.sponsor,
+        directCount:     info.directCount,
+        binaryParent:    info.binaryParent,
+        placedLeft:      info.placedLeft,
+        leftChild:       info.leftChild,
+        rightChild:      info.rightChild,
+        leftSubUsers:    info.leftSubVolume,
+        rightSubUsers:   info.rightSubVolume,
+        mvtBalance:      info.mvtBalance,
+        totalReceived:   info.totalReceived,
+        totalSold:       info.totalSold,
+        incomeLimit:     info.incomeLimit,
+        usdtBalance:     info.usdtBalance,
+        rebirthPool:     info.rebirthPool,
+        btcPoolBalance:  info.btcPoolBalance,
+        powerLegPoints:  info.powerLegPoints,
+        matchedPairs:    info.matchedVolume,
+        mainAccount:     info.mainAccount,
+        rebirthCount:    info.rebirthCount,
+        joinedAt:        info.joinedAt,
       };
 
       setIsRegistered(ui.isRegistered);
@@ -182,15 +182,18 @@ export function useWeb3() {
           setMvtPrice({ buyPrice: bp, sellPrice: sp });
         } catch { }
 
-        // Binary pairs
+        // Binary volume
         try {
-          const [curr, newP] = await contract.getCurrentBinaryPairs(address);
-          setBinaryPairs({ currentPairs: curr, newPairs: newP });
+          const [,,currentMatched, newVolume] = await contract.getCurrentBinaryVolume(address);
+          setBinaryPairs({ currentPairs: currentMatched, newPairs: newVolume });
         } catch { }
 
-        // Actual MVT ERC20 tokens held by the contract (caps sellable amount)
+        // MVT ERC20 tokens held by the contract (from mvaultToken address)
         try {
-          const bal = await contract.getMvtContractBalance();
+          const mvtAddr = await contract.mvaultToken();
+          const { ethers: e } = await import("ethers");
+          const mvt = new e.Contract(mvtAddr, ["function balanceOf(address) view returns (uint256)"], getProvider());
+          const bal = await mvt.balanceOf(MVAULT_CONTRACT_ADDRESS);
           setContractMvtBalance(bal);
         } catch { }
 
@@ -271,7 +274,8 @@ export function useWeb3() {
   const activatePackage = useCallback(async (_pkg?: number) => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
-    const tx = await contract.activate();
+    const pkg = _pkg ?? 2; // default PRO ($130)
+    const tx = await contract.activate(pkg);
     await tx.wait();
     await fetchUserData();
   }, [getSigner, fetchUserData]);
@@ -505,10 +509,11 @@ export function useWeb3() {
     await fetchUserData();
   }, [getSigner, fetchUserData]);
 
-  const activateFromBalance = useCallback(async () => {
+  const activateFromBalance = useCallback(async (_pkg?: number) => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
-    const tx = await contract.activateFromBalance();
+    const pkg = _pkg ?? 2; // default PRO ($130)
+    const tx = await contract.activateFromBalance(pkg);
     await tx.wait();
     await fetchUserData();
   }, [getSigner, fetchUserData]);
@@ -608,11 +613,12 @@ export function useWeb3() {
   const registerAndActivateFor = useCallback(async (
     newUser: string,
     binaryParent: string,
-    placeLeft: boolean
+    placeLeft: boolean,
+    pkg = 2
   ) => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
-    const tx = await contract.registerAndActivateFor(newUser, binaryParent, placeLeft, { gasLimit: 800000 });
+    const tx = await contract.registerAndActivateFor(newUser, binaryParent, placeLeft, pkg, { gasLimit: 800000 });
     await tx.wait();
     await fetchUserData();
   }, [getSigner, fetchUserData]);
@@ -642,8 +648,12 @@ export function useWeb3() {
   const getAdminPoolBalances = useCallback(async () => {
     const provider = getProvider();
     const contract = getMvaultContract(provider);
-    const [binary, reserve, admin] = await contract.getPoolBalances();
-    const userCount = await contract.getAllUsersCount();
+    const [binary, reserve, admin, userCount] = await Promise.all([
+      contract.binaryPool(),
+      contract.reservePool(),
+      contract.adminPool(),
+      contract.totalUsers(),
+    ]);
     return {
       binaryPool: binary as bigint,
       powerLegReserve: reserve as bigint,
@@ -652,31 +662,15 @@ export function useWeb3() {
     };
   }, []);
 
-  const distributeBinaryIncome = useCallback(async (totalUserCount: number) => {
-    const signer = await getSigner();
-    const contract = getMvaultContract(signer);
-    const BATCH = 200;
-    for (let offset = 0; offset < totalUserCount; offset += BATCH) {
-      const limit = Math.min(BATCH, totalUserCount - offset);
-      const tx = await contract.distributeBinaryIncome(offset, limit);
-      await tx.wait();
-      // Only first batch resets binaryPool; subsequent batches are no-ops on already-distributed pools
-      // but the contract's _binaryDistributed flag prevents double distribution
-      if (offset === 0) break; // contract processes all in first call if limit is large enough
-    }
-  }, [getSigner]);
+  // applyBinaryDistribution requires off-chain computation of shares.
+  // For now this is a no-op placeholder — use admin scripts for distribution.
+  const distributeBinaryIncome = useCallback(async (_totalUserCount: number) => {
+    throw new Error("Binary distribution now requires off-chain computation. Use the admin script: npx hardhat run scripts/distribute-binary.cjs");
+  }, []);
 
-  const distributePowerLeg = useCallback(async (totalUserCount: number) => {
-    const signer = await getSigner();
-    const contract = getMvaultContract(signer);
-    const BATCH = 200;
-    for (let offset = 0; offset < totalUserCount; offset += BATCH) {
-      const limit = Math.min(BATCH, totalUserCount - offset);
-      const tx = await contract.distributePowerLeg(offset, limit);
-      await tx.wait();
-      if (offset === 0) break;
-    }
-  }, [getSigner]);
+  const distributePowerLeg = useCallback(async (_totalUserCount: number) => {
+    throw new Error("Power leg distribution now requires off-chain computation. Use the admin script: npx hardhat run scripts/distribute-powerleg.cjs");
+  }, []);
 
   return {
     account, loading, initialLoaded, isRegistered, userInfo,

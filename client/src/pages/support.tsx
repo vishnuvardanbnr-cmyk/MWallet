@@ -501,14 +501,20 @@ function AdminDistribution({ getAdminPoolBalances, distributeBinaryIncome, distr
         <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400" data-testid="text-distribution-error">{error}</div>
       )}
 
+      {/* Info: server-side auto-distributor */}
+      <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300 space-y-1.5" data-testid="text-distributor-info">
+        <p className="font-semibold">Auto-distributor is active on the server</p>
+        <p className="text-blue-300/70">Distribution now uses off-chain computation (applyBinaryDistribution / applyPowerLegDistribution). The server runs this automatically every 24 hours. For manual runs use the VPS admin scripts.</p>
+      </div>
+
       {/* Step 1 */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 opacity-60">
         <div className={`flex-shrink-0 h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold ${step1Done ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400"}`}>
           {step1Done ? "✓" : "1"}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium">Distribute Binary Income</p>
-          <p className="text-[11px] text-muted-foreground">70% to matched pairs · sets Power Leg Points</p>
+          <p className="text-sm font-medium">Binary Income (Step 1)</p>
+          <p className="text-[11px] text-muted-foreground">70% to matched pairs · handled by server auto-distributor</p>
         </div>
         <button
           onClick={handleStep1}
@@ -517,18 +523,18 @@ function AdminDistribution({ getAdminPoolBalances, distributeBinaryIncome, distr
           data-testid="button-distribute-binary"
         >
           {step1Loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <TrendingUp className="h-3 w-3" />}
-          {step1Loading ? "Running…" : "Run Step 1"}
+          {step1Loading ? "Running…" : "Manual"}
         </button>
       </div>
 
       {/* Step 2 */}
-      <div className="flex items-center gap-3">
+      <div className="flex items-center gap-3 opacity-60">
         <div className={`flex-shrink-0 h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold ${step2Done ? "bg-emerald-500/20 text-emerald-400" : "bg-violet-500/20 text-violet-400"}`}>
           {step2Done ? "✓" : "2"}
         </div>
         <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium">Distribute Power Leg</p>
-          <p className="text-[11px] text-muted-foreground">30% proportional to Power Leg Points · resets cycle</p>
+          <p className="text-sm font-medium">Power Leg (Step 2)</p>
+          <p className="text-[11px] text-muted-foreground">30% proportional to Power Leg Points · handled by server auto-distributor</p>
         </div>
         <button
           onClick={handleStep2}
@@ -537,9 +543,13 @@ function AdminDistribution({ getAdminPoolBalances, distributeBinaryIncome, distr
           data-testid="button-distribute-powerleg"
         >
           {step2Loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-          {step2Loading ? "Running…" : "Run Step 2"}
+          {step2Loading ? "Running…" : "Manual"}
         </button>
       </div>
+
+      {error && (
+        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400" data-testid="text-distribution-error-2">{error}</div>
+      )}
 
       {step2Done && (
         <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 text-center" data-testid="text-cycle-complete">

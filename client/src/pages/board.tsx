@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Coins, Loader2, Lock, Unlock, ChevronRight, Users, Trophy, Zap, CheckCircle2, Grid2X2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { BOARD_PRICES_USD, getMvaultContract, formatTokenAmount } from "@/lib/contract";
+import { BOARD_PRICES_USD, getMvaultContract, BOARD_HANDLER_ABI, formatTokenAmount } from "@/lib/contract";
 
 interface BoardProps {
   btcPoolBalance: bigint;
@@ -50,15 +50,24 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
     try {
       const { ethers } = await import("ethers");
       const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const contract = getMvaultContract(provider);
+      const mvaultContract = getMvaultContract(provider);
       const userAddr = account.toLowerCase();
+
+      // Resolve the boardHandler address dynamically from MvaultContract
+      const boardHandlerAddr = await mvaultContract.boardHandler().catch(() => null);
+      const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
+      const boardContract = boardHandlerAddr && boardHandlerAddr !== ZERO_ADDR
+        ? new ethers.Contract(boardHandlerAddr, BOARD_HANDLER_ABI, provider)
+        : null;
 
       const tiers: BoardTier[] = [];
       for (let i = 1; i <= 10; i++) {
         try {
+          if (!boardContract) throw new Error("Board handler not set");
+
           const [queueLength, currentIndex] = await Promise.all([
-            contract.getBoardQueueLength(i),
-            contract.getBoardCurrentIndex(i),
+            boardContract.getBoardQueueLength(i),
+            boardContract.getBoardCurrentIndex(i),
           ]);
           const qLen = Number(queueLength);
           const cIdx = Number(currentIndex);
@@ -68,7 +77,7 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
 
           for (let j = cIdx; j < maxScan; j++) {
             try {
-              const matrixInfo = await contract.getBoardMatrixInfo(i, j);
+              const matrixInfo = await boardContract.getBoardMatrixInfo(i, j);
               if (matrixInfo[0].toLowerCase() === userAddr) {
                 entries.push({
                   poolLevel: i,

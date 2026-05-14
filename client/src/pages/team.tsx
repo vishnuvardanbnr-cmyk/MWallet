@@ -148,14 +148,14 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
     try {
       const provider = new ethers.BrowserProvider((window as any).ethereum);
       const contract = getMvaultContract(provider);
-      const info = await contract.getUserInfo(addr);
+      const info = await contract.users(addr);
       return {
         address: addr,
-        leftChild: info[6] ?? ZERO_ADDRESS,
-        rightChild: info[7] ?? ZERO_ADDRESS,
+        leftChild: info.leftChild ?? ZERO_ADDRESS,
+        rightChild: info.rightChild ?? ZERO_ADDRESS,
         displayName: info.displayName ?? "",
-        leftSubUsers: info[8] ?? 0n,
-        rightSubUsers: info[9] ?? 0n,
+        leftSubUsers: info.leftSubVolume ?? 0n,
+        rightSubUsers: info.rightSubVolume ?? 0n,
       };
     } catch { return null; }
   }, []);
@@ -225,9 +225,9 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
         const childResults = await Promise.all(
           currentDepth.map(async (addr) => {
             try {
-              const info = await contract.getUserInfo(addr);
-              const left:  string = info[6];
-              const right: string = info[7];
+              const info = await contract.users(addr);
+              const left:  string = info.leftChild;
+              const right: string = info.rightChild;
               const children: string[] = [];
               if (left  && left  !== ZERO_ADDRESS) children.push(left);
               if (right && right !== ZERO_ADDRESS) children.push(right);

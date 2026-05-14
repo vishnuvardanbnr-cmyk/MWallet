@@ -103,12 +103,11 @@ export default function PaidStakingPage({
       const [allow, bal, info] = await Promise.all([
         usdt.allowance(account, MVAULT_CONTRACT_ADDRESS),
         usdt.balanceOf(account),
-        mvault.getUserInfo(account),
+        mvault.users(account),
       ]);
       setUsdtAllowance(allow as bigint);
       setWalletUsdt(bal as bigint);
-      // getUserInfo returns usdtBalance at index 14
-      setContractUsdt(info[14] as bigint);
+      setContractUsdt(info.usdtBalance as bigint);
     } catch {}
   }, [account]);
 

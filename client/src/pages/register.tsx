@@ -87,15 +87,15 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
     setValidating(true);
     try {
       const contract = getMvaultContract(getDirectProvider());
-      const info = await contract.getUserInfo(addr);
-      const isReg = info[0];
-      const isAct = info[1];
+      const info = await contract.users(addr);
+      const isReg = info.isRegistered;
+      const isAct = info.isActive;
       const dname = info.displayName || "";
       if (!isReg) {
         setSponsorInfo(null);
       } else {
-        const leftChild  = info[6] as string;
-        const rightChild = info[7] as string;
+        const leftChild  = info.leftChild as string;
+        const rightChild = info.rightChild as string;
         const leftTaken  = !!leftChild  && leftChild  !== ZERO_ADDRESS;
         const rightTaken = !!rightChild && rightChild !== ZERO_ADDRESS;
         setSponsorInfo({ address: addr, displayName: dname, isActive: isAct, valid: true, leftTaken, rightTaken });

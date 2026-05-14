@@ -28,36 +28,44 @@ interface IMvaultBoardMatrix {
     function getBoardCurrentIndex(uint256 boardLevel) external view returns (uint256);
 }
 
+// ─────────────────────────────────────────────
+// MvaultStaking interface (called by MvaultContract delegates)
+// ─────────────────────────────────────────────
+interface IMvaultStaking {
+    function executeStake(address user, uint256 amount, bool isLocked) external;
+    function executeUnstake(address user, uint256 stakeIndex) external;
+    function executeConvertToLocked(address user, uint256 stakeIndex) external;
+    function getStakeCount(address user) external view returns (uint256);
+    function getStake(address user, uint256 index) external view returns (
+        uint256 mvtAmount, uint256 usdtInvested, uint256 stakedAt, uint256 lockedSince, bool active
+    );
+    function getActiveStakes(address user) external view returns (
+        uint256[] memory indices, uint256[] memory mvtAmounts,
+        uint256[] memory usdtInvestedArr, uint256[] memory stakedAts, uint256[] memory lockedSinces
+    );
+}
+
 contract MvaultContract is Ownable, ReentrancyGuard {
 
     // ── External contracts ────────────────────────────────────────────────────
     IERC20              public immutable usdtToken;
     IMvaultToken        public           mvaultToken;
     IMvaultBoardMatrix  public           boardHandler;
+    IMvaultStaking      public           stakingModule;
 
     // ── Package constants ──────────────────────────────────────────────────────
-    // pkg=1  STARTER : $55  → income limit $165 (3×)
-    // pkg=2  PRO     : $130 → income limit $390 (3×)
-    uint256 public constant PRICE_STARTER  = 55  * 1e18;
-    uint256 public constant INCOME_STARTER = 165 * 1e18;
-    uint256 public constant PRICE_PRO      = 130 * 1e18;
-    uint256 public constant INCOME_PRO     = 390 * 1e18;
+    uint256 internal constant PRICE_STARTER  = 55  * 1e18;
+    uint256 internal constant INCOME_STARTER = 165 * 1e18;
+    uint256 internal constant PRICE_PRO      = 130 * 1e18;
+    uint256 internal constant INCOME_PRO     = 390 * 1e18;
 
     // ── Pool allocation constants ──────────────────────────────────────────────
-    uint256 public constant LEVEL_ALLOC    = 30;          // % of gross MVT → level income (10 levels)
-    uint256 public constant BINARY_ALLOC   = 30;          // % of gross MVT → binary pool
-    uint256 public constant ADMIN_ALLOC    = 20;          // % of gross MVT → admin free pool
-    uint256 public constant RANK_ALLOC     = 10;          // % of gross MVT → rank income pool
+    uint256 internal constant LEVEL_ALLOC    = 30;
+    uint256 internal constant BINARY_ALLOC   = 30;
+    uint256 internal constant ADMIN_ALLOC    = 20;
+    uint256 internal constant RANK_ALLOC     = 10;
     // Liquidity 10% handled internally by MvaultToken (only 90% minted)
-    uint256 public constant BTC_POOL_RATE  = 10;          // % of sell USDT → user BTC pool
-
-    // ── Rank qualification constants ──────────────────────────────────────────
-    // Team sales threshold for M1 ($2000 USDT, 18 decimals)
-    uint256 public constant M1_TEAM_SALES  = 2000 * 1e18;
-    // Minimum direct sponsors for M1
-    uint256 public constant M1_MIN_DIRECTS = 5;
-    // Minimum legs (sponsor-tree branches at depth 1) that must contain sales for M1
-    uint256 public constant M1_MIN_LEGS    = 2;
+    uint256 internal constant BTC_POOL_RATE  = 10;
 
     // ── User record ───────────────────────────────────────────────────────────
     struct User {
@@ -95,12 +103,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         address mainAccount;      // if sub-account → points to main; else address(0)
         uint256 rebirthCount;
         // Rank
-        uint8   rank;             // 0=none, 1=M1, 2=M2, 3=M3, 4=M4, 5=M5
+        uint8   rank;             // reserved for rank system (not yet auto-computed)
         uint256 teamSalesUsdt;    // cumulative USDT activated in sponsor-tree downline
-        uint256 m1Count;          // M1+ users anywhere in sponsor-tree downline
-        uint256 m2Count;          // M2+ users anywhere in sponsor-tree downline
-        uint256 m3Count;          // M3+ users anywhere in sponsor-tree downline
-        uint256 m4Count;          // M4+ users anywhere in sponsor-tree downline
         // Meta
         uint256 joinedAt;
         // Profile
@@ -128,21 +132,6 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // ── Board Matrix tracking ──────────────────────────────────────────────────
     mapping(address => uint256) public boardEntryCount;
     mapping(address => uint256) public totalBoardRewardsEarned;
-
-    // ── Staking ───────────────────────────────────────────────────────────────
-    uint256 public constant MIN_STAKE_USDT  = 50  * 1e18; // $50 minimum
-    uint256 public constant LOCK_DURATION   = 300 days;   // 10-month lock
-    uint256 public constant FLEX_CAP_MULT   = 2;          // flexible sell cap = 2× invested
-
-    struct StakePosition {
-        uint256 mvtAmount;    // MVT tokens currently staked (held by this contract)
-        uint256 usdtInvested; // original USDT deposited (used for 2x cap on flexible)
-        uint256 stakedAt;     // when position was created
-        uint256 lockedSince;  // >0 = locked, value = timestamp when lock started; 0 = flexible
-        bool    active;       // false once unstaked
-    }
-
-    mapping(address => StakePosition[]) private _stakes;
 
     // ── Transaction History (on-chain) ────────────────────────────────────────
     // txType constants
@@ -200,7 +189,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     event Reborn(address indexed mainAccount, address indexed subAccount, uint256 rebirthIndex);
     event Reactivated(address indexed user, uint256 pkgPrice, uint256 grossMvt, bool upgraded);
     event RankIncomePaid(address indexed to, address indexed from, uint8 rank, uint256 amount);
-    event RankIncomeSkipped(address indexed upline, uint8 rank, uint256 amount);
+    event RankIncomeDistributed(uint256 totalPool, uint256 recipientCount);
     event RankUpdated(address indexed user, uint8 oldRank, uint8 newRank);
     event ProfileUpdated(address indexed user);
     event MvaultTokenUpdated(address newToken);
@@ -239,16 +228,15 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     error BoardHandlerNotSet();
     error InsufficientBtcPoolForBoard();
     error NotBoardHandler();
-    error InvalidIndex();
-    error AlreadyUnstaked();
-    error AlreadyLocked();
-    error StillLocked();
-    error BelowMinStake();
     error EmptyPool();
     error ExceedsPool();
     error SubAccountAlreadyRegistered();
-    error AlreadyConverted();
-    error NoMvtMinted();
+    error NotStakingModule();
+    error InvalidAddress();
+    error CannotSelfRegister();
+    error CallerNotActive();
+    error NoRebirthBalance();
+    error UseRebirthInstead();
 
     // ─────────────────────────────────────────────────────────────────────────
     constructor(address _usdt, address _mvaultToken) Ownable(msg.sender) {
@@ -271,6 +259,16 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (_boardHandler == address(0)) revert ZeroAddress();
         boardHandler = IMvaultBoardMatrix(_boardHandler);
         emit BoardHandlerUpdated(_boardHandler);
+    }
+
+    function setStakingModule(address _staking) external onlyOwner {
+        if (_staking == address(0)) revert ZeroAddress();
+        stakingModule = IMvaultStaking(_staking);
+    }
+
+    modifier onlyStakingModule() {
+        if (msg.sender != address(stakingModule)) revert NotStakingModule();
+        _;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -326,6 +324,59 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
         emit BoardRewardCredited(_user, _usdtAmount, _boardLevel);
         _recordTx(_user, TX_BOARD_REWARD, _usdtAmount, uint8(_boardLevel), address(0));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // STAKING MODULE — CALLBACKS (called by MvaultStaking)
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Batch-credit virtual MVT income to a list of uplines.
+     *         Called by MvaultStaking after computing the distribution off-chain.
+     */
+    function staking_batchCreditMvtIncome(
+        address   staker,
+        address[] calldata tos,
+        uint8[]   calldata levels,
+        uint256[] calldata amounts
+    ) external onlyStakingModule {
+        for (uint256 i = 0; i < tos.length; i++) {
+            users[tos[i]].mvtBalance    += amounts[i];
+            users[tos[i]].totalReceived += amounts[i];
+            _recordTx(tos[i], TX_LEVEL_INCOME, amounts[i], levels[i], staker);
+        }
+    }
+
+    /// @notice Called by MvaultStaking after executeStake completes.
+    function staking_postStake(address user, uint256 usdtAmount, uint256 adminAmt)
+        external onlyStakingModule
+    {
+        adminPool += adminAmt;
+        _recordTx(user, TX_STAKE, usdtAmount, 0, address(0));
+    }
+
+    /// @notice Called by MvaultStaking after executeUnstake completes.
+    function staking_postUnstake(address user, uint256 usdtToUser, uint256 adminCapCut)
+        external onlyStakingModule
+    {
+        users[user].usdtBalance += usdtToUser;
+        adminPool               += adminCapCut;
+        _recordTx(user, TX_UNSTAKE, usdtToUser, 0, address(0));
+    }
+
+    function staking_getSponsorChain(address staker, uint8 depth)
+        external view
+        returns (address[] memory sponsors, bool[] memory actives)
+    {
+        sponsors = new address[](depth);
+        actives  = new bool[](depth);
+        address cur = users[staker].sponsor;
+        for (uint8 i = 0; i < depth; i++) {
+            if (cur == address(0)) break;
+            sponsors[i] = cur;
+            actives[i]  = users[cur].isActive;
+            cur = users[cur].sponsor;
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -470,10 +521,10 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         bool    placeLeft,
         uint8   pkg
     ) external nonReentrant {
-        if (newUser == address(0))           revert("Invalid address");
-        if (newUser == msg.sender)           revert("Cannot register yourself");
+        if (newUser == address(0))           revert InvalidAddress();
+        if (newUser == msg.sender)           revert CannotSelfRegister();
         if (!users[msg.sender].isRegistered) revert NotRegistered();
-        if (!users[msg.sender].isActive)     revert("Caller not active");
+        if (!users[msg.sender].isActive)     revert CallerNotActive();
         if (users[newUser].isRegistered)     revert AlreadyRegistered();
 
         (uint256 price, uint256 incomeCap) = _pkgParams(pkg);
@@ -542,7 +593,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         _updateAncestorVolumes(user, pkgPrice);
         _updateTeamStats(user, pkgPrice);
         _distributeLevelIncome(user, grossMvt, levelAmt);
-        _distributeRankIncome(user, rankAmt);
+        rankPool += rankAmt;
 
         emit Activated(user, minted, grossMvt, levelAmt, binaryAmt, adminAmt);
         _recordTx(user, TX_ACTIVATION, pkgPrice, 0, address(0));
@@ -621,147 +672,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         address cur = users[from].sponsor;
         while (cur != address(0)) {
             users[cur].teamSalesUsdt += pkgPrice;
-            _refreshRank(cur);
             cur = users[cur].sponsor;
-        }
-    }
-
-    /**
-     * @dev Recompute rank for `u` based on current struct counters and emit RankUpdated if changed.
-     *      Rank rules:
-     *        M1: directCount >= 5 AND teamSalesUsdt >= $2000 AND >=2 different direct-leg subtrees have sales
-     *        M2: m1Count >= 2
-     *        M3: m2Count >= 4
-     *        M4: m3Count >= 4
-     *        M5: m4Count >= 4
-     *      When a user advances from rank N-1 to rank N their count is incremented on their sponsor.
-     */
-    function _refreshRank(address u) internal {
-        uint8 old = users[u].rank;
-        uint8 newRank = _computeRank(u);
-        if (newRank == old) return;
-
-        users[u].rank = newRank;
-        emit RankUpdated(u, old, newRank);
-
-        // Update ancestor count fields for the newly achieved rank(s).
-        // We walk from old+1 up to newRank to credit each newly earned rank step.
-        address sp = users[u].sponsor;
-        while (sp != address(0)) {
-            bool changed = false;
-            if (newRank >= 1 && old < 1) { users[sp].m1Count++; changed = true; }
-            if (newRank >= 2 && old < 2) { users[sp].m2Count++; changed = true; }
-            if (newRank >= 3 && old < 3) { users[sp].m3Count++; changed = true; }
-            if (newRank >= 4 && old < 4) { users[sp].m4Count++; changed = true; }
-            if (!changed) break;
-            // Ancestor's rank may now change too
-            _refreshRankNoPropagate(sp);
-            sp = users[sp].sponsor;
-        }
-    }
-
-    /**
-     * @dev Refresh rank of a single node without recursively propagating count changes upward.
-     *      Used inside the ancestor walk in _refreshRank to avoid double-propagation.
-     */
-    function _refreshRankNoPropagate(address u) internal {
-        uint8 old = users[u].rank;
-        uint8 newRank = _computeRank(u);
-        if (newRank == old) return;
-        users[u].rank = newRank;
-        emit RankUpdated(u, old, newRank);
-    }
-
-    /**
-     * @dev Pure rank computation from current User fields.
-     *      Checks ranks from highest to lowest and returns the best achieved.
-     */
-    function _computeRank(address u) internal view returns (uint8) {
-        User storage d = users[u];
-        if (!d.isActive) return 0;
-
-        // M5: 4x M4 in downline
-        if (d.m4Count >= 4) return 5;
-        // M4: 4x M3
-        if (d.m3Count >= 4) return 4;
-        // M3: 4x M2
-        if (d.m2Count >= 4) return 3;
-        // M2: 2x M1
-        if (d.m1Count >= 2) return 2;
-        // M1: 5 directs + $2000 team sales + 2 active legs
-        if (d.directCount >= M1_MIN_DIRECTS
-            && d.teamSalesUsdt >= M1_TEAM_SALES
-            && _activeLegCount(u) >= M1_MIN_LEGS) return 1;
-
-        return 0;
-    }
-
-    /**
-     * @dev Count how many of u's direct sponsor-children (u's direct referrals)
-     *      have at least one active user in their own subtree (or are themselves active).
-     *      A "leg" here is one direct referral of u.
-     */
-    function _activeLegCount(address u) internal view returns (uint256 count) {
-        // We iterate allUsers once and check sponsor == u; then check if that child
-        // or any of their downline is active. To keep gas reasonable we use the
-        // directCount already tracked — any direct of u who is active counts as a leg.
-        // We need at least M1_MIN_LEGS such directs.
-        for (uint256 i = 0; i < allUsers.length && count < M1_MIN_LEGS + 1; i++) {
-            address a = allUsers[i];
-            if (users[a].sponsor == u && users[a].isActive) {
-                count++;
-            }
-        }
-    }
-
-    /**
-     * @dev Walk up the sponsor tree from `from` and distribute rankAmt proportionally.
-     *      Each rank slot (M1=10%, M2=20%, M3=20%, M4=20%, M5=30%) is paid to the
-     *      NEAREST ancestor holding exactly that rank.  If no qualifier is found the
-     *      share goes to adminPool.
-     *
-     *      Because a higher-rank user also holds lower rank they would absorb all lower
-     *      slots below them — which is NOT the design.  Instead each slot goes to the
-     *      first ancestor whose rank == that target rank exactly (or the first to have
-     *      qualified for it — since ranks are strictly ascending we look for rank >= target
-     *      but stop at the first hit, meaning a M3 only absorbs the M3 slot, not M1/M2).
-     *
-     *      Implementation: walk sponsor tree once, tracking which rank slots are still
-     *      unclaimed.  When we meet a user whose rank == requiredRank, pay that slot.
-     *      A higher-rank user does NOT satisfy a lower-rank slot.
-     */
-    function _distributeRankIncome(address from, uint256 rankAmt) internal {
-        // Slot amounts: index 1=M1, 2=M2, 3=M3, 4=M4, 5=M5
-        uint256[6] memory slotPct = [uint256(0), 10, 20, 20, 20, 30];
-        bool[6] memory paid;      // tracks which slots have been filled
-        uint256 unpaid = 5;       // all 5 slots start unpaid
-
-        address cur = users[from].sponsor;
-        while (cur != address(0) && unpaid > 0) {
-            uint8 r = users[cur].rank;
-            if (r >= 1 && r <= 5 && !paid[r]) {
-                uint256 share = (rankAmt * slotPct[r]) / 100;
-                paid[r] = true;
-                unpaid--;
-                users[cur].mvtBalance    += share;
-                users[cur].totalReceived += share;
-                emit RankIncomePaid(cur, from, r, share);
-                _recordTx(cur, TX_RANK_INCOME, share, r, from);
-            }
-            cur = users[cur].sponsor;
-        }
-
-        // Any unpaid slots → adminPool
-        if (unpaid > 0) {
-            uint256 leftover = 0;
-            for (uint8 r = 1; r <= 5; r++) {
-                if (!paid[r]) {
-                    uint256 share = (rankAmt * slotPct[r]) / 100;
-                    leftover += share;
-                    emit RankIncomeSkipped(address(0), r, share);
-                }
-            }
-            adminPool += leftover;
         }
     }
 
@@ -936,8 +847,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     function claimRebirthBalance() external nonReentrant {
         User storage u = users[msg.sender];
         if (!u.isActive)               revert NotActive();
-        if (u.rebirthPool == 0)        revert("No rebirth balance to claim");
-        if (u.rebirthPool >= u.packagePrice) revert("Use rebirth() - pool is >= package price");
+        if (u.rebirthPool == 0)              revert NoRebirthBalance();
+        if (u.rebirthPool >= u.packagePrice) revert UseRebirthInstead();
 
         uint256 claim    = u.rebirthPool;
         u.rebirthPool    = 0;
@@ -1028,7 +939,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         _updateAncestorVolumes(user, pkgPrice);
         _updateTeamStats(user, pkgPrice);
         _distributeLevelIncome(user, grossMvt, levelAmt);
-        _distributeRankIncome(user, rankAmt);
+        rankPool += rankAmt;
 
         emit Reactivated(user, pkgPrice, grossMvt, upgraded);
         _recordTx(user, TX_REACTIVATION, pkgPrice, 0, address(0));
@@ -1080,70 +991,37 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * @notice STEP 1: Distribute 70% of binaryPool to users with new pair matches.
-     *         Sets powerLegPoints = newPairs × 3 (STARTER $55) or newPairs × 5 (PRO $130) for matching users.
-     *         Call distributePowerLeg() after processing all batches to close the cycle.
-     *
-     * @param offset  Start index in allUsers array.
-     * @param limit   How many users to process in this call.
+     * @notice STEP 1: Apply pre-computed binary distributions.
+     *         The admin script reads user volumes via RPC, computes shares off-chain,
+     *         then calls this with the results. Each entry's powerLegPts is the
+     *         cumulative power-leg points for that user (newVolume / 1e18).
      */
-    function distributeBinaryIncome(
-        uint256 offset,
-        uint256 limit
-    ) external onlyOwner nonReentrant {
+    function applyBinaryDistribution(
+        address[] calldata users_arr,
+        uint256[] calldata shares,
+        uint256[] calldata powerLegPts,
+        uint256[] calldata newMatchedVols
+    ) external onlyOwner {
         if (_binaryDistributed) revert BinaryAlreadyDistributed();
         if (binaryPool == 0) revert EmptyPool();
 
-        uint256 pool = binaryPool;
-        binaryPool   = 0;
-
+        uint256 pool   = binaryPool;
+        binaryPool     = 0;
         uint256 binary70   = (pool * 70) / 100;
-        uint256 powerLeg30 = pool - binary70;
-        _powerLeg30Reserve = powerLeg30;
+        _powerLeg30Reserve = pool - binary70;
 
-        uint256 end = offset + limit;
-        if (end > allUsers.length) end = allUsers.length;
-
-        // First pass — count total new matched volume in this batch
-        uint256 totalNewVolume = 0;
-        for (uint256 i = offset; i < end; i++) {
-            address u = allUsers[i];
-            if (!users[u].isActive) continue;
-            uint256 matched = _minOf(users[u].leftSubVolume, users[u].rightSubVolume);
-            if (matched > users[u].matchedVolume) {
-                totalNewVolume += matched - users[u].matchedVolume;
-            }
-        }
-
-        if (totalNewVolume == 0) {
-            adminPool += binary70 + powerLeg30;
-            _powerLeg30Reserve = 0;
-            emit BinaryIncomeDistributed(pool, 0, 0, 0);
-            return;
-        }
-
-        // Second pass — distribute 70% and assign power leg points proportional to volume
-        for (uint256 i = offset; i < end; i++) {
-            address u = allUsers[i];
-            if (!users[u].isActive) continue;
-
-            uint256 matched    = _minOf(users[u].leftSubVolume, users[u].rightSubVolume);
-            uint256 newVolume  = matched > users[u].matchedVolume
-                ? matched - users[u].matchedVolume : 0;
-            if (newVolume == 0) continue;
-
-            uint256 share = (binary70 * newVolume) / totalNewVolume;
-            users[u].mvtBalance      += share;
-            users[u].totalReceived   += share;
-            // Power leg points: 1 point per $1 of matched volume (volume in wei → divide by 1e18)
-            users[u].powerLegPoints  += newVolume / 1e18;
-            users[u].matchedVolume    = matched;
-            emit BinaryIncomePaid(u, newVolume, share);
-            _recordTx(u, TX_BINARY_INCOME, share, 0, address(0));
+        for (uint256 i = 0; i < users_arr.length; i++) {
+            address u = users_arr[i];
+            users[u].mvtBalance    += shares[i];
+            users[u].totalReceived += shares[i];
+            users[u].powerLegPoints = powerLegPts[i];
+            users[u].matchedVolume  = newMatchedVols[i];
+            emit BinaryIncomePaid(u, powerLegPts[i], shares[i]);
+            _recordTx(u, TX_BINARY_INCOME, shares[i], 0, address(0));
         }
 
         _binaryDistributed = true;
-        emit BinaryIncomeDistributed(pool, binary70, powerLeg30, totalNewVolume);
+        emit BinaryIncomeDistributed(pool, binary70, pool - binary70, users_arr.length);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1151,52 +1029,31 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * @notice STEP 2: Distribute the 30% power-leg reserve proportionally to
-     *         powerLegPoints, then reset all power leg points to 0.
-     *
-     * @param offset  Start index in allUsers array.
-     * @param limit   Max users to process in this call.
+     * @notice STEP 2: Apply pre-computed power-leg distributions.
+     *         adminLeftover = any reserve not distributed (goes to adminPool).
      */
-    function distributePowerLeg(
-        uint256 offset,
-        uint256 limit
-    ) external onlyOwner nonReentrant {
+    function applyPowerLegDistribution(
+        address[] calldata users_arr,
+        uint256[] calldata shares,
+        uint256   adminLeftover
+    ) external onlyOwner {
         if (!_binaryDistributed) revert BinaryNotDistributed();
 
-        uint256 end = offset + limit;
-        if (end > allUsers.length) end = allUsers.length;
-
-        // Count total power legs in this batch
-        uint256 totalPowerLegs = 0;
-        for (uint256 i = offset; i < end; i++) {
-            totalPowerLegs += users[allUsers[i]].powerLegPoints;
-        }
-
         uint256 reserve = _powerLeg30Reserve;
-        if (totalPowerLegs > 0 && reserve > 0) {
-            for (uint256 i = offset; i < end; i++) {
-                address u = allUsers[i];
-                if (users[u].powerLegPoints == 0) continue;
-                uint256 pts   = users[u].powerLegPoints;
-                uint256 share = (reserve * pts) / totalPowerLegs;
-                users[u].mvtBalance    += share;
-                users[u].totalReceived += share;
-                emit PowerLegIncomePaid(u, pts, share);
-                _recordTx(u, TX_POWERLEG, share, 0, address(0));
-            }
-        } else {
-            adminPool += reserve;
+        for (uint256 i = 0; i < users_arr.length; i++) {
+            address u = users_arr[i];
+            uint256 pts = users[u].powerLegPoints;
+            users[u].mvtBalance    += shares[i];
+            users[u].totalReceived += shares[i];
+            users[u].powerLegPoints = 0;
+            emit PowerLegIncomePaid(u, pts, shares[i]);
+            _recordTx(u, TX_POWERLEG, shares[i], 0, address(0));
         }
 
-        // Reset power legs
-        for (uint256 i = offset; i < end; i++) {
-            users[allUsers[i]].powerLegPoints = 0;
-        }
-
-        _powerLeg30Reserve = 0;
-        _binaryDistributed = false;
-
-        emit PowerLegDistributed(reserve, totalPowerLegs);
+        adminPool          += adminLeftover;
+        _powerLeg30Reserve  = 0;
+        _binaryDistributed  = false;
+        emit PowerLegDistributed(reserve, users_arr.length);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1228,274 +1085,53 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // STAKING
+    // STAKING — thin delegates to MvaultStaking module
     // ─────────────────────────────────────────────────────────────────────────
-
-    /**
-     * @notice Stake using USDT held in this contract (from income, unstaking, or deposits).
-     *         No external wallet approval needed — USDT is already in this contract.
-     *         100% USDT → real MVT minted on-chain via bonding curve (token mints 90% = grossMvt).
-     *         From grossMvt:
-     *           60% → staked for the user (real on-chain MVT)
-     *           20% → level income in MVT to 10 uplines
-     *                 (rates: 10%,5%,2%,1%,0.5%,0.5%,0.3%,0.3%,0.2%,0.2% of grossMvt)
-     *            5% → admin pool in MVT
-     *           15% → liquidity backing (stays in contract, price floor support)
-     * @param usdtAmount  Must be >= MIN_STAKE_USDT ($50).
-     * @param isLocked    false = flexible (2× cap on USDT return, instant unstake)
-     *                    true  = locked  (no cap, 10-month lock)
-     */
-    function stakeFromBalance(uint256 usdtAmount, bool isLocked) external nonReentrant {
-        if (usdtAmount < MIN_STAKE_USDT) revert BelowMinStake();
-        if (!users[msg.sender].isRegistered) revert NotRegistered();
-        if (!users[msg.sender].isActive) revert NotActive();
-        if (users[msg.sender].usdtBalance < usdtAmount) revert InsufficientUsdtBalance();
-
-        // Deduct from user's in-contract USDT balance (USDT already held by this contract)
-        users[msg.sender].usdtBalance -= usdtAmount;
-
-        // Mint real MVT: 100% USDT → bonding curve mints 90% of theoretical = grossMvt
-        usdtToken.approve(address(mvaultToken), usdtAmount);
-        uint256 balBefore = mvaultToken.balanceOf(address(this));
-        mvaultToken.addLiquidityAndMint(address(this), usdtAmount);
-        uint256 grossMvt = mvaultToken.balanceOf(address(this)) - balBefore;
-        if (grossMvt == 0) revert NoMvtMinted();
-
-        _doStakeDistribution(msg.sender, usdtAmount, grossMvt, isLocked);
-    }
 
     /**
      * @notice Stake USDT from the user's external wallet.
      *         Requires prior USDT approval for this contract.
-     *         Same distribution as stakeFromBalance.
-     * @param usdtAmount  Must be >= MIN_STAKE_USDT ($50).
-     * @param isLocked    false = flexible (2× cap on USDT return, instant unstake)
-     *                    true  = locked  (no cap, 10-month lock)
      */
     function stake(uint256 usdtAmount, bool isLocked) external nonReentrant {
-        if (usdtAmount < MIN_STAKE_USDT) revert BelowMinStake();
         if (!users[msg.sender].isRegistered) revert NotRegistered();
         if (!users[msg.sender].isActive) revert NotActive();
-
         bool ok = usdtToken.transferFrom(msg.sender, address(this), usdtAmount);
         if (!ok) revert TransferFailed();
-
-        // Mint real MVT: 100% USDT → bonding curve mints 90% of theoretical = grossMvt
-        usdtToken.approve(address(mvaultToken), usdtAmount);
-        uint256 balBefore = mvaultToken.balanceOf(address(this));
-        mvaultToken.addLiquidityAndMint(address(this), usdtAmount);
-        uint256 grossMvt = mvaultToken.balanceOf(address(this)) - balBefore;
-        if (grossMvt == 0) revert NoMvtMinted();
-
-        _doStakeDistribution(msg.sender, usdtAmount, grossMvt, isLocked);
+        usdtToken.approve(address(stakingModule), usdtAmount);
+        stakingModule.executeStake(msg.sender, usdtAmount, isLocked);
     }
 
     /**
-     * @dev Core staking distribution logic shared by stake() and stakeFromBalance().
-     *      From grossMvt (90% of theoretical):
-     *        60% → staked MVT for user
-     *        20% → level income across 10 uplines (unqualified → adminPool)
-     *         5% → adminPool
-     *        15% → liquidity backing (stays in contract)
+     * @notice Stake using USDT held in this contract (from income, unstaking, or deposits).
+     *         No external wallet approval needed — USDT is already in this contract.
      */
-    function _doStakeDistribution(
-        address staker,
-        uint256 usdtAmount,
-        uint256 grossMvt,
-        bool isLocked
-    ) internal {
-        // 20% of grossMvt → 10 upline levels
-        // Rates (in units of 1000 = 100%): 100,50,20,10,5,5,3,3,2,2  → sum=200 = 20%
-        uint256[10] memory levelRates = [uint256(100), 50, 20, 10, 5, 5, 3, 3, 2, 2];
-        address cur = users[staker].sponsor;
-        uint256 levelDistributed = 0;
-        uint256 levelToAdmin     = 0;
-        for (uint8 i = 0; i < 10; i++) {
-            uint256 share = grossMvt * levelRates[i] / 1000;
-            if (share == 0) {
-                if (cur != address(0)) cur = users[cur].sponsor;
-                continue;
-            }
-            if (cur == address(0) || !users[cur].isActive) {
-                levelToAdmin += share;
-            } else {
-                users[cur].mvtBalance    += share;
-                users[cur].totalReceived += share;
-                levelDistributed         += share;
-                emit StakeLevelIncomePaid(cur, staker, i + 1, share);
-                _recordTx(cur, TX_LEVEL_INCOME, share, i + 1, staker);
-            }
-            if (cur != address(0)) cur = users[cur].sponsor;
-        }
-
-        // 5% → adminPool + any unqualified level shares
-        uint256 adminAmt = grossMvt * 5 / 100;
-        adminPool += adminAmt + levelToAdmin;
-
-        // 15% → liquidity backing (stays in contract as price floor, not distributed)
-        uint256 liquidityAmt = grossMvt * 15 / 100;
-
-        // 60% → staked for user (grossMvt - 20% levels - 5% admin - 15% liquidity)
-        uint256 levelTotal = levelDistributed + levelToAdmin;
-        uint256 stakedMvt  = grossMvt - levelTotal - adminAmt - liquidityAmt;
-        if (stakedMvt == 0) revert NoMvtMinted();
-
-        uint256 stakeIndex = _stakes[staker].length;
-        _stakes[staker].push(StakePosition({
-            mvtAmount:    stakedMvt,
-            usdtInvested: usdtAmount,
-            stakedAt:     block.timestamp,
-            lockedSince:  isLocked ? block.timestamp : 0,
-            active:       true
-        }));
-
-        emit Staked(staker, stakeIndex, usdtAmount, stakedMvt, isLocked);
-        _recordTx(staker, TX_STAKE, usdtAmount, 0, address(0));
+    function stakeFromBalance(uint256 usdtAmount, bool isLocked) external nonReentrant {
+        if (!users[msg.sender].isRegistered) revert NotRegistered();
+        if (!users[msg.sender].isActive) revert NotActive();
+        if (users[msg.sender].usdtBalance < usdtAmount) revert InsufficientUsdtBalance();
+        users[msg.sender].usdtBalance -= usdtAmount;
+        usdtToken.approve(address(stakingModule), usdtAmount);
+        stakingModule.executeStake(msg.sender, usdtAmount, isLocked);
     }
 
     /**
-     * @notice Unstake a position.
-     *
-     *  Flexible (lockedSince == 0):
-     *   • 5% tokens → direct sponsor
-     *   • 95% tokens sold; USDT capped at 2× usdtInvested → user
-     *   • Excess USDT (above cap) → adminPool
-     *   • Instant — no time lock
-     *
-     *  Locked (lockedSince > 0):
-     *   • Requires 10-month lock elapsed
-     *   • 5%/2%/1%/1%/1% tokens → 5 uplines
-     *   • 90% tokens sold → full USDT → user (no cap)
-     *
-     *  NO BTC pool deduction in either case.
+     * @notice Unstake a position (flexible or locked).
      */
     function unstake(uint256 stakeIndex) external nonReentrant {
-        if (stakeIndex >= _stakes[msg.sender].length) revert InvalidIndex();
-        StakePosition storage pos = _stakes[msg.sender][stakeIndex];
-        if (!pos.active) revert AlreadyUnstaked();
-
-        bool isLocked = pos.lockedSince > 0;
-        if (isLocked) {
-            if (block.timestamp < pos.lockedSince + LOCK_DURATION) revert StillLocked();
-        }
-
-        pos.active = false;
-        uint256 totalMvt = pos.mvtAmount;
-        uint256 usdtCap  = pos.usdtInvested * FLEX_CAP_MULT; // only used for flexible
-        uint256 toSell   = totalMvt;
-
-        if (!isLocked) {
-            // ── Flexible: 5% virtual MVT to direct sponsor (subject to income limit on sell) ─
-            uint256 sponsorShare = (totalMvt * 5) / 100;
-            address sponsor = users[msg.sender].sponsor;
-            if (sponsor != address(0) && users[sponsor].isActive && sponsorShare > 0) {
-                users[sponsor].mvtBalance    += sponsorShare;
-                users[sponsor].totalReceived += sponsorShare;
-                toSell -= sponsorShare;
-                emit StakeLevelIncomePaid(sponsor, msg.sender, 1, sponsorShare);
-                _recordTx(sponsor, TX_LEVEL_INCOME, sponsorShare, 1, msg.sender);
-            }
-        } else {
-            // ── Locked: 5%+2%+1%+1%+1% virtual MVT to 5 uplines (subject to income limit on sell) ─
-            uint8[5] memory rates = [5, 2, 1, 1, 1];
-            address cur = users[msg.sender].sponsor;
-            for (uint8 i = 0; i < 5; i++) {
-                if (cur == address(0)) break;
-                uint256 share = (totalMvt * rates[i]) / 100;
-                if (share > 0 && users[cur].isActive) {
-                    users[cur].mvtBalance    += share;
-                    users[cur].totalReceived += share;
-                    toSell -= share;
-                    emit StakeLevelIncomePaid(cur, msg.sender, i + 1, share);
-                    _recordTx(cur, TX_LEVEL_INCOME, share, i + 1, msg.sender);
-                }
-                cur = users[cur].sponsor;
-            }
-        }
-
-        // Sell remaining tokens — USDT lands in this contract
-        uint256 usdtBefore = usdtToken.balanceOf(address(this));
-        mvaultToken.sell(toSell);
-        uint256 usdtGross = usdtToken.balanceOf(address(this)) - usdtBefore;
-
-        uint256 usdtToUser  = usdtGross;
-        uint256 adminCapCut = 0;
-
-        if (!isLocked && usdtGross > usdtCap) {
-            // Flexible 2× cap: excess goes to adminPool
-            adminCapCut = usdtGross - usdtCap;
-            usdtToUser  = usdtCap;
-            adminPool  += adminCapCut;
-        }
-
-        // Credit USDT to user's in-contract balance (not direct wallet transfer)
-        if (usdtToUser > 0) {
-            users[msg.sender].usdtBalance += usdtToUser;
-        }
-
-        emit Unstaked(msg.sender, stakeIndex, totalMvt, usdtToUser, adminCapCut);
-        _recordTx(msg.sender, TX_UNSTAKE, usdtToUser, 0, address(0));
+        stakingModule.executeUnstake(msg.sender, stakeIndex);
     }
 
     /**
-     * @notice Convert a flexible position to locked.
-     *         Starts the 10-month lock from now.
-     *         The 2× cap no longer applies once converted.
+     * @notice Convert a flexible stake position to locked (starts 10-month lock).
      */
     function convertToLocked(uint256 stakeIndex) external {
-        if (stakeIndex >= _stakes[msg.sender].length) revert InvalidIndex();
-        StakePosition storage pos = _stakes[msg.sender][stakeIndex];
-        if (!pos.active) revert AlreadyUnstaked();
-        if (pos.lockedSince != 0) revert AlreadyLocked();
-
-        pos.lockedSince = block.timestamp;
-        emit ConvertedToLocked(msg.sender, stakeIndex, block.timestamp);
+        stakingModule.executeConvertToLocked(msg.sender, stakeIndex);
     }
 
     // ─────────────────────────────────────────────────────────────────────────
     // VIEW FUNCTIONS
     // ─────────────────────────────────────────────────────────────────────────
 
-    function getUserInfo(address u) external view returns (
-        bool    isRegistered,
-        bool    isActive,
-        address sponsor,
-        uint256 directCount,
-        address binaryParent,
-        bool    placedLeft,
-        address leftChild,
-        address rightChild,
-        uint256 leftSubVolume,
-        uint256 rightSubVolume,
-        uint256 mvtBalance,
-        uint256 totalReceived,
-        uint256 totalSold,
-        uint256 incomeLimit,
-        uint256 usdtBalance,
-        uint256 rebirthPool,
-        uint256 btcPoolBalance,
-        uint256 powerLegPoints,
-        uint256 matchedVolume,
-        address mainAccount,
-        uint256 rebirthCount,
-        uint256 joinedAt
-    ) {
-        User storage d = users[u];
-        return (
-            d.isRegistered, d.isActive, d.sponsor, d.directCount,
-            d.binaryParent, d.placedLeft, d.leftChild, d.rightChild,
-            d.leftSubVolume, d.rightSubVolume,
-            d.mvtBalance, d.totalReceived, d.totalSold,
-            d.incomeLimit, d.usdtBalance, d.rebirthPool,
-            d.btcPoolBalance,
-            d.powerLegPoints, d.matchedVolume,
-            d.mainAccount, d.rebirthCount, d.joinedAt
-        );
-    }
-
-    /**
-     * @notice Returns BTC pool details for a user.
-     */
     function getBtcPoolInfo(address u) external view returns (
         uint256 btcPoolBalance,
         uint256 totalBtcEarned
@@ -1529,29 +1165,6 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         sellPrice = mvaultToken.getSellPrice();
     }
 
-    function getAllUsersCount() external view returns (uint256) { return allUsers.length; }
-
-    function getBoardPrice(uint256 _level) external view returns (uint256) {
-        if (address(boardHandler) == address(0)) return 0;
-        return boardHandler.getBoardPrice(_level);
-    }
-
-    function getBoardQueueLength(uint256 _level) external view returns (uint256) {
-        if (address(boardHandler) == address(0)) return 0;
-        return boardHandler.getBoardQueueLength(_level);
-    }
-
-    function getBoardMatrixInfo(uint256 _level, uint256 _index) external view returns (
-        address owner, uint256 filledCount, bool completed
-    ) {
-        return boardHandler.getBoardMatrixInfo(_level, _index);
-    }
-
-    function getBoardCurrentIndex(uint256 _level) external view returns (uint256) {
-        if (address(boardHandler) == address(0)) return 0;
-        return boardHandler.getBoardCurrentIndex(_level);
-    }
-
     function getUserBoardStats(address _user) external view returns (
         uint256 entries,
         uint256 totalRewards
@@ -1564,18 +1177,6 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         btcBalance = users[_user].btcPoolBalance;
         boardPrice = boardHandler.getBoardPrice(1);
         eligible   = users[_user].isActive && btcBalance >= boardPrice;
-    }
-
-    function getPoolBalances() external view returns (
-        uint256 binary,
-        uint256 reserve,
-        uint256 admin
-    ) {
-        return (binaryPool, reservePool, adminPool);
-    }
-
-    function getMvtContractBalance() external view returns (uint256) {
-        return mvaultToken.balanceOf(address(this));
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1641,70 +1242,80 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // STAKING VIEW FUNCTIONS
+    // STAKING VIEW DELEGATES
     // ─────────────────────────────────────────────────────────────────────────
 
-    /**
-     * @notice Returns the number of stake positions for a user.
-     */
     function getStakeCount(address user) external view returns (uint256) {
-        return _stakes[user].length;
+        return stakingModule.getStakeCount(user);
     }
 
-    /**
-     * @notice Returns details of a specific stake position.
-     */
     function getStake(address user, uint256 index) external view returns (
-        uint256 mvtAmount,
-        uint256 usdtInvested,
-        uint256 stakedAt,
-        uint256 lockedSince,
-        bool    active
+        uint256 mvtAmount, uint256 usdtInvested, uint256 stakedAt, uint256 lockedSince, bool active
     ) {
-        require(index < _stakes[user].length, "Invalid index");
-        StakePosition storage p = _stakes[user][index];
-        return (p.mvtAmount, p.usdtInvested, p.stakedAt, p.lockedSince, p.active);
+        return stakingModule.getStake(user, index);
     }
 
-    /**
-     * @notice Returns all active stake positions for a user.
-     */
     function getActiveStakes(address user) external view returns (
-        uint256[] memory indices,
-        uint256[] memory mvtAmounts,
-        uint256[] memory usdtInvestedArr,
-        uint256[] memory stakedAts,
-        uint256[] memory lockedSinces
+        uint256[] memory indices, uint256[] memory mvtAmounts,
+        uint256[] memory usdtInvestedArr, uint256[] memory stakedAts, uint256[] memory lockedSinces
     ) {
-        uint256 total = _stakes[user].length;
-        uint256 count = 0;
-        for (uint256 i = 0; i < total; i++) {
-            if (_stakes[user][i].active) count++;
+        return stakingModule.getActiveStakes(user);
+    }
+
+    function MIN_STAKE_USDT()  external pure returns (uint256) { return 50 * 1e18; }
+    function LOCK_DURATION()   external pure returns (uint256) { return 300 days; }
+    function FLEX_CAP_MULT()   external pure returns (uint256) { return 2; }
+
+    /**
+     * @notice Get direct referrals of a user with pagination (newest first).
+     */
+    function getDirectReferralsPaginated(
+        address _user,
+        uint256 _offset,
+        uint256 _limit
+    ) external view returns (address[] memory referrals, uint256 total) {
+        uint256 n = allUsers.length;
+        // Count directs
+        for (uint256 i = 0; i < n; i++) {
+            if (users[allUsers[i]].sponsor == _user) total++;
         }
-        indices        = new uint256[](count);
-        mvtAmounts     = new uint256[](count);
-        usdtInvestedArr = new uint256[](count);
-        stakedAts      = new uint256[](count);
-        lockedSinces   = new uint256[](count);
-        uint256 j = 0;
-        for (uint256 i = 0; i < total; i++) {
-            if (_stakes[user][i].active) {
-                StakePosition storage p = _stakes[user][i];
-                indices[j]         = i;
-                mvtAmounts[j]      = p.mvtAmount;
-                usdtInvestedArr[j] = p.usdtInvested;
-                stakedAts[j]       = p.stakedAt;
-                lockedSinces[j]    = p.lockedSince;
-                j++;
+        if (total == 0 || _offset >= total) return (new address[](0), total);
+        uint256 available = total - _offset;
+        uint256 count = _limit < available ? _limit : available;
+        referrals = new address[](count);
+        uint256 found = 0;
+        uint256 skip  = _offset;
+        for (uint256 i = 0; i < n && found < count; i++) {
+            if (users[allUsers[i]].sponsor == _user) {
+                if (skip > 0) { skip--; continue; }
+                referrals[found++] = allUsers[i];
             }
         }
     }
 
     /**
-     * @notice Returns LOCK_DURATION constant (for frontend use).
+     * @notice ADMIN: Distribute rankPool to rank holders.
+     *         Admin computes recipients off-chain and submits pre-computed amounts.
+     *         adminLeftover = any reserve not allocated (added back to adminPool).
      */
-    function getLockDuration() external pure returns (uint256) {
-        return LOCK_DURATION;
+    function applyRankIncome(
+        address[] calldata users_arr,
+        uint256[] calldata shares,
+        uint256   adminLeftover
+    ) external onlyOwner {
+        if (rankPool == 0) revert EmptyPool();
+        uint256 pool = rankPool;
+        rankPool = 0;
+        for (uint256 i = 0; i < users_arr.length; i++) {
+            address u = users_arr[i];
+            uint8   r = users[u].rank;
+            users[u].mvtBalance    += shares[i];
+            users[u].totalReceived += shares[i];
+            emit RankIncomePaid(u, address(0), r, shares[i]);
+            _recordTx(u, TX_RANK_INCOME, shares[i], r, address(0));
+        }
+        adminPool += adminLeftover;
+        emit RankIncomeDistributed(pool, users_arr.length);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

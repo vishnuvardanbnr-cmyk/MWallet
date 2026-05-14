@@ -53,27 +53,29 @@ export default function DeepPlacementPage({ userInfo, account }: DeepPlacementPa
         const addr = queue.shift()!;
         if (!addr || addr === ZERO_ADDRESS) continue;
         try {
-          const info = await con.getUserInfo(addr);
-          let name = shortenAddress(addr);
-          try {
-            const pr = await con.getProfile(addr);
-            if (pr[4] && pr[0]) name = pr[0];
-          } catch {}
+          const info = await con.users(addr);
+          let name = info.displayName || shortenAddress(addr);
+          if (!name) {
+            try {
+              const pr = await con.getProfile(addr);
+              if (pr[4] && pr[0]) name = pr[0];
+            } catch {}
+          }
 
           const node: TreeNode = {
             address: addr,
-            userId: info[0].toString(),
+            userId: info.isRegistered ? addr.slice(-4) : "?",
             displayName: name,
-            leftChild: info[3],
-            rightChild: info[4],
-            userPackage: Number(info[6]),
-            hasLeftSlot: info[3] === ZERO_ADDRESS,
-            hasRightSlot: info[4] === ZERO_ADDRESS,
+            leftChild: info.leftChild,
+            rightChild: info.rightChild,
+            userPackage: Number(info.packagePrice),
+            hasLeftSlot: info.leftChild === ZERO_ADDRESS,
+            hasRightSlot: info.rightChild === ZERO_ADDRESS,
           };
           result.push(node);
 
-          if (info[3] && info[3] !== ZERO_ADDRESS) queue.push(info[3]);
-          if (info[4] && info[4] !== ZERO_ADDRESS) queue.push(info[4]);
+          if (info.leftChild && info.leftChild !== ZERO_ADDRESS) queue.push(info.leftChild);
+          if (info.rightChild && info.rightChild !== ZERO_ADDRESS) queue.push(info.rightChild);
         } catch (err) {
           console.error("Error loading node:", addr, err);
         }

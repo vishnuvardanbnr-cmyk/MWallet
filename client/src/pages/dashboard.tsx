@@ -85,14 +85,14 @@ export default function Dashboard({
           const subAddr: string = events[i].args?.[1];
           if (!subAddr) continue;
           try {
-            const info = await contract.getUserInfo(subAddr);
+            const info = await contract.users(subAddr);
             results.push({
               address: subAddr,
-              mvtBalance: info[10],
-              usdtBalance: info[14],
-              incomeLimit: info[13],
-              rebirthCount: info[20],
-              isActive: info[1],
+              mvtBalance: info.mvtBalance,
+              usdtBalance: info.usdtBalance,
+              incomeLimit: info.incomeLimit,
+              rebirthCount: info.rebirthCount,
+              isActive: info.isActive,
               rebirthIndex: i + 1,
             });
           } catch {

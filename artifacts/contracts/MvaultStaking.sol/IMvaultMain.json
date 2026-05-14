@@ -1,0 +1,114 @@
+{
+  "_format": "hh-sol-artifact-1",
+  "contractName": "IMvaultMain",
+  "sourceName": "contracts/MvaultStaking.sol",
+  "abi": [
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "staker",
+          "type": "address"
+        },
+        {
+          "internalType": "address[]",
+          "name": "tos",
+          "type": "address[]"
+        },
+        {
+          "internalType": "uint8[]",
+          "name": "levels",
+          "type": "uint8[]"
+        },
+        {
+          "internalType": "uint256[]",
+          "name": "amounts",
+          "type": "uint256[]"
+        }
+      ],
+      "name": "staking_batchCreditMvtIncome",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "staker",
+          "type": "address"
+        },
+        {
+          "internalType": "uint8",
+          "name": "depth",
+          "type": "uint8"
+        }
+      ],
+      "name": "staking_getSponsorChain",
+      "outputs": [
+        {
+          "internalType": "address[]",
+          "name": "sponsors",
+          "type": "address[]"
+        },
+        {
+          "internalType": "bool[]",
+          "name": "actives",
+          "type": "bool[]"
+        }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "user",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "usdtAmount",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "adminAmt",
+          "type": "uint256"
+        }
+      ],
+      "name": "staking_postStake",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    },
+    {
+      "inputs": [
+        {
+          "internalType": "address",
+          "name": "user",
+          "type": "address"
+        },
+        {
+          "internalType": "uint256",
+          "name": "usdtToUser",
+          "type": "uint256"
+        },
+        {
+          "internalType": "uint256",
+          "name": "adminCapCut",
+          "type": "uint256"
+        }
+      ],
+      "name": "staking_postUnstake",
+      "outputs": [],
+      "stateMutability": "nonpayable",
+      "type": "function"
+    }
+  ],
+  "bytecode": "0x",
+  "deployedBytecode": "0x",
+  "linkReferences": {},
+  "deployedLinkReferences": {}
+}

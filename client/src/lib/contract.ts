@@ -61,7 +61,7 @@ export const DEPOSIT_ADMIN_WALLET = "0x04e8c5b49de683c5b44ef1269bd5ee4f338868c4"
 
 // ── MvaultContract ABI ────────────────────────────────────────────────────────
 export const MVAULT_ABI = [
-  // Custom errors — required for Ethers v6 to decode revert reasons
+  // Custom errors
   "error AlreadyRegistered()",
   "error NotRegistered()",
   "error AlreadyActive()",
@@ -79,10 +79,14 @@ export const MVAULT_ABI = [
   "error BinaryAlreadyDistributed()",
   "error BoardHandlerNotSet()",
   "error InsufficientBtcPoolForBoard()",
+  "error EmptyPool()",
   // Registration & activation
   "function register(address sponsor, address binaryParent, bool placeLeft) external",
-  "function activate() external",
-  "function registerAndActivateFor(address newUser, address binaryParent, bool placeLeft) external",
+  "function activate(uint8 pkg) external",
+  "function activateFromBalance(uint8 pkg) external",
+  "function registerAndActivateFor(address newUser, address binaryParent, bool placeLeft, uint8 pkg) external",
+  "function reactivate(uint8 pkg) external",
+  "function reactivateFromBalance(uint8 pkg) external",
   // Virtual MVT operations
   "function sellMvt(uint256 amount) external",
   "function withdrawUsdt(uint256 amount) external",
@@ -93,36 +97,38 @@ export const MVAULT_ABI = [
   // Profile
   "function setProfile(string _displayName, string _email, string _phone, string _country) external",
   "function getProfile(address _user) view returns (string displayName, string email, string phone, string country, bool profileSet)",
+  // Public state — users mapping (full struct, includes profile strings)
+  "function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 matchedVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 powerLegPoints, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, string displayName, string email, string phone, string country, bool profileSet)",
+  // Public pool variables
+  "function binaryPool() view returns (uint256)",
+  "function reservePool() view returns (uint256)",
+  "function adminPool() view returns (uint256)",
+  "function rankPool() view returns (uint256)",
+  "function totalUsers() view returns (uint256)",
+  "function boardHandler() view returns (address)",
+  "function stakingModule() view returns (address)",
   // Views
-  "function getUserInfo(address u) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubUsers, uint256 rightSubUsers, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 btcPoolBalance, uint256 powerLegPoints, uint256 matchedPairs, address mainAccount, uint256 rebirthCount, uint256 joinedAt)",
   "function getBtcPoolInfo(address u) view returns (uint256 btcPoolBalance, uint256 totalBtcEarned)",
   "function canRebirth(address user) view returns (bool eligible, uint256 poolBalance)",
-  "function getCurrentBinaryPairs(address u) view returns (uint256 currentPairs, uint256 newPairs)",
+  "function getCurrentBinaryVolume(address u) view returns (uint256 leftVolume, uint256 rightVolume, uint256 currentMatched, uint256 newVolume)",
   "function getMvtPrice() view returns (uint256 buyPrice, uint256 sellPrice)",
-  "function totalUsers() view returns (uint256)",
-  "function getAllUsersCount() view returns (uint256)",
   "function getDirectReferralsPaginated(address _user, uint256 _offset, uint256 _limit) view returns (address[] referrals, uint256 total)",
-  "function getPoolBalances() view returns (uint256 binary, uint256 reserve, uint256 admin)",
-  "function getMvtContractBalance() view returns (uint256)",
   "function getTransactions(address user, uint256 offset, uint256 limit) view returns (tuple(uint8 txType, uint32 ts, uint256 amount, uint8 level, address addr)[] records, uint256 total)",
   "function usdtToken() view returns (address)",
   "function mvaultToken() view returns (address)",
-  "function PACKAGE_PRICE() view returns (uint256)",
-  "function INCOME_LIMIT() view returns (uint256)",
   // Board pool
   "function enterBoardPool() external",
   "function canEnterBoard(address user) view returns (bool eligible, uint256 btcBalance, uint256 boardPrice)",
-  "function getBoardPrice(uint256 level) view returns (uint256)",
-  "function getBoardQueueLength(uint256 level) view returns (uint256)",
-  "function getBoardCurrentIndex(uint256 level) view returns (uint256)",
-  "function getBoardMatrixInfo(uint256 level, uint256 index) view returns (address owner, uint256 filledCount, bool completed)",
-  "function getUserBoardStats(address user) view returns (uint256[] poolLevels, uint256[] matrixIndices, uint256[] filledCounts, bool[] completeds)",
+  "function getUserBoardStats(address user) view returns (uint256 entries, uint256 totalRewards)",
   // Admin distribution
-  "function distributeBinaryIncome(uint256 offset, uint256 limit) external",
-  "function distributePowerLeg(uint256 offset, uint256 limit) external",
+  "function applyBinaryDistribution(address[] users_arr, uint256[] shares, uint256[] powerLegPts, uint256[] newMatchedVols) external",
+  "function applyPowerLegDistribution(address[] users_arr, uint256[] shares, uint256 adminLeftover) external",
+  "function applyRankIncome(address[] users_arr, uint256[] shares, uint256 adminLeftover) external",
+  "function withdrawAdminPool(address to, uint256 amount) external",
+  "function withdrawReservePool(address to, uint256 amount) external",
   // Events
   "event Registered(address indexed user, address indexed sponsor, address indexed binaryParent, bool placeLeft)",
-  "event Activated(address indexed user, uint256 mvtMinted, uint256 grossMvt, uint256 levelAmt, uint256 binaryAmt, uint256 reserveAmt)",
+  "event Activated(address indexed user, uint256 mvtMinted, uint256 grossMvt, uint256 levelAmt, uint256 binaryAmt, uint256 adminAmt)",
   "event LevelIncomePaid(address indexed to, address indexed from, uint8 level, uint256 amount)",
   "event LevelIncomeSkipped(address indexed upline, uint8 level, uint256 amount)",
   "event MvtSold(address indexed user, uint256 mvtAmount, uint256 usdtNet, uint256 usdtToBtcPool, uint256 usdtToIncome, uint256 usdtToRebirth)",
@@ -130,9 +136,13 @@ export const MVAULT_ABI = [
   "event BtcPoolWithdrawn(address indexed user, uint256 amount)",
   "event UsdtWithdrawn(address indexed user, uint256 amount)",
   "event Reborn(address indexed mainAccount, address indexed subAccount, uint256 rebirthIndex)",
+  "event Reactivated(address indexed user, uint256 pkgPrice, uint256 grossMvt, bool upgraded)",
   "event BinaryIncomeDistributed(uint256 totalPool, uint256 binary70, uint256 powerLeg30, uint256 totalPairs)",
   "event BinaryIncomePaid(address indexed user, uint256 newPairs, uint256 amount)",
   "event PowerLegIncomePaid(address indexed user, uint256 powerLegPoints, uint256 amount)",
+  "event PowerLegDistributed(uint256 reserve, uint256 recipientCount)",
+  "event RankIncomePaid(address indexed to, address indexed from, uint8 rank, uint256 amount)",
+  "event RankIncomeDistributed(uint256 totalPool, uint256 recipientCount)",
   "event BoardEntered(address indexed user, uint256 boardLevel, uint256 usdtDeducted)",
   "event BoardRewardCredited(address indexed user, uint256 usdtAmount, uint256 boardLevel)",
   // Staking
@@ -146,7 +156,6 @@ export const MVAULT_ABI = [
   "function MIN_STAKE_USDT() view returns (uint256)",
   "function LOCK_DURATION() view returns (uint256)",
   "function FLEX_CAP_MULT() view returns (uint256)",
-  "function getLockDuration() view returns (uint256)",
   "event Staked(address indexed user, uint256 stakeIndex, uint256 usdtAmount, uint256 mvtMinted, bool isLocked)",
   "event Unstaked(address indexed user, uint256 stakeIndex, uint256 mvtReturned, uint256 usdtReceived, uint256 adminCapCut)",
   "event ConvertedToLocked(address indexed user, uint256 stakeIndex, uint256 lockedSince)",

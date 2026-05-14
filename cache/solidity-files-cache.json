@@ -6,7 +6,7 @@
       "contentHash": "60979dc1809de91d37f195183ce98b51",
       "sourceName": "contracts/MvaultBoardMatrix.sol",
       "solcConfig": {
-        "version": "0.8.20",
+        "version": "0.8.27",
         "settings": {
           "optimizer": {
             "enabled": true,
@@ -49,7 +49,7 @@
       "contentHash": "d3c790edc9ccf808a17c5a6cd13614fd",
       "sourceName": "@openzeppelin/contracts/access/Ownable.sol",
       "solcConfig": {
-        "version": "0.8.20",
+        "version": "0.8.27",
         "settings": {
           "optimizer": {
             "enabled": true,
@@ -88,7 +88,7 @@
       "contentHash": "6e5efb502dd6652d12ad15eea2c5bdf4",
       "sourceName": "@openzeppelin/contracts/utils/ReentrancyGuard.sol",
       "solcConfig": {
-        "version": "0.8.20",
+        "version": "0.8.27",
         "settings": {
           "optimizer": {
             "enabled": true,
@@ -127,7 +127,7 @@
       "contentHash": "9261adf6457863de3e9892f51317ec89",
       "sourceName": "@openzeppelin/contracts/token/ERC20/IERC20.sol",
       "solcConfig": {
-        "version": "0.8.20",
+        "version": "0.8.27",
         "settings": {
           "optimizer": {
             "enabled": true,
@@ -164,7 +164,7 @@
       "contentHash": "bf8e9c3398d381dc66c5302267927386",
       "sourceName": "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol",
       "solcConfig": {
-        "version": "0.8.20",
+        "version": "0.8.27",
         "settings": {
           "optimizer": {
             "enabled": true,
@@ -204,7 +204,7 @@
       "contentHash": "67bfbc07588eb8683b3fd8f6f909563e",
       "sourceName": "@openzeppelin/contracts/utils/Context.sol",
       "solcConfig": {
-        "version": "0.8.20",
+        "version": "0.8.27",
         "settings": {
           "optimizer": {
             "enabled": true,
@@ -241,7 +241,7 @@
       "contentHash": "e656d64c4ce918f3d13030b91c935134",
       "sourceName": "@openzeppelin/contracts/utils/StorageSlot.sol",
       "solcConfig": {
-        "version": "0.8.20",
+        "version": "0.8.27",
         "settings": {
           "optimizer": {
             "enabled": true,
@@ -278,7 +278,7 @@
       "contentHash": "a7fd0f05e36b0d0a21c75340c9c639ec",
       "sourceName": "@openzeppelin/contracts/interfaces/IERC1363.sol",
       "solcConfig": {
-        "version": "0.8.20",
+        "version": "0.8.27",
         "settings": {
           "optimizer": {
             "enabled": true,
@@ -318,7 +318,7 @@
       "contentHash": "68620db2da7583d9a4919096ac77f577",
       "sourceName": "@openzeppelin/contracts/interfaces/IERC20.sol",
       "solcConfig": {
-        "version": "0.8.20",
+        "version": "0.8.27",
         "settings": {
           "optimizer": {
             "enabled": true,
@@ -355,7 +355,7 @@
       "contentHash": "947853028399b7de34bcc3704ee06e99",
       "sourceName": "@openzeppelin/contracts/interfaces/IERC165.sol",
       "solcConfig": {
-        "version": "0.8.20",
+        "version": "0.8.27",
         "settings": {
           "optimizer": {
             "enabled": true,
@@ -392,7 +392,7 @@
       "contentHash": "7074c93b1ea0a122063f26ddd1db1032",
       "sourceName": "@openzeppelin/contracts/utils/introspection/IERC165.sol",
       "solcConfig": {
-        "version": "0.8.20",
+        "version": "0.8.27",
         "settings": {
           "optimizer": {
             "enabled": true,
@@ -429,7 +429,7 @@
       "contentHash": "513778b30d2750f5d2b9b19bbcf748a5",
       "sourceName": "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol",
       "solcConfig": {
-        "version": "0.8.20",
+        "version": "0.8.27",
         "settings": {
           "optimizer": {
             "enabled": true,
@@ -468,7 +468,7 @@
       "contentHash": "d15c4d05583536e080f1960ab282772d",
       "sourceName": "@openzeppelin/contracts/token/ERC20/ERC20.sol",
       "solcConfig": {
-        "version": "0.8.20",
+        "version": "0.8.27",
         "settings": {
           "optimizer": {
             "enabled": true,
@@ -510,7 +510,7 @@
       "contentHash": "bcc76f4747d56c28c40ae272ef3470a6",
       "sourceName": "@openzeppelin/contracts/interfaces/draft-IERC6093.sol",
       "solcConfig": {
-        "version": "0.8.20",
+        "version": "0.8.27",
         "settings": {
           "optimizer": {
             "enabled": true,
@@ -549,7 +549,7 @@
       "contentHash": "471ead02171c8c7e2dc2dc2a57317f46",
       "sourceName": "contracts/MvaultToken.sol",
       "solcConfig": {
-        "version": "0.8.20",
+        "version": "0.8.27",
         "settings": {
           "optimizer": {
             "enabled": true,
@@ -587,11 +587,11 @@
       ]
     },
     "/home/runner/workspace/contracts/MvaultContract.sol": {
-      "lastModificationDate": 1778742572151,
-      "contentHash": "75bef00f75b1b11dda2252e01e3c0141",
+      "lastModificationDate": 1778746158400,
+      "contentHash": "81ad8e24646d6a0d3a3008309a2358d4",
       "sourceName": "contracts/MvaultContract.sol",
       "solcConfig": {
-        "version": "0.8.20",
+        "version": "0.8.27",
         "settings": {
           "optimizer": {
             "enabled": true,
@@ -625,8 +625,52 @@
       ],
       "artifacts": [
         "IMvaultBoardMatrix",
+        "IMvaultStaking",
         "IMvaultToken",
         "MvaultContract"
+      ]
+    },
+    "/home/runner/workspace/contracts/MvaultStaking.sol": {
+      "lastModificationDate": 1778745015575,
+      "contentHash": "1651e559a7006dce941c90015a410319",
+      "sourceName": "contracts/MvaultStaking.sol",
+      "solcConfig": {
+        "version": "0.8.27",
+        "settings": {
+          "optimizer": {
+            "enabled": true,
+            "runs": 1
+          },
+          "viaIR": true,
+          "evmVersion": "paris",
+          "outputSelection": {
+            "*": {
+              "*": [
+                "abi",
+                "evm.bytecode",
+                "evm.deployedBytecode",
+                "evm.methodIdentifiers",
+                "metadata"
+              ],
+              "": [
+                "ast"
+              ]
+            }
+          }
+        }
+      },
+      "imports": [
+        "@openzeppelin/contracts/token/ERC20/IERC20.sol",
+        "@openzeppelin/contracts/access/Ownable.sol",
+        "@openzeppelin/contracts/utils/ReentrancyGuard.sol"
+      ],
+      "versionPragmas": [
+        "^0.8.20"
+      ],
+      "artifacts": [
+        "IMvaultMain",
+        "IMvaultToken",
+        "MvaultStaking"
       ]
     }
   }
