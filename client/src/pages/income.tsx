@@ -88,7 +88,12 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
   const totalPendingMvt = pendingCycles.reduce((sum, c) => sum + BigInt(c.totalMvt), 0n);
   const hasPending = pendingCycles.length > 0 && totalPendingMvt > 0n;
 
-  // ── Claim All — single batchClaim tx, one MetaMask popup ─────────────────
+  // Maximum cycles per batchClaim tx.
+  // 100 cycles × 120k gas = 12M gas — well within BSC's 300M block limit.
+  // Above this, split into pages so we never approach the block gas limit.
+  const BATCH_CLAIM_MAX = 100;
+
+  // ── Claim All — single batchClaim tx (or multiple if >100 pending) ────────
   async function handleClaimAll() {
     if (!pendingCycles.length || !walletAddress) return;
     setClaimErr(null);
@@ -101,20 +106,29 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
       // Sort ascending so newMatchedVol / newPowerLegPts are applied in order
       const sorted = [...pendingCycles].sort((a, b) => a.cycle - b.cycle);
 
-      const gasLimit = 150_000 + 120_000 * sorted.length;
+      // Chunk into pages of BATCH_CLAIM_MAX to avoid hitting the block gas limit
+      for (let offset = 0; offset < sorted.length; offset += BATCH_CLAIM_MAX) {
+        const page = sorted.slice(offset, offset + BATCH_CLAIM_MAX);
+        const gasLimit = 150_000 + 120_000 * page.length;
 
-      const tx = await dist.batchClaim(
-        sorted.map(c => BigInt(c.cycle)),
-        sorted.map(c => BigInt(c.binaryShare)),
-        sorted.map(c => BigInt(c.powerLegShare)),
-        sorted.map(c => BigInt(c.newMatchedVol)),
-        sorted.map(c => BigInt(c.newPowerLegPts)),
-        sorted.map(c => c.proof),
-        { gasLimit },
-      );
-      await tx.wait();
+        const tx = await dist.batchClaim(
+          page.map(c => BigInt(c.cycle)),
+          page.map(c => BigInt(c.binaryShare)),
+          page.map(c => BigInt(c.powerLegShare)),
+          page.map(c => BigInt(c.newMatchedVol)),
+          page.map(c => BigInt(c.newPowerLegPts)),
+          page.map(c => c.proof),
+          { gasLimit },
+        );
+        await tx.wait();
 
-      setClaimedCycles(new Set(sorted.map(c => c.cycle)));
+        setClaimedCycles(prev => {
+          const next = new Set(prev);
+          page.forEach(c => next.add(c.cycle));
+          return next;
+        });
+      }
+
       qc.invalidateQueries({ queryKey: ["/api/distribution/proofs", walletAddress] });
     } catch (err: any) {
       const msg = err?.shortMessage || err?.reason || err?.message || "Claim failed";
@@ -123,6 +137,9 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
       setClaiming(false);
     }
   }
+
+  // Warn user if their pending cycles will require multiple transactions
+  const claimTxCount = Math.ceil(pendingCycles.length / BATCH_CLAIM_MAX);
 
   const allClaimed = pendingCycles.length === 0 && claimedCycles.size > 0;
 
@@ -235,8 +252,9 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
                   <p className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-total-claimable">
                     {parseFloat(formatTokenAmount(totalPendingMvt, 18)).toFixed(4)} MVT
                   </p>
-                  <p className="text-[9px] text-muted-foreground mt-0.5">
-                    {pendingCycles.length} cycle{pendingCycles.length !== 1 ? "s" : ""} — claim any time
+                    <p className="text-[9px] text-muted-foreground mt-0.5">
+                    {pendingCycles.length} cycle{pendingCycles.length !== 1 ? "s" : ""}
+                    {claimTxCount > 1 ? ` — ${claimTxCount} transactions needed` : " — claim any time"}
                   </p>
                 </div>
                 <Button

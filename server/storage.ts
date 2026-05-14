@@ -93,6 +93,7 @@ export interface IStorage {
   getLatestDistributionCycle(): Promise<DistributionCycle | undefined>;
   getDistributionCycle(cycle: number): Promise<DistributionCycle | undefined>;
   saveDistributionProof(cycle: number, walletAddress: string, binaryShare: string, powerLegShare: string, newMatchedVol: string, newPowerLegPts: string, proof: string[]): Promise<DistributionProof>;
+  saveDistributionProofsBulk(proofs: Array<{ cycle: number; walletAddress: string; binaryShare: string; powerLegShare: string; newMatchedVol: string; newPowerLegPts: string; proof: string[] }>): Promise<void>;
   getDistributionProof(cycle: number, walletAddress: string): Promise<DistributionProof | undefined>;
 }
 
@@ -712,6 +713,26 @@ export class DatabaseStorage implements IStorage {
       })
       .returning();
     return row;
+  }
+
+  async saveDistributionProofsBulk(proofs: Array<{ cycle: number; walletAddress: string; binaryShare: string; powerLegShare: string; newMatchedVol: string; newPowerLegPts: string; proof: string[] }>): Promise<void> {
+    if (proofs.length === 0) return;
+    const CHUNK = 500;
+    const rows = proofs.map(p => ({ ...p, walletAddress: p.walletAddress.toLowerCase() }));
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      await db.insert(distributionProofs)
+        .values(rows.slice(i, i + CHUNK))
+        .onConflictDoUpdate({
+          target: [distributionProofs.cycle, distributionProofs.walletAddress],
+          set: {
+            binaryShare:    sql`EXCLUDED.binary_share`,
+            powerLegShare:  sql`EXCLUDED.power_leg_share`,
+            newMatchedVol:  sql`EXCLUDED.new_matched_vol`,
+            newPowerLegPts: sql`EXCLUDED.new_power_leg_pts`,
+            proof:          sql`EXCLUDED.proof`,
+          },
+        });
+    }
   }
 
   async getDistributionProof(cycle: number, walletAddress: string): Promise<DistributionProof | undefined> {

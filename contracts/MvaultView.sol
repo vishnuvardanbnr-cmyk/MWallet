@@ -236,6 +236,65 @@ contract MvaultView {
         }
     }
 
+    // ── Distributor batch reader ───────────────────────────────────────────────
+
+    /**
+     * @notice Returns only the 5 fields needed by the off-chain distributor
+     *         for a batch of addresses, in a single eth_call.
+     *
+     *         One call with 500 addresses replaces 500 individual users() calls,
+     *         and transfers ~40× less data (5 uint256/bool fields vs 33 fields
+     *         including profile strings).  This is critical for 1M+ member scale.
+     *
+     * @param addrs  Array of user addresses to query (max ~500 per call)
+     * @return isActive        isActive flag per user
+     * @return leftSubVolume   leftSubVolume per user
+     * @return rightSubVolume  rightSubVolume per user
+     * @return matchedVolume   matchedVolume per user
+     * @return powerLegPoints  powerLegPoints per user
+     */
+    function getDistributorBatch(address[] calldata addrs)
+        external view
+        returns (
+            bool[]    memory isActive,
+            uint256[] memory leftSubVolume,
+            uint256[] memory rightSubVolume,
+            uint256[] memory matchedVolume,
+            uint256[] memory powerLegPoints
+        )
+    {
+        uint256 len = addrs.length;
+        isActive       = new bool[](len);
+        leftSubVolume  = new uint256[](len);
+        rightSubVolume = new uint256[](len);
+        matchedVolume  = new uint256[](len);
+        powerLegPoints = new uint256[](len);
+
+        for (uint256 i = 0; i < len; i++) {
+            // Fetch full struct — all 33 fields — but only keep 5.
+            // Named vars for all fields: Solidity requires every return slot to be named
+            // or blank-skipped with commas (both are valid in 0.8+).
+            (
+                bool _reg, bool _act,
+                address, uint256, address, bool, address, address,
+                uint256 _l, uint256 _r, uint256 _m,
+                uint256, uint256, uint256, uint256, uint256,
+                uint256, uint256, uint256, uint256,
+                uint256 _p,
+                uint256, uint256, address, uint256, uint8, uint256, uint256,
+                string memory, string memory, string memory, string memory,
+                bool
+            ) = mvault.users(addrs[i]);
+
+            if (!_reg) continue;   // unregistered — leave arrays at zero
+            isActive[i]       = _act;
+            leftSubVolume[i]  = _l;
+            rightSubVolume[i] = _r;
+            matchedVolume[i]  = _m;
+            powerLegPoints[i] = _p;
+        }
+    }
+
     // ── Contract addresses ────────────────────────────────────────────────────
 
     function getMvaultAddress()       external view returns (address) { return address(mvault); }
