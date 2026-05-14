@@ -112,13 +112,17 @@ export default function Dashboard({
   const mvtBalanceNum = parseFloat(formatTokenAmount(userInfo.mvtBalance, 18));
   const usdtBalanceNum = parseFloat(formatTokenAmount(userInfo.usdtBalance, 18));
   const incomeLimitNum = parseFloat(formatTokenAmount(userInfo.incomeLimit, 18));
+  const incomeLimitCapNum = parseFloat(formatTokenAmount(userInfo.incomeLimitCap, 18));
   const rebirthPoolNum = parseFloat(formatTokenAmount(userInfo.rebirthPool, 18));
   const btcPoolNum = parseFloat(formatTokenAmount(userInfo.btcPoolBalance, 18));
   const totalReceivedNum = parseFloat(formatTokenAmount(userInfo.totalReceived, 18));
+  const pkgPriceNum = parseFloat(formatTokenAmount(userInfo.packagePrice, 18));
+  const rebirthThreshold = pkgPriceNum > 0 ? pkgPriceNum : 130;
 
   const estimatedSellValue = sellPriceNum > 0 ? mvtBalanceNum * sellPriceNum * 0.9 : 0;
-  const incomeUsed = 390 - incomeLimitNum;
-  const incomeProgress = Math.min(100, (incomeUsed / 390) * 100);
+  const incomeCap = incomeLimitCapNum > 0 ? incomeLimitCapNum : 390;
+  const incomeUsed = incomeCap - incomeLimitNum;
+  const incomeProgress = Math.min(100, (incomeUsed / incomeCap) * 100);
 
   const leftCount = Number(userInfo.leftSubUsers);
   const rightCount = Number(userInfo.rightSubUsers);
@@ -244,7 +248,7 @@ export default function Dashboard({
                 style={{ width: `${incomeProgress}%` }}
               />
             </div>
-            <p className="text-[10px] text-muted-foreground">${incomeUsed.toFixed(2)} / $390 used</p>
+            <p className="text-[10px] text-muted-foreground">${incomeUsed.toFixed(2)} / ${incomeCap.toFixed(2)} used</p>
           </div>
         </div>
 
@@ -286,25 +290,25 @@ export default function Dashboard({
                 </p>
               </div>
             </div>
-            {rebirthPoolNum >= 130 && (
+            {rebirthPoolNum >= rebirthThreshold && (
               <Badge variant="outline" className="text-[9px] border-purple-500/30 text-purple-400 animate-pulse">
                 Ready!
               </Badge>
             )}
           </div>
 
-          {rebirthPoolNum < 130 ? (
+          {rebirthPoolNum < rebirthThreshold ? (
             <div className="mt-1">
               <div className="h-1.5 w-full rounded-full bg-white/[0.06] overflow-hidden">
-                <div className="h-full rounded-full bg-purple-500/60 transition-all" style={{ width: `${Math.min(100, (rebirthPoolNum / 130) * 100)}%` }} />
+                <div className="h-full rounded-full bg-purple-500/60 transition-all" style={{ width: `${Math.min(100, (rebirthPoolNum / rebirthThreshold) * 100)}%` }} />
               </div>
               <p className="text-[10px] text-muted-foreground mt-1.5">
-                ${(130 - rebirthPoolNum).toFixed(2)} more needed to trigger rebirth ($130 required)
+                ${(rebirthThreshold - rebirthPoolNum).toFixed(2)} more needed to trigger rebirth (${rebirthThreshold.toFixed(2)} required)
               </p>
             </div>
           ) : (
             <div className="mt-2 space-y-2">
-              <p className="text-[10px] text-purple-300/80">$130 reached — create a new sub-account to continue earning beyond your $390 limit.</p>
+              <p className="text-[10px] text-purple-300/80">${rebirthThreshold.toFixed(2)} reached — create a new sub-account to continue earning beyond your ${incomeCap.toFixed(2)} limit.</p>
               <button
                 onClick={() => setLocation("/rebirth")}
                 className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-purple-500/15 border border-purple-500/30 text-sm font-semibold text-purple-300 hover:bg-purple-500/20 transition-all"

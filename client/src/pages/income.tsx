@@ -48,8 +48,10 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
 
   const totalReceivedMvt = parseFloat(formatTokenAmount(userInfo.totalReceived, 18));
   const mvtBalanceMvt = parseFloat(formatTokenAmount(userInfo.mvtBalance, 18));
-  const incomeUsed = 390 - parseFloat(formatTokenAmount(userInfo.incomeLimit, 18));
-  const incomeProgress = Math.min(100, (incomeUsed / 390) * 100);
+  const incomeLimitCapNum = parseFloat(formatTokenAmount(userInfo.incomeLimitCap, 18));
+  const incomeCap = incomeLimitCapNum > 0 ? incomeLimitCapNum : 390;
+  const incomeUsed = incomeCap - parseFloat(formatTokenAmount(userInfo.incomeLimit, 18));
+  const incomeProgress = Math.min(100, (incomeUsed / incomeCap) * 100);
 
   return (
     <div className="p-4 sm:p-6 space-y-6 relative z-10">
@@ -102,7 +104,7 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
       <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.07s" }} data-testid="card-income-limit">
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>
-            <span className="gradient-text">Income Limit ($390 Max)</span>
+            <span className="gradient-text">Income Limit (${incomeCap.toFixed(2)} Max)</span>
           </h2>
           <Badge variant="outline" className="text-[9px] border-amber-500/30 text-amber-400">
             ${parseFloat(formatTokenAmount(userInfo.incomeLimit, 18)).toFixed(2)} remaining
@@ -117,12 +119,12 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
           </div>
           <div className="flex justify-between text-[10px] text-muted-foreground">
             <span>${incomeUsed.toFixed(2)} USDT received</span>
-            <span>$390 cap (3× activation)</span>
+            <span>${incomeCap.toFixed(2)} cap (3× activation)</span>
           </div>
         </div>
         <div className="mt-3 flex items-start gap-2 p-2.5 rounded-xl bg-amber-500/[0.06] border border-amber-500/10">
           <Info className="h-3.5 w-3.5 text-amber-400/70 shrink-0 mt-0.5" />
-          <p className="text-[10px] text-muted-foreground">When your income limit reaches $0, all MVT sell proceeds go to your rebirth pool. Trigger rebirth to reset your limit to $390.</p>
+          <p className="text-[10px] text-muted-foreground">When your income limit reaches $0, all MVT sell proceeds go to your rebirth pool. Trigger rebirth to reset your limit to ${incomeCap.toFixed(2)}.</p>
         </div>
       </div>
 

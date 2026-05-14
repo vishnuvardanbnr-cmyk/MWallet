@@ -153,9 +153,8 @@ export const MVAULT_ABI = [
   "function getStakeCount(address user) view returns (uint256)",
   "function getStake(address user, uint256 index) view returns (uint256 mvtAmount, uint256 usdtInvested, uint256 stakedAt, uint256 lockedSince, bool active)",
   "function getActiveStakes(address user) view returns (uint256[] indices, uint256[] mvtAmounts, uint256[] usdtInvestedArr, uint256[] stakedAts, uint256[] lockedSinces)",
-  "function MIN_STAKE_USDT() view returns (uint256)",
-  "function LOCK_DURATION() view returns (uint256)",
-  "function FLEX_CAP_MULT() view returns (uint256)",
+  // Note: MIN_STAKE_USDT / LOCK_DURATION / FLEX_CAP_MULT are on MvaultStaking, not here.
+  // Read them via getMvaultViewContract() → getMinStakeUsdt/getLockDuration/getFlexCapMult.
   "event Staked(address indexed user, uint256 stakeIndex, uint256 usdtAmount, uint256 mvtMinted, bool isLocked)",
   "event Unstaked(address indexed user, uint256 stakeIndex, uint256 mvtReturned, uint256 usdtReceived, uint256 adminCapCut)",
   "event ConvertedToLocked(address indexed user, uint256 stakeIndex, uint256 lockedSince)",

@@ -23,6 +23,8 @@ export interface UserInfo {
   totalReceived: bigint;
   totalSold: bigint;
   incomeLimit: bigint;
+  incomeLimitCap: bigint;   // max income for this user's package (3× packagePrice)
+  packagePrice: bigint;     // activation price paid: 55e18 (Starter) or 130e18 (Pro)
   usdtBalance: bigint;
   rebirthPool: bigint;
   btcPoolBalance: bigint;
@@ -161,6 +163,8 @@ export function useWeb3() {
         totalReceived:   info.totalReceived,
         totalSold:       info.totalSold,
         incomeLimit:     info.incomeLimit,
+        incomeLimitCap:  info.incomeLimitCap  ?? 390n * 10n ** 18n,
+        packagePrice:    info.packagePrice    ?? 130n * 10n ** 18n,
         usdtBalance:     info.usdtBalance,
         rebirthPool:     info.rebirthPool,
         btcPoolBalance:  info.btcPoolBalance,
