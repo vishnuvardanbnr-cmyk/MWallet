@@ -9,12 +9,74 @@ const OVERRIDE_RATES = [0, 0.01, 0.01, 0.01, 0.01, 0.01, 0.005, 0.005, 0.005, 0.
 // Max levels eligible by package index (0=NONE,1=STARTER,2=BASIC,3=PRO,4=ELITE,5=STOCKIEST,6=SS)
 const OVERRIDE_MAX_LEVELS = [0, 1, 2, 3, 4, 6, 15];
 
-const BSC_TESTNET_RPC = "https://data-seed-prebsc-1-s1.binance.org:8545/";
+// Staking invest level reward rates (10 levels, sum = 20% of theoretical tokens)
+const STAKING_INVEST_LEVEL_RATES = [0.10, 0.05, 0.02, 0.01, 0.005, 0.005, 0.003, 0.003, 0.002, 0.002];
+
+const BSC_TESTNET_RPC = "https://bsc-testnet-rpc.publicnode.com";
 const MLM_READ_ABI = [
   "function getUserInfo(address _user) external view returns (uint256 userId, address sponsor, address binaryParent, address leftChild, address rightChild, uint8 placementSide, uint8 userPackage, uint8 status, uint256 walletBalance, uint256 tempWalletBalance, uint256 totalEarnings, uint256 directReferralCount, uint256 joinedAt)",
 ];
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
-const MLM_CONTRACT_ADDR = process.env.VITE_CONTRACT_ADDRESS || "0x6Ff2b61d1882e7a122b09a109F78F5b2E5ef174e";
+const MLM_CONTRACT_ADDR = process.env.VITE_MVAULT_CONTRACT_ADDRESS || process.env.VITE_CONTRACT_ADDRESS || "0x164E4c01958c623CeF48C7DF8C66deFbB5eB4f57";
+
+/**
+ * Distributes 20% of theoretical tokens to 10 upline levels on staking invest.
+ * Rates: L1=10% L2=5% L3=2% L4=1% L5=0.5% L6=0.5% L7=0.3% L8=0.3% L9=0.2% L10=0.2%
+ * Unqualified (inactive/missing) upline shares accumulate to admin.
+ * Returns { distributed, toAdmin } both in tokens.
+ */
+async function distributeStakingInvestLevelIncome(
+  fromWallet: string,
+  theoreticalTokens: number,
+  buyPrice: number,
+): Promise<{ distributed: number; toAdmin: number }> {
+  let distributed = 0;
+  let toAdmin = 0;
+  try {
+    const { ethers } = await import("ethers");
+    const provider = new ethers.JsonRpcProvider(BSC_TESTNET_RPC);
+    const mlm = new ethers.Contract(MLM_CONTRACT_ADDR, MLM_READ_ABI, provider);
+
+    let current = fromWallet;
+    for (let i = 0; i < STAKING_INVEST_LEVEL_RATES.length; i++) {
+      const info = await mlm.getUserInfo(current);
+      const sponsor: string = info[1];
+      if (!sponsor || sponsor === ZERO_ADDR) {
+        // No more uplines — all remaining level shares go to admin
+        for (let r = i; r < STAKING_INVEST_LEVEL_RATES.length; r++) {
+          toAdmin += theoreticalTokens * STAKING_INVEST_LEVEL_RATES[r];
+        }
+        break;
+      }
+
+      const sponsorInfo = await mlm.getUserInfo(sponsor);
+      const isActive = Number(sponsorInfo[7]) > 0;
+      const share = theoreticalTokens * STAKING_INVEST_LEVEL_RATES[i];
+
+      if (isActive && share > 0) {
+        await storage.addMTokenMainBalance(sponsor, share.toFixed(8));
+        await storage.logTokenTransaction({
+          walletAddress: sponsor,
+          txType: "staking_level_income",
+          tokenAmount: share.toFixed(8),
+          usdtAmount: (share * buyPrice).toFixed(4),
+          priceAtTxn: buyPrice.toFixed(8),
+          note: `Level ${i + 1} staking invest reward from ${fromWallet}`,
+        });
+        distributed += share;
+      } else {
+        toAdmin += share;
+      }
+
+      current = sponsor;
+    }
+  } catch (_err) {
+    // Non-fatal — if RPC fails, unprocessed level income goes to admin
+    const totalLevelPct = STAKING_INVEST_LEVEL_RATES.reduce((a, b) => a + b, 0);
+    toAdmin = theoreticalTokens * totalLevelPct - distributed;
+  }
+  return { distributed, toAdmin };
+}
 
 async function distributeStakingOverride(fromWallet: string, usdtProfit: number): Promise<void> {
   try {
@@ -501,17 +563,28 @@ export async function registerRoutes(
 
       const { buyPrice } = await getTokenPrice();
 
-      // Token calculations — user gets 70% of theoretical tokens, locked in plan
+      // ── Token distribution on Fixed staking invest ─────────────────────────
+      // From 100% theoretical tokens (usdtAmt / buyPrice):
+      //   15% → liquidity backing (no tokens minted for this portion)
+      //   20% → level rewards across 10 uplines (L1=10%, L2=5%, L3=2%, L4=1%, L5–L6=0.5%, L7–L8=0.3%, L9–L10=0.2%)
+      //    5% → company/admin
+      //   60% → user (locked in staking plan)
       const theoreticalTokens = usdtAmt / buyPrice;
-      const mintedTokens = theoreticalTokens * 0.9;   // 90% minted total
-      const userTokens = theoreticalTokens * 0.7;      // 70% locked for user
-      const adminTokens = theoreticalTokens * 0.2;     // 20% for admin
+      const userTokens   = theoreticalTokens * 0.60;  // 60% locked for user
+      const adminTokens  = theoreticalTokens * 0.05;  // 5% company
 
       await storage.deductVirtualUsdt(addr, usdtAmt.toString());
 
+      // Distribute 20% level income to 10 uplines (async, non-blocking after deduct)
+      const { distributed: levelDistributed, toAdmin: levelToAdmin } =
+        await distributeStakingInvestLevelIncome(addr, theoreticalTokens, buyPrice);
+
+      // Total minted into circulating supply = user + admin + successfully distributed level tokens
+      const totalMinted = userTokens + adminTokens + levelDistributed + levelToAdmin;
+
       const econ = await storage.getTokenEconomics();
       await storage.updateTokenEconomics({
-        circulatingSupply: (parseFloat(econ.circulatingSupply) + mintedTokens).toFixed(8),
+        circulatingSupply: (parseFloat(econ.circulatingSupply) + totalMinted).toFixed(8),
         liquidity: (parseFloat(econ.liquidity) + usdtAmt).toFixed(8),
       });
 
@@ -520,13 +593,14 @@ export async function registerRoutes(
       const endDate = new Date(startDate);
       endDate.setMinutes(endDate.getMinutes() + 10 * 5); // [TEST MODE] 10 months × 5 min/month = 50 min (prod: setMonth +10)
 
+      const totalMintedForPlan = userTokens + adminTokens + levelDistributed + levelToAdmin;
       const plan = await storage.createPaidStakingPlan({
         walletAddress: addr,
         usdtInvested: usdtAmt.toFixed(4),
         buyPriceAtEntry: buyPrice.toFixed(8),
-        totalTokensMinted: mintedTokens.toFixed(8),
+        totalTokensMinted: totalMintedForPlan.toFixed(8),
         userTokens: userTokens.toFixed(8),
-        adminTokens: adminTokens.toFixed(8),
+        adminTokens: (adminTokens + levelToAdmin).toFixed(8),
         dailyRewardUsdt: "0",   // No daily rewards — price appreciation only
         startDate,
         endDate,
@@ -548,10 +622,10 @@ export async function registerRoutes(
         tokenAmount: userTokens.toFixed(8),
         usdtAmount: usdtAmt.toFixed(4),
         priceAtTxn: buyPrice.toFixed(8),
-        note: `Staked $${usdtAmt} USDT @ $${buyPrice.toFixed(8)}/token. ${userTokens.toFixed(2)} tokens locked for 10 months. 4x sell cap = $${(buyPrice * 4).toFixed(8)}/token`,
+        note: `Fixed stake $${usdtAmt} USDT @ $${buyPrice.toFixed(8)}/token. Split: 60% user (${userTokens.toFixed(2)} tokens), 20% levels, 15% liquidity, 5% company. 4x sell cap = $${(buyPrice * 4).toFixed(8)}/token`,
       });
 
-      res.json({ plan, userTokens: userTokens.toFixed(8), adminTokens: adminTokens.toFixed(8), buyPriceUsed: buyPrice.toFixed(8), capPrice: (buyPrice * 4).toFixed(8) });
+      res.json({ plan, userTokens: userTokens.toFixed(8), adminTokens: adminTokens.toFixed(8), levelDistributed: levelDistributed.toFixed(8), buyPriceUsed: buyPrice.toFixed(8), capPrice: (buyPrice * 4).toFixed(8) });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
@@ -574,24 +648,40 @@ export async function registerRoutes(
       }
 
       const { buyPrice } = await getTokenPrice();
-      const tokens = usdtAmt / buyPrice;  // 100% go to user, no lock
+
+      // ── Token distribution on Flexi staking invest ─────────────────────────
+      // From 100% theoretical tokens (usdtAmt / buyPrice):
+      //   15% → liquidity backing (no tokens minted for this portion)
+      //   20% → level rewards across 10 uplines (L1=10%, L2=5%, L3=2%, L4=1%, L5–L6=0.5%, L7–L8=0.3%, L9–L10=0.2%)
+      //    5% → company/admin
+      //   60% → user (added to mainBalance immediately, no lock)
+      const theoreticalTokens = usdtAmt / buyPrice;
+      const userTokens  = theoreticalTokens * 0.60;  // 60% to user
+      const adminTokens = theoreticalTokens * 0.05;  // 5% company
 
       await storage.deductVirtualUsdt(addr, usdtAmt.toString());
 
+      // Distribute 20% level income to 10 uplines (async, non-blocking after deduct)
+      const { distributed: levelDistributed, toAdmin: levelToAdmin } =
+        await distributeStakingInvestLevelIncome(addr, theoreticalTokens, buyPrice);
+
+      // Total minted into circulating supply = user + admin + level tokens
+      const totalMinted = userTokens + adminTokens + levelDistributed + levelToAdmin;
+
       const econ = await storage.getTokenEconomics();
       await storage.updateTokenEconomics({
-        circulatingSupply: (parseFloat(econ.circulatingSupply) + tokens).toFixed(8),
+        circulatingSupply: (parseFloat(econ.circulatingSupply) + totalMinted).toFixed(8),
         liquidity: (parseFloat(econ.liquidity) + usdtAmt).toFixed(8),
       });
 
-      // Add directly to mainBalance (no lock)
-      await storage.addMTokenMainBalance(addr, tokens.toFixed(8));
+      // Add user's 60% directly to mainBalance (no lock)
+      await storage.addMTokenMainBalance(addr, userTokens.toFixed(8));
 
       // Create a free purchase batch for sell-cap tracking (2x cap)
       const batch = await storage.createTokenBatch({
         walletAddress: addr,
-        tokenAmount: tokens.toFixed(8),
-        tokensRemaining: tokens.toFixed(8),
+        tokenAmount: userTokens.toFixed(8),
+        tokensRemaining: userTokens.toFixed(8),
         entryPrice: buyPrice.toFixed(8),
         batchType: "free",
         stakingPlanId: null,
@@ -600,13 +690,13 @@ export async function registerRoutes(
       await storage.logTokenTransaction({
         walletAddress: addr,
         txType: "buy_hold",
-        tokenAmount: tokens.toFixed(8),
+        tokenAmount: userTokens.toFixed(8),
         usdtAmount: usdtAmt.toFixed(4),
         priceAtTxn: buyPrice.toFixed(8),
-        note: `Bought & held ${tokens.toFixed(2)} M-tokens @ $${buyPrice.toFixed(8)}. 2x cap = $${(buyPrice * 2).toFixed(8)}/token`,
+        note: `Flexi stake $${usdtAmt} USDT @ $${buyPrice.toFixed(8)}/token. Split: 60% user (${userTokens.toFixed(2)} tokens), 20% levels, 15% liquidity, 5% company. 2x cap = $${(buyPrice * 2).toFixed(8)}/token`,
       });
 
-      res.json({ tokens: tokens.toFixed(8), buyPriceUsed: buyPrice.toFixed(8), capPrice: (buyPrice * 2).toFixed(8), batch });
+      res.json({ tokens: userTokens.toFixed(8), levelDistributed: levelDistributed.toFixed(8), buyPriceUsed: buyPrice.toFixed(8), capPrice: (buyPrice * 2).toFixed(8), batch });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
