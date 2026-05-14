@@ -28,52 +28,6 @@ interface IMvaultBoardMatrix {
     function getBoardCurrentIndex(uint256 boardLevel) external view returns (uint256);
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// MvaultContract
-//
-// Packages (chosen at activation):
-//   pkg=1  STARTER  $55   → income limit $165  (3×)
-//   pkg=2  PRO      $130  → income limit $390  (3×)
-//
-// Activation:
-//   Chosen pkg price → MvaultToken mints MVT (token keeps 10% for liquidity)
-//   Gross MVT (pre-deduction) is the basis for all splits:
-//     30% → level income   (10 upline levels)
-//     30% → binaryPool     (admin distributes per cycle)
-//     20% → adminPool      (admin free pool)
-//     10% → rank income    (M1–M5 sponsor-tree walk, unqualified → adminPool)
-//     10% → liquidity      (handled by MvaultToken internally)
-//
-// Income limit  = 3 × pkg price per user.
-//   When user sells MVT → USDT first fills income limit → excess to rebirthPool.
-//   Once incomeLimit = 0 all sell proceeds go to rebirthPool.
-//
-// Rebirth:
-//   Requires rebirthPool ≥ user's packagePrice.
-//   On rebirth(subAccount):
-//     • packagePrice deducted from rebirthPool  → funds sub-account activation.
-//     • packagePrice transferred from rebirthPool → credited to main account usdtBalance.
-//     • incomeLimit resets to user's incomeLimitCap.
-//     • Sub-account registered + activated (same distributions).
-//     • Sub-account's level-income sponsor = main account's sponsor
-//       → so sub-account's L1 income goes to the person who referred the main account.
-//     • Sub-account placed in binary tree (BFS from main account for open slot).
-//
-// Level rates (% of gross MVT, sum = 40%):
-//   L1=20%  L2=5%  L3=4%  L4=3%  L5=2%  L6=1%  L7=1%  L8-L15=0.5% each
-//
-// Qualification to receive level income:
-//   L1 → 0 directs   L2–L4 → 2 directs   L5–L7 → 5 directs   L8–L15 → 10 directs
-//
-// Binary distribution (admin, 2-step per cycle):
-//   Step 1 distributeBinaryIncome:  70% to pair matchers; sets powerLegPoints = newPairs×3 (STARTER) or newPairs×5 (PRO)
-//   Step 2 distributePowerLeg:      30% proportional to powerLegPoints; resets points to 0
-//
-// Virtual MVT balance:
-//   All MVT held by this contract, tracked per user.
-//   sellMvt(amount) → burns MVT → USDT routed through income limit / rebirthPool.
-//   withdrawUsdt(amount) → user pulls accumulated USDT balance.
-// ─────────────────────────────────────────────────────────────────────────────
 contract MvaultContract is Ownable, ReentrancyGuard {
 
     // ── External contracts ────────────────────────────────────────────────────
