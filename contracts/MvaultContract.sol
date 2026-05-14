@@ -40,7 +40,7 @@ interface IMvaultBoardMatrix {
 //   Gross MVT (pre-deduction) is the basis for all splits:
 //     30% → level income   (10 upline levels)
 //     30% → binaryPool     (admin distributes per cycle)
-//     30% → adminPool      (admin free pool)
+//     20% → adminPool      (admin free pool)
 //     10% → liquidity      (handled by MvaultToken internally)
 //
 // Income limit  = 3 × pkg price per user.
@@ -91,7 +91,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // ── Pool allocation constants ──────────────────────────────────────────────
     uint256 public constant LEVEL_ALLOC    = 30;          // % of gross MVT → level income (10 levels)
     uint256 public constant BINARY_ALLOC   = 30;          // % of gross MVT → binary pool
-    uint256 public constant ADMIN_ALLOC    = 30;          // % of gross MVT → admin free pool
+    uint256 public constant ADMIN_ALLOC    = 20;          // % of gross MVT → admin free pool
     // Liquidity 10% handled internally by MvaultToken (only 90% minted)
     uint256 public constant BTC_POOL_RATE  = 10;          // % of sell USDT → user BTC pool
 
@@ -545,11 +545,11 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         mvaultToken.addLiquidityAndMint(address(this), pkgPrice);
         uint256 minted = mvaultToken.balanceOf(address(this)) - before; // actual 90%
 
-        // Split on GROSS basis: 30% level + 30% binary + 30% admin + 10% liquidity (in MVT token)
+        // Split on GROSS basis: 30% level + 30% binary + 20% admin + 10% liquidity + 10% reserved (in MVT token)
         uint256 levelAmt  = (grossMvt * LEVEL_ALLOC)  / 100;  // 30%
         uint256 binaryAmt = (grossMvt * BINARY_ALLOC) / 100;  // 30%
-        uint256 adminAmt  = (grossMvt * ADMIN_ALLOC)  / 100;  // 30%
-        // Remaining ~10% (rounding dust) also goes to adminPool
+        uint256 adminAmt  = (grossMvt * ADMIN_ALLOC)  / 100;  // 20%
+        // Remaining ~20% (10% liquidity + 10% reserved) also accumulates as dust → adminPool until reassigned
         uint256 dust = grossMvt - levelAmt - binaryAmt - adminAmt;
 
         binaryPool += binaryAmt;
