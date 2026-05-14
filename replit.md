@@ -17,13 +17,14 @@ M-Vault is a Web3 MLM/DeFi platform for BNB Smart Chain. Users connect MetaMask 
 ## Smart Contracts (BSC Testnet — ACTIVE)
 | Contract | Address |
 |---|---|
-| **MVault Main** | `0x393eDB201A29A2d25673aAB8E57CCC5fd6Fe2866` |
-| **MVT Token** | `0xD56629f4E39Bc23aB3c7262aeddC1bB3C9893c08` |
-| **Board Matrix** | `0xdB45afa66c1BC434977a6956fBFD7f19869f4823` |
+| **MVault Main** | `0xcF110A7D5D2D5e2Df14db910f137A9f6681247d2` |
+| **MVT Token** | `0x248984989669c6e0D817221A934ca899583c3836` |
+| **Board Matrix** | `0xAC6A29Fa016D7bcd0295b64524b007C81aB8E887` |
+| **MvaultStaking** | `0x23168479Bda53409B0ed0CBe434665Fe9B157e91` |
+| **MvaultView** | `0x76C90Aab0FCF2a79c0A8Ea9aCae14Eb6305215b2` |
 | **USDT (testnet)** | `0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3` |
 | **Admin Wallet** | `0x04E8c5B49dE683c5B44eF1269Bd5ee4f338868C4` |
 | **Manager Wallet** | `0x12Fcf3d1084455d3677a110925D73b01F3846750` (DEPLOYER_PRIVATE_KEY) |
-| **MvaultView** | `0x55ff5c62486EB7117dfc0e6988DA728ce87D1912` |
 | **MvaultDistributor** | `0x46B7A3a9f21bC0baf942869d0Ba332fA0C652089` |
 
 ## Contract Size Notes (EIP-170 limit: 24 576 bytes)
@@ -44,8 +45,9 @@ node scripts/deploy-mvault-view.cjs
 
 ## Deploying to VPS
 ```bash
-bash scripts/update-vps.sh <TOKEN_ADDR> <CONTRACT_ADDR> <BOARD_ADDR>
-# Requires VPS_PASSWORD env secret and DEPLOYER_PRIVATE_KEY secret
+bash scripts/update-vps.sh
+# Requires VPS_PASSWORD env secret (password SSH) and DEPLOYER_PRIVATE_KEY secret
+# Note: If VPS_PASSWORD SSH fails, VPS may require key-based auth — set up SSH key or update password.
 ```
 
 ## Environment Variables (VPS .env)

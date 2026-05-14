@@ -16,6 +16,13 @@ interface IncomeProps {
   walletAddress?: string;
 }
 
+function fmtVol(wei: bigint): string {
+  const val = parseFloat(ethers.formatUnits(wei, 18));
+  if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(2)}M`;
+  if (val >= 1_000) return `$${(val / 1_000).toFixed(1)}K`;
+  return `$${val.toFixed(2)}`;
+}
+
 const LEVEL_RATES: { level: number; pct: string; value: string; dirReq: number }[] = [
   { level: 1,  pct: "20%",  value: "$26.00", dirReq: 0 },
   { level: 2,  pct: "5%",   value: "$6.50",  dirReq: 2 },
@@ -66,8 +73,8 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
   const [showCycles, setShowCycles]   = useState(false);
 
   const directCount  = Number(userInfo.directCount);
-  const leftCount    = Number(userInfo.leftSubUsers);
-  const rightCount   = Number(userInfo.rightSubUsers);
+  const leftCount    = fmtVol(userInfo.leftSubUsers);
+  const rightCount   = fmtVol(userInfo.rightSubUsers);
   const newPairs     = Number(binaryPairs.newPairs);
   const matchedPairs = Number(userInfo.matchedPairs);
 

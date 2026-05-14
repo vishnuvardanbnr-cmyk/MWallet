@@ -2,8 +2,16 @@ import { GitBranch, ArrowLeft, ArrowDownLeft, ArrowDownRight, Users, Zap, Trendi
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
+import { ethers } from "ethers";
 import { formatTokenAmount } from "@/lib/contract";
 import type { UserInfo, MvtPrice, BinaryPairs } from "@/hooks/use-web3";
+
+function fmtVol(wei: bigint): string {
+  const val = parseFloat(ethers.formatUnits(wei, 18));
+  if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(2)}M`;
+  if (val >= 1_000) return `$${(val / 1_000).toFixed(1)}K`;
+  return `$${val.toFixed(2)}`;
+}
 
 interface BinaryDetailsProps {
   userInfo: UserInfo;
@@ -15,18 +23,18 @@ interface BinaryDetailsProps {
 export default function BinaryDetails({ userInfo, mvtPrice, binaryPairs, formatAmount }: BinaryDetailsProps) {
   const [, navigate] = useLocation();
 
-  const leftCount = Number(userInfo.leftSubUsers);
-  const rightCount = Number(userInfo.rightSubUsers);
+  const leftVol = userInfo.leftSubUsers;
+  const rightVol = userInfo.rightSubUsers;
   const matchedPairs = Number(userInfo.matchedPairs);
   const powerLegPts = Number(userInfo.powerLegPoints);
   const currentPairs = Number(binaryPairs.currentPairs);
   const newPairs = Number(binaryPairs.newPairs);
   const rebirthCount = Number(userInfo.rebirthCount);
 
-  const stronger = leftCount >= rightCount ? "left" : "right";
-  const weaker = leftCount >= rightCount ? "right" : "left";
-  const strongCount = stronger === "left" ? leftCount : rightCount;
-  const weakCount = weaker === "left" ? leftCount : rightCount;
+  const stronger = leftVol >= rightVol ? "left" : "right";
+  const weaker = leftVol >= rightVol ? "right" : "left";
+  const strongDisplay = fmtVol(stronger === "left" ? leftVol : rightVol);
+  const weakDisplay = fmtVol(weaker === "left" ? leftVol : rightVol);
 
   return (
     <div className="p-4 sm:p-6 space-y-6 relative z-10">
@@ -47,8 +55,8 @@ export default function BinaryDetails({ userInfo, mvtPrice, binaryPairs, formatA
         <div className="glass-card rounded-2xl p-4 text-center" data-testid="card-left-team">
           <ArrowDownLeft className="h-5 w-5 mx-auto text-blue-400 mb-2" />
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Left Team</p>
-          <p className="text-2xl font-bold text-blue-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-left-count">{leftCount}</p>
-          <p className="text-[10px] text-muted-foreground">members</p>
+          <p className="text-2xl font-bold text-blue-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-left-count">{fmtVol(leftVol)}</p>
+          <p className="text-[10px] text-muted-foreground">USDT vol</p>
         </div>
         <div className="glass-card rounded-2xl p-4 text-center" data-testid="card-matched-pairs">
           <GitBranch className="h-5 w-5 mx-auto text-emerald-400 mb-2" />
@@ -59,8 +67,8 @@ export default function BinaryDetails({ userInfo, mvtPrice, binaryPairs, formatA
         <div className="glass-card rounded-2xl p-4 text-center col-span-2 sm:col-span-1" data-testid="card-right-team">
           <ArrowDownRight className="h-5 w-5 mx-auto text-purple-400 mb-2" />
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Right Team</p>
-          <p className="text-2xl font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-right-count">{rightCount}</p>
-          <p className="text-[10px] text-muted-foreground">members</p>
+          <p className="text-2xl font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-right-count">{fmtVol(rightVol)}</p>
+          <p className="text-[10px] text-muted-foreground">USDT vol</p>
         </div>
       </div>
 
@@ -103,11 +111,11 @@ export default function BinaryDetails({ userInfo, mvtPrice, binaryPairs, formatA
         <div className="grid grid-cols-2 gap-3">
           <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
             <p className="text-[10px] text-muted-foreground mb-1 capitalize">{stronger} (power leg)</p>
-            <p className="text-lg font-bold text-yellow-300">{strongCount} members</p>
+            <p className="text-lg font-bold text-yellow-300">{strongDisplay} vol</p>
           </div>
           <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
             <p className="text-[10px] text-muted-foreground mb-1 capitalize">{weaker} (weak leg)</p>
-            <p className="text-lg font-bold text-muted-foreground">{weakCount} members</p>
+            <p className="text-lg font-bold text-muted-foreground">{weakDisplay} vol</p>
           </div>
         </div>
         <div className="mt-3 p-3 rounded-xl bg-yellow-600/[0.06] border border-yellow-600/10">

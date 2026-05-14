@@ -19,6 +19,7 @@ contract MvaultToken is ERC20, Ownable, ReentrancyGuard {
 
     IERC20 public immutable usdtToken;
     address public mvaultContract;
+    address public stakingModule;
 
     uint256 public totalLiquidity;
     uint256 public totalMinted;
@@ -58,7 +59,7 @@ contract MvaultToken is ERC20, Ownable, ReentrancyGuard {
     }
 
     modifier onlyMvault() {
-        if (msg.sender != mvaultContract) revert OnlyMvault();
+        if (msg.sender != mvaultContract && msg.sender != stakingModule) revert OnlyMvault();
         _;
     }
 
@@ -67,6 +68,11 @@ contract MvaultToken is ERC20, Ownable, ReentrancyGuard {
         address old = mvaultContract;
         mvaultContract = _contract;
         emit MvaultContractUpdated(old, _contract);
+    }
+
+    function setStakingModule(address _staking) external onlyOwner {
+        if (_staking == address(0)) revert ZeroAddress();
+        stakingModule = _staking;
     }
 
     /**

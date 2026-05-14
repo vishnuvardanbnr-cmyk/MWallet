@@ -10,6 +10,13 @@ import { ethers } from "ethers";
 
 const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
+function fmtVol(wei: bigint): string {
+  const val = parseFloat(ethers.formatUnits(wei, 18));
+  if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(2)}M`;
+  if (val >= 1_000) return `$${(val / 1_000).toFixed(1)}K`;
+  return `$${val.toFixed(2)}`;
+}
+
 interface DashboardProps {
   userInfo: UserInfo;
   mvtPrice: MvtPrice;
@@ -127,8 +134,8 @@ export default function Dashboard({
   const incomeUsed = incomeCap - incomeLimitNum;
   const incomeProgress = Math.min(100, (incomeUsed / incomeCap) * 100);
 
-  const leftCount = Number(userInfo.leftSubUsers);
-  const rightCount = Number(userInfo.rightSubUsers);
+  const leftCount = fmtVol(userInfo.leftSubUsers);
+  const rightCount = fmtVol(userInfo.rightSubUsers);
   const directCount = Number(userInfo.directCount);
   const currentPairs = Number(binaryPairs.currentPairs);
   const newPairs = Number(binaryPairs.newPairs);

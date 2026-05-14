@@ -18,6 +18,13 @@ const ITEMS_PER_PAGE = 10;
 const MAX_LEVEL_NODES = 200;
 const MAX_LEVELS = 10;
 
+function fmtVol(wei: bigint): string {
+  const val = parseFloat(ethers.formatUnits(wei, 18));
+  if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(2)}M`;
+  if (val >= 1_000) return `$${(val / 1_000).toFixed(1)}K`;
+  return `$${val.toFixed(2)}`;
+}
+
 interface TeamProps {
   userInfo: UserInfo;
   formatAmount: (val: bigint) => string;
@@ -289,8 +296,8 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
   const totalPages   = Math.max(1, Math.ceil(total / ITEMS_PER_PAGE));
   const levelPages   = Math.max(1, Math.ceil(levelMembers.length / LEVEL_PER_PAGE));
   const levelSlice   = levelMembers.slice((levelLevelPage - 1) * LEVEL_PER_PAGE, levelLevelPage * LEVEL_PER_PAGE);
-  const leftCount    = Number(userInfo.leftSubUsers);
-  const rightCount   = Number(userInfo.rightSubUsers);
+  const leftCount    = fmtVol(userInfo.leftSubUsers);
+  const rightCount   = fmtVol(userInfo.rightSubUsers);
   const directCount  = Number(userInfo.directCount);
 
   const getMeta = (addr: string) => memberMetaCache.current.get(addr);
@@ -464,9 +471,9 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
                   </>
                 )}
                 <div className="flex items-center justify-center gap-3 mt-1.5">
-                  <span className="text-[9px] text-blue-400/70">{String(currentNode.leftSubUsers || 0n)} left</span>
+                  <span className="text-[9px] text-blue-400/70">{fmtVol(currentNode.leftSubUsers || 0n)} left</span>
                   <span className="text-muted-foreground/30">·</span>
-                  <span className="text-[9px] text-purple-400/70">{String(currentNode.rightSubUsers || 0n)} right</span>
+                  <span className="text-[9px] text-purple-400/70">{fmtVol(currentNode.rightSubUsers || 0n)} right</span>
                 </div>
               </div>
 

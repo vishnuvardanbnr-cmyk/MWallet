@@ -46,9 +46,9 @@ export const NETWORK = isMainnet ? BSC_MAINNET : BSC_TESTNET;
 
 // ── New MvaultContract + MvaultToken ──────────────────────────────────────────
 export const MVAULT_CONTRACT_ADDRESS =
-  import.meta.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x393eDB201A29A2d25673aAB8E57CCC5fd6Fe2866";
+  import.meta.env.VITE_MVAULT_CONTRACT_ADDRESS || "0xcF110A7D5D2D5e2Df14db910f137A9f6681247d2";
 export const MVT_TOKEN_ADDRESS =
-  import.meta.env.VITE_MVT_TOKEN_ADDRESS || "0xD56629f4E39Bc23aB3c7262aeddC1bB3C9893c08";
+  import.meta.env.VITE_MVT_TOKEN_ADDRESS || "0x248984989669c6e0D817221A934ca899583c3836";
 // USDT token address (same for both old and new contracts)
 export const TOKEN_ADDRESS =
   import.meta.env.VITE_PAYMENT_TOKEN_ADDRESS || "0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3";
@@ -206,13 +206,13 @@ export const MLM_ABI = [
 ];
 
 export const BOARD_HANDLER_ADDRESS =
-  import.meta.env.VITE_BOARD_HANDLER_ADDRESS || "0xcA0Cc4A6236b4Af41E5588B70679DF9E9B8625Dc";
+  import.meta.env.VITE_BOARD_HANDLER_ADDRESS || "0xAC6A29Fa016D7bcd0295b64524b007C81aB8E887";
 
 // MvaultView — read-only helper that re-exposes functions removed from
 // MvaultContract to stay under the EIP-170 24 576-byte limit.
 // Set VITE_MVAULT_VIEW_ADDRESS in .env after deploying MvaultView.sol.
 export const MVAULT_VIEW_ADDRESS =
-  import.meta.env.VITE_MVAULT_VIEW_ADDRESS || "";
+  import.meta.env.VITE_MVAULT_VIEW_ADDRESS || "0x76C90Aab0FCF2a79c0A8Ea9aCae14Eb6305215b2";
 
 export const MVAULT_VIEW_ABI = [
   // Pool balances
