@@ -17,13 +17,14 @@ M-Vault is a Web3 MLM/DeFi platform for BNB Smart Chain. Users connect MetaMask 
 ## Smart Contracts (BSC Testnet — ACTIVE)
 | Contract | Address |
 |---|---|
-| **MVault Main** | `0x164E4c01958c623CeF48C7DF8C66deFbB5eB4f57` |
-| **MVT Token** | `0x80fBC04347c8a163902C9D7E2daE8B2474b01f5e` |
-| **Board Matrix** | `0xcA0Cc4A6236b4Af41E5588B70679DF9E9B8625Dc` |
+| **MVault Main** | `0x393eDB201A29A2d25673aAB8E57CCC5fd6Fe2866` |
+| **MVT Token** | `0xD56629f4E39Bc23aB3c7262aeddC1bB3C9893c08` |
+| **Board Matrix** | `0xdB45afa66c1BC434977a6956fBFD7f19869f4823` |
 | **USDT (testnet)** | `0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3` |
 | **Admin Wallet** | `0x04E8c5B49dE683c5B44eF1269Bd5ee4f338868C4` |
-| **MvaultView** | *(deploy with `node scripts/deploy-mvault-view.cjs`)* |
-| **MvaultDistributor** | *(deploy with `node scripts/deploy-distributor.cjs`)* |
+| **Manager Wallet** | `0x12Fcf3d1084455d3677a110925D73b01F3846750` (DEPLOYER_PRIVATE_KEY) |
+| **MvaultView** | `0x55ff5c62486EB7117dfc0e6988DA728ce87D1912` |
+| **MvaultDistributor** | `0x46B7A3a9f21bC0baf942869d0Ba332fA0C652089` |
 
 ## Contract Size Notes (EIP-170 limit: 24 576 bytes)
 - **MvaultContract.sol**: 24 332 bytes — 244 bytes under the limit

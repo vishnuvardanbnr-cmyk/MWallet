@@ -128,6 +128,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // Distributor module (MvaultDistributor — Merkle-proof claim system)
     address public distributor;
 
+    // Manager — can call setDistributor and run distributions (does not have owner powers)
+    address public manager;
+
     // ── Board Matrix tracking ──────────────────────────────────────────────────
     mapping(address => uint256) public boardEntryCount;
     mapping(address => uint256) public totalBoardRewardsEarned;
@@ -264,7 +267,19 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         stakingModule = IMvaultStaking(_staking);
     }
 
-    function setDistributor(address _distributor) external onlyOwner {
+    // ── Manager role ──────────────────────────────────────────────────────────
+
+    modifier onlyOwnerOrManager() {
+        require(msg.sender == owner() || msg.sender == manager, "Not owner or manager");
+        _;
+    }
+
+    function setManager(address _manager) external onlyOwner {
+        if (_manager == address(0)) revert ZeroAddress();
+        manager = _manager;
+    }
+
+    function setDistributor(address _distributor) external onlyOwnerOrManager {
         if (_distributor == address(0)) revert ZeroAddress();
         distributor = _distributor;
     }

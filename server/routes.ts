@@ -17,7 +17,7 @@ const MLM_READ_ABI = [
   "function getUserInfo(address _user) external view returns (uint256 userId, address sponsor, address binaryParent, address leftChild, address rightChild, uint8 placementSide, uint8 userPackage, uint8 status, uint256 walletBalance, uint256 tempWalletBalance, uint256 totalEarnings, uint256 directReferralCount, uint256 joinedAt)",
 ];
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
-const MLM_CONTRACT_ADDR = process.env.VITE_MVAULT_CONTRACT_ADDRESS || process.env.VITE_CONTRACT_ADDRESS || "0x164E4c01958c623CeF48C7DF8C66deFbB5eB4f57";
+const MLM_CONTRACT_ADDR = process.env.VITE_MVAULT_CONTRACT_ADDRESS || process.env.VITE_CONTRACT_ADDRESS || "0x393eDB201A29A2d25673aAB8E57CCC5fd6Fe2866";
 
 /**
  * Distributes 20% of theoretical tokens to 10 upline levels on staking invest.
