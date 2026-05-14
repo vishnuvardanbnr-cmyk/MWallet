@@ -136,6 +136,7 @@ export const MVAULT_ABI = [
   "event BoardEntered(address indexed user, uint256 boardLevel, uint256 usdtDeducted)",
   "event BoardRewardCredited(address indexed user, uint256 usdtAmount, uint256 boardLevel)",
   // Staking
+  "function stakeFromBalance(uint256 usdtAmount, bool isLocked) external",
   "function stake(uint256 usdtAmount, bool isLocked) external",
   "function unstake(uint256 stakeIndex) external",
   "function convertToLocked(uint256 stakeIndex) external",

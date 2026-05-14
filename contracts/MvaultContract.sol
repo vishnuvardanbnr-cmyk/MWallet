@@ -1278,16 +1278,45 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * @notice Stake USDT.
-     *         100% USDT buys MVT via bonding curve (token internally mints 90% = "gross MVT").
-     *         From gross MVT:
-     *           15% of theoretical (= 15/90 of grossMvt) → level income in MVT to 5 uplines
-     *                                                        (rates: 10/2/1/1/1 per 90 units)
-     *            5% of theoretical (=  5/90 of grossMvt) → admin pool in MVT
-     *           70% of theoretical (= 70/90 of grossMvt) → staked for the user
+     * @notice Stake using USDT held in this contract (from income, unstaking, or deposits).
+     *         No external wallet approval needed — USDT is already in this contract.
+     *         100% USDT → real MVT minted on-chain via bonding curve (token mints 90% = grossMvt).
+     *         From grossMvt:
+     *           60% → staked for the user (real on-chain MVT)
+     *           20% → level income in MVT to 10 uplines
+     *                 (rates: 10%,5%,2%,1%,0.5%,0.5%,0.3%,0.3%,0.2%,0.2% of grossMvt)
+     *            5% → admin pool in MVT
+     *           15% → liquidity backing (stays in contract, price floor support)
      * @param usdtAmount  Must be >= MIN_STAKE_USDT ($50).
      * @param isLocked    false = flexible (2× cap on USDT return, instant unstake)
-     *                    true  = locked  (no cap, 10-month lock, bonus token distribution to uplines)
+     *                    true  = locked  (no cap, 10-month lock)
+     */
+    function stakeFromBalance(uint256 usdtAmount, bool isLocked) external nonReentrant {
+        if (usdtAmount < MIN_STAKE_USDT) revert BelowMinStake();
+        if (!users[msg.sender].isRegistered) revert NotRegistered();
+        if (!users[msg.sender].isActive) revert NotActive();
+        if (users[msg.sender].usdtBalance < usdtAmount) revert InsufficientUsdtBalance();
+
+        // Deduct from user's in-contract USDT balance (USDT already held by this contract)
+        users[msg.sender].usdtBalance -= usdtAmount;
+
+        // Mint real MVT: 100% USDT → bonding curve mints 90% of theoretical = grossMvt
+        usdtToken.approve(address(mvaultToken), usdtAmount);
+        uint256 balBefore = mvaultToken.balanceOf(address(this));
+        mvaultToken.addLiquidityAndMint(address(this), usdtAmount);
+        uint256 grossMvt = mvaultToken.balanceOf(address(this)) - balBefore;
+        if (grossMvt == 0) revert NoMvtMinted();
+
+        _doStakeDistribution(msg.sender, usdtAmount, grossMvt, isLocked);
+    }
+
+    /**
+     * @notice Stake USDT from the user's external wallet.
+     *         Requires prior USDT approval for this contract.
+     *         Same distribution as stakeFromBalance.
+     * @param usdtAmount  Must be >= MIN_STAKE_USDT ($50).
+     * @param isLocked    false = flexible (2× cap on USDT return, instant unstake)
+     *                    true  = locked  (no cap, 10-month lock)
      */
     function stake(uint256 usdtAmount, bool isLocked) external nonReentrant {
         if (usdtAmount < MIN_STAKE_USDT) revert BelowMinStake();
@@ -1297,22 +1326,38 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         bool ok = usdtToken.transferFrom(msg.sender, address(this), usdtAmount);
         if (!ok) revert TransferFailed();
 
-        // 100% USDT → MVT (token mints 90% of theoretical = "gross MVT")
+        // Mint real MVT: 100% USDT → bonding curve mints 90% of theoretical = grossMvt
         usdtToken.approve(address(mvaultToken), usdtAmount);
         uint256 balBefore = mvaultToken.balanceOf(address(this));
         mvaultToken.addLiquidityAndMint(address(this), usdtAmount);
         uint256 grossMvt = mvaultToken.balanceOf(address(this)) - balBefore;
         if (grossMvt == 0) revert NoMvtMinted();
 
-        // Level income in MVT: rates [10,2,1,1,1] per 90 units of grossMvt (sums to 15/90).
-        // Credited to sponsors' virtual MVT balance — subject to income limit when they sell.
-        // Unqualified upline shares accumulate to levelToAdmin (MVT).
-        uint8[5] memory levelRates = [10, 2, 1, 1, 1];
-        address cur = users[msg.sender].sponsor;
+        _doStakeDistribution(msg.sender, usdtAmount, grossMvt, isLocked);
+    }
+
+    /**
+     * @dev Core staking distribution logic shared by stake() and stakeFromBalance().
+     *      From grossMvt (90% of theoretical):
+     *        60% → staked MVT for user
+     *        20% → level income across 10 uplines (unqualified → adminPool)
+     *         5% → adminPool
+     *        15% → liquidity backing (stays in contract)
+     */
+    function _doStakeDistribution(
+        address staker,
+        uint256 usdtAmount,
+        uint256 grossMvt,
+        bool isLocked
+    ) internal {
+        // 20% of grossMvt → 10 upline levels
+        // Rates (in units of 1000 = 100%): 100,50,20,10,5,5,3,3,2,2  → sum=200 = 20%
+        uint256[10] memory levelRates = [uint256(100), 50, 20, 10, 5, 5, 3, 3, 2, 2];
+        address cur = users[staker].sponsor;
         uint256 levelDistributed = 0;
         uint256 levelToAdmin     = 0;
-        for (uint8 i = 0; i < 5; i++) {
-            uint256 share = grossMvt * levelRates[i] / 90;
+        for (uint8 i = 0; i < 10; i++) {
+            uint256 share = grossMvt * levelRates[i] / 1000;
             if (share == 0) {
                 if (cur != address(0)) cur = users[cur].sponsor;
                 continue;
@@ -1323,23 +1368,26 @@ contract MvaultContract is Ownable, ReentrancyGuard {
                 users[cur].mvtBalance    += share;
                 users[cur].totalReceived += share;
                 levelDistributed         += share;
-                emit StakeLevelIncomePaid(cur, msg.sender, i + 1, share);
-                _recordTx(cur, TX_LEVEL_INCOME, share, i + 1, msg.sender);
+                emit StakeLevelIncomePaid(cur, staker, i + 1, share);
+                _recordTx(cur, TX_LEVEL_INCOME, share, i + 1, staker);
             }
-            cur = users[cur].sponsor;
+            if (cur != address(0)) cur = users[cur].sponsor;
         }
 
-        // Admin alloc: 5/90 of grossMvt + any unqualified level shares (kept as MVT)
-        uint256 adminAmt = grossMvt * 5 / 90;
+        // 5% → adminPool + any unqualified level shares
+        uint256 adminAmt = grossMvt * 5 / 100;
         adminPool += adminAmt + levelToAdmin;
 
-        // Staked: grossMvt minus all level alloc (15/90) and admin alloc (5/90) = 70/90
+        // 15% → liquidity backing (stays in contract as price floor, not distributed)
+        uint256 liquidityAmt = grossMvt * 15 / 100;
+
+        // 60% → staked for user (grossMvt - 20% levels - 5% admin - 15% liquidity)
         uint256 levelTotal = levelDistributed + levelToAdmin;
-        uint256 stakedMvt  = grossMvt - levelTotal - adminAmt;
+        uint256 stakedMvt  = grossMvt - levelTotal - adminAmt - liquidityAmt;
         if (stakedMvt == 0) revert NoMvtMinted();
 
-        uint256 stakeIndex = _stakes[msg.sender].length;
-        _stakes[msg.sender].push(StakePosition({
+        uint256 stakeIndex = _stakes[staker].length;
+        _stakes[staker].push(StakePosition({
             mvtAmount:    stakedMvt,
             usdtInvested: usdtAmount,
             stakedAt:     block.timestamp,
@@ -1347,8 +1395,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
             active:       true
         }));
 
-        emit Staked(msg.sender, stakeIndex, usdtAmount, stakedMvt, isLocked);
-        _recordTx(msg.sender, TX_STAKE, usdtAmount, 0, address(0));
+        emit Staked(staker, stakeIndex, usdtAmount, stakedMvt, isLocked);
+        _recordTx(staker, TX_STAKE, usdtAmount, 0, address(0));
     }
 
     /**

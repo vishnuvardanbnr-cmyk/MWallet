@@ -575,12 +575,18 @@ export function useWeb3() {
 
   // ── Staking ─────────────────────────────────────────────────────────────────
 
-  const stakeUsdt = useCallback(async (usdtAmount: string, isLocked: boolean) => {
+  const stakeUsdt = useCallback(async (usdtAmount: string, isLocked: boolean, useContractBalance = false) => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
     const amountBn = ethers.parseUnits(usdtAmount, 18);
-    const tx = await contract.stake(amountBn, isLocked);
-    await tx.wait();
+    if (useContractBalance) {
+      // Uses USDT already in the contract — no wallet approval needed
+      const tx = await contract.stakeFromBalance(amountBn, isLocked, { gasLimit: 600_000 });
+      await tx.wait();
+    } else {
+      const tx = await contract.stake(amountBn, isLocked, { gasLimit: 600_000 });
+      await tx.wait();
+    }
     await fetchUserData();
   }, [getSigner, fetchUserData]);
 

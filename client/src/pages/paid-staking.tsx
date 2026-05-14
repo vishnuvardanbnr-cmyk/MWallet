@@ -20,7 +20,7 @@ interface StakePosition {
 
 interface Props {
   account: string;
-  stakeUsdt?: (usdtAmount: string, isLocked: boolean) => Promise<void>;
+  stakeUsdt?: (usdtAmount: string, isLocked: boolean, useContractBalance?: boolean) => Promise<void>;
   unstakePosition?: (stakeIndex: number) => Promise<void>;
   convertStakeToLocked?: (stakeIndex: number) => Promise<void>;
   getActiveStakesOnChain?: (user: string) => Promise<StakePosition[]>;
@@ -28,10 +28,14 @@ interface Props {
   tokenDecimals?: number;
 }
 
-const LEVEL_RATES      = [10, 2, 1, 1, 1];
-const LOCK_DURATION_S  = 300 * 24 * 60 * 60; // 300 days in seconds
-const FLEX_CAP_MULT    = 2;
-const LOCKED_FEE_RATES = [5, 2, 1, 1, 1];
+// New 10-level distribution: rates as % of grossMvt (sums to 20%)
+const STAKE_LEVEL_RATES    = [10, 5, 2, 1, 0.5, 0.5, 0.3, 0.3, 0.2, 0.2];
+const STAKE_USER_PCT       = 60;
+const STAKE_ADMIN_PCT      = 5;
+const STAKE_LIQUIDITY_PCT  = 15;
+const LOCK_DURATION_S      = 300 * 24 * 60 * 60; // 300 days in seconds
+const FLEX_CAP_MULT        = 2;
+const LOCKED_FEE_RATES     = [5, 2, 1, 1, 1];
 
 function fmt(n: number, d = 2) {
   return n.toLocaleString(undefined, { maximumFractionDigits: d, minimumFractionDigits: d });
@@ -49,17 +53,19 @@ export default function PaidStakingPage({
 }: Props) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
-  const [activeTab, setActiveTab]         = useState<"flexible" | "locked">("flexible");
-  const [usdtInput, setUsdtInput]         = useState("");
-  const [staking, setStaking]             = useState(false);
-  const [approvingUsdt, setApprovingUsdt] = useState(false);
+  const [activeTab, setActiveTab]             = useState<"flexible" | "locked">("flexible");
+  const [stakeSource, setStakeSource]         = useState<"wallet" | "balance">("wallet");
+  const [usdtInput, setUsdtInput]             = useState("");
+  const [staking, setStaking]                 = useState(false);
+  const [approvingUsdt, setApprovingUsdt]     = useState(false);
   const [unstakingIndex, setUnstakingIndex]   = useState<number | null>(null);
   const [convertingIndex, setConvertingIndex] = useState<number | null>(null);
-  const [positions, setPositions]         = useState<StakePosition[]>([]);
-  const [loadingPos, setLoadingPos]       = useState(false);
-  const [usdtAllowance, setUsdtAllowance] = useState<bigint>(0n);
-  const [walletUsdt, setWalletUsdt]       = useState<bigint>(0n);
-  const [expandedIndex, setExpandedIndex] = useState<number | null>(null);
+  const [positions, setPositions]             = useState<StakePosition[]>([]);
+  const [loadingPos, setLoadingPos]           = useState(false);
+  const [usdtAllowance, setUsdtAllowance]     = useState<bigint>(0n);
+  const [walletUsdt, setWalletUsdt]           = useState<bigint>(0n);
+  const [contractUsdt, setContractUsdt]       = useState<bigint>(0n);
+  const [expandedIndex, setExpandedIndex]     = useState<number | null>(null);
 
   const [buyPrice,  setBuyPrice]  = useState(0);
   const [sellPrice, setSellPrice] = useState(0);
@@ -93,12 +99,16 @@ export default function PaidStakingPage({
     try {
       const provider = new ethers.BrowserProvider((window as any).ethereum);
       const usdt = getTokenContract(provider);
-      const [allow, bal] = await Promise.all([
+      const mvault = getMvaultContract(provider);
+      const [allow, bal, info] = await Promise.all([
         usdt.allowance(account, MVAULT_CONTRACT_ADDRESS),
         usdt.balanceOf(account),
+        mvault.getUserInfo(account),
       ]);
       setUsdtAllowance(allow as bigint);
       setWalletUsdt(bal as bigint);
+      // getUserInfo returns usdtBalance at index 14
+      setContractUsdt(info[14] as bigint);
     } catch {}
   }, [account]);
 
@@ -106,13 +116,22 @@ export default function PaidStakingPage({
 
   // ── Derived values ──────────────────────────────────────────────────────────
   const usdtAmt      = parseFloat(usdtInput) || 0;
-  const levelIncomes = LEVEL_RATES.map(r => (usdtAmt * r) / 100);
-  const totalLevPct  = LEVEL_RATES.reduce((a, b) => a + b, 0); // 15%
-  const forTokens    = usdtAmt * (1 - totalLevPct / 100);      // 85%
-  const estMvt       = buyPrice > 0 ? forTokens / buyPrice : 0;
-  const amountBn     = usdtAmt > 0 ? (() => { try { return ethers.parseUnits(usdtInput || "0", 18); } catch { return 0n; } })() : 0n;
-  const needsApproval = usdtAllowance < amountBn;
   const walletBal    = parseFloat(formatTokenAmount(walletUsdt, tokenDecimals));
+  const contractBal  = parseFloat(formatTokenAmount(contractUsdt, tokenDecimals));
+  const activeBal    = stakeSource === "balance" ? contractBal : walletBal;
+
+  // New distribution: grossMvt = 90% of theoretical; user gets 60% of grossMvt
+  // grossMvt ≈ usdtAmt / buyPrice * 0.9 (contract mints at bonding curve)
+  const grossMvt     = buyPrice > 0 ? (usdtAmt / buyPrice) * 0.9 : 0;
+  const levelIncomes = STAKE_LEVEL_RATES.map(r => (grossMvt * r) / 100);
+  const totalLevPct  = STAKE_LEVEL_RATES.reduce((a, b) => a + b, 0); // 20% of grossMvt
+  const userMvt      = grossMvt * STAKE_USER_PCT / 100;              // 60% of grossMvt
+  const adminMvt     = grossMvt * STAKE_ADMIN_PCT / 100;             // 5% of grossMvt
+  const liquidityMvt = grossMvt * STAKE_LIQUIDITY_PCT / 100;         // 15% of grossMvt
+  const estMvt       = userMvt;                                       // what user receives
+
+  const amountBn      = usdtAmt > 0 ? (() => { try { return ethers.parseUnits(usdtInput || "0", 18); } catch { return 0n; } })() : 0n;
+  const needsApproval = stakeSource === "wallet" && usdtAllowance < amountBn;
 
   const totStakedMvt  = positions.reduce((s, p) => s + parseFloat(formatTokenAmount(p.mvtAmount,    tokenDecimals)), 0);
   const totStakedUsdt = positions.reduce((s, p) => s + parseFloat(formatTokenAmount(p.usdtInvested, tokenDecimals)), 0);
@@ -164,11 +183,12 @@ export default function PaidStakingPage({
 
   const handleStake = async () => {
     if (!stakeUsdt) return;
-    if (usdtAmt < 50)         { toast({ title: "Min $50 USDT", variant: "destructive" }); return; }
-    if (usdtAmt > walletBal)  { toast({ title: "Insufficient Balance", variant: "destructive" }); return; }
+    if (usdtAmt < 50)            { toast({ title: "Min $50 USDT", variant: "destructive" }); return; }
+    if (usdtAmt > activeBal)     { toast({ title: "Insufficient Balance", variant: "destructive" }); return; }
+    const useContractBalance = stakeSource === "balance";
     setStaking(true);
     try {
-      await stakeUsdt(usdtInput, activeTab === "locked");
+      await stakeUsdt(usdtInput, activeTab === "locked", useContractBalance);
       toast({ title: "Staked!", description: `$${fmt(usdtAmt)} USDT → ~${fmt(estMvt)} MVT (${activeTab})` });
       setUsdtInput("");
       await loadPositions();
@@ -225,12 +245,18 @@ export default function PaidStakingPage({
       </div>
 
       {/* Stats */}
-      <div className="grid grid-cols-3 gap-3 slide-in" style={{ animationDelay: "0.05s" }}>
+      <div className="grid grid-cols-4 gap-3 slide-in" style={{ animationDelay: "0.05s" }}>
         <div className="glass-card rounded-xl p-3 text-center">
           <DollarSign className="h-4 w-4 mx-auto text-emerald-400 mb-1" />
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">Wallet USDT</p>
           <p className="text-sm font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }}
             data-testid="text-wallet-usdt">${fmt(walletBal)}</p>
+        </div>
+        <div className="glass-card rounded-xl p-3 text-center">
+          <Shield className="h-4 w-4 mx-auto text-cyan-400 mb-1" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">M-Vault Balance</p>
+          <p className="text-sm font-bold text-cyan-400" style={{ fontFamily: "var(--font-display)" }}
+            data-testid="text-contract-usdt">${fmt(contractBal)}</p>
         </div>
         <div className="glass-card rounded-xl p-3 text-center">
           <Coins className="h-4 w-4 mx-auto text-yellow-300 mb-1" />
@@ -304,15 +330,49 @@ export default function PaidStakingPage({
               <p><strong className="text-amber-300">Flexible Staking:</strong> Unstake anytime, no lock.</p>
               <p>• On unstake: 5% MVT → direct sponsor; 95% sold for USDT.</p>
               <p className="font-semibold text-amber-400">• 2× sell cap: max USDT = 2× your invested amount. Excess → admin.</p>
-              <p className="text-emerald-400/80">• USDT proceeds are credited to your Wallet balance — withdraw from the Wallet page.</p>
+              <p className="text-emerald-400/80">• USDT proceeds credited to your Wallet balance — withdraw from the Wallet page.</p>
             </>
           ) : (
             <>
               <p><strong className="text-violet-300">Locked Staking:</strong> 10-month lock. Unstake after 300 days.</p>
               <p>• On unstake: 5%/2%/1%/1%/1% MVT → 5 sponsor levels; 90% sold for USDT.</p>
               <p className="font-semibold text-violet-400">• No sell cap: receive full sell value of your tokens.</p>
-              <p className="text-emerald-400/80">• USDT proceeds are credited to your Wallet balance — withdraw from the Wallet page.</p>
+              <p className="text-emerald-400/80">• USDT proceeds credited to your Wallet balance — withdraw from the Wallet page.</p>
             </>
+          )}
+        </div>
+
+        {/* Funding source toggle */}
+        <div className="space-y-2">
+          <label className="text-[11px] text-muted-foreground uppercase tracking-wider">Fund from</label>
+          <div className="flex rounded-xl bg-white/[0.03] p-1 gap-1">
+            <button
+              onClick={() => setStakeSource("wallet")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold transition-all ${
+                stakeSource === "wallet"
+                  ? "bg-emerald-500/15 text-emerald-300 border border-emerald-500/20"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              data-testid="tab-source-wallet">
+              <DollarSign className="h-3.5 w-3.5" />
+              Wallet USDT <span className="text-[10px] opacity-70">(${fmt(walletBal)})</span>
+            </button>
+            <button
+              onClick={() => setStakeSource("balance")}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 rounded-lg text-xs font-semibold transition-all ${
+                stakeSource === "balance"
+                  ? "bg-cyan-500/15 text-cyan-300 border border-cyan-500/20"
+                  : "text-muted-foreground hover:text-foreground"
+              }`}
+              data-testid="tab-source-balance">
+              <Shield className="h-3.5 w-3.5" />
+              M-Vault Balance <span className="text-[10px] opacity-70">(${fmt(contractBal)})</span>
+            </button>
+          </div>
+          {stakeSource === "balance" && (
+            <p className="text-[10px] text-cyan-400/80 flex items-center gap-1">
+              <CheckCircle className="h-3 w-3" /> No wallet approval needed — uses your in-contract USDT
+            </p>
           )}
         </div>
 
@@ -328,7 +388,7 @@ export default function PaidStakingPage({
               className="flex-1 bg-transparent text-sm font-bold outline-none placeholder:text-muted-foreground/30"
               data-testid="input-usdt-amount"
             />
-            <button onClick={() => setUsdtInput(Math.floor(walletBal).toString())}
+            <button onClick={() => setUsdtInput(Math.floor(activeBal).toString())}
               className="text-[10px] text-yellow-300 font-semibold uppercase px-2 py-1 rounded-md bg-yellow-600/10 hover:bg-yellow-600/15 transition-colors shrink-0"
               data-testid="button-max-stake">MAX</button>
           </div>
@@ -343,31 +403,36 @@ export default function PaidStakingPage({
         {usdtAmt >= 50 && (
           <div className="space-y-3 p-4 rounded-xl bg-white/[0.02] border border-white/[0.05]"
             data-testid="card-stake-preview">
-            <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Breakdown</p>
+            <p className="text-[11px] text-muted-foreground uppercase tracking-wider font-medium">Distribution (of minted MVT)</p>
 
             <div className="space-y-1.5">
-              <p className="text-[10px] text-muted-foreground mb-1.5">Level Income (paid now in USDT to uplines)</p>
-              {LEVEL_RATES.map((rate, i) => (
+              <p className="text-[10px] text-muted-foreground mb-1.5">Level Income → 10 uplines (in MVT)</p>
+              {STAKE_LEVEL_RATES.map((rate, i) => (
                 <div key={i} className="flex items-center justify-between text-xs">
                   <span className="text-muted-foreground">L{i + 1} ({rate}%)</span>
-                  <span className="font-medium text-emerald-400">${fmt(levelIncomes[i], 4)}</span>
+                  <span className="font-medium text-emerald-400">~{fmt(levelIncomes[i], 4)} MVT</span>
                 </div>
               ))}
               <div className="h-px bg-white/[0.06] my-1" />
               <div className="flex justify-between text-xs font-semibold">
-                <span className="text-muted-foreground">Level total</span>
-                <span className="text-emerald-400">${fmt(usdtAmt * totalLevPct / 100, 4)} ({totalLevPct}%)</span>
+                <span className="text-muted-foreground">Level total ({totalLevPct}%)</span>
+                <span className="text-emerald-400">~{fmt(grossMvt * totalLevPct / 100, 4)} MVT</span>
               </div>
             </div>
             <div className="h-px bg-white/[0.06]" />
             <div className="space-y-1.5">
               <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">For token purchase (85%)</span>
-                <span className="font-medium">${fmt(forTokens, 4)}</span>
+                <span className="text-muted-foreground">Admin pool (5%)</span>
+                <span className="font-medium text-red-400/80">~{fmt(adminMvt, 4)} MVT</span>
               </div>
               <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Estimated MVT @ ${buyPrice.toFixed(6)}</span>
-                <span className="font-bold text-yellow-300">~{fmt(estMvt, 2)} MVT</span>
+                <span className="text-muted-foreground">Liquidity backing (15%)</span>
+                <span className="font-medium text-blue-400/80">~{fmt(liquidityMvt, 4)} MVT</span>
+              </div>
+              <div className="h-px bg-white/[0.06] my-1" />
+              <div className="flex justify-between text-xs font-bold">
+                <span className="text-yellow-300">You receive (60%)</span>
+                <span className="text-yellow-300">~{fmt(estMvt, 4)} MVT</span>
               </div>
               {activeTab === "flexible" && (
                 <div className="flex justify-between text-xs">
@@ -394,7 +459,7 @@ export default function PaidStakingPage({
             {approvingUsdt ? "Approving..." : "Approve USDT First"}
           </button>
         ) : (
-          <button onClick={handleStake} disabled={staking || usdtAmt < 50 || usdtAmt > walletBal}
+          <button onClick={handleStake} disabled={staking || usdtAmt < 50 || usdtAmt > activeBal}
             className={`w-full py-3.5 px-6 rounded-xl font-bold text-sm transition-all flex items-center justify-center gap-2 disabled:opacity-50 ${
               activeTab === "flexible"
                 ? "glow-button text-white"
