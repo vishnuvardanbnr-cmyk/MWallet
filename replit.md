@@ -23,6 +23,7 @@ M-Vault is a Web3 MLM/DeFi platform for BNB Smart Chain. Users connect MetaMask 
 | **USDT (testnet)** | `0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3` |
 | **Admin Wallet** | `0x04E8c5B49dE683c5B44eF1269Bd5ee4f338868C4` |
 | **MvaultView** | *(deploy with `node scripts/deploy-mvault-view.cjs`)* |
+| **MvaultDistributor** | *(deploy with `node scripts/deploy-distributor.cjs`)* |
 
 ## Contract Size Notes (EIP-170 limit: 24 576 bytes)
 - **MvaultContract.sol**: 24 332 bytes — 244 bytes under the limit

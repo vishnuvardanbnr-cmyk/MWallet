@@ -1,5 +1,5 @@
 import { sql } from "drizzle-orm";
-import { pgTable, text, varchar, serial, integer, boolean, numeric, timestamp } from "drizzle-orm/pg-core";
+import { pgTable, text, varchar, serial, integer, boolean, numeric, timestamp, uniqueIndex } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -280,6 +280,33 @@ export const musdtOverrideIncome = pgTable("musdt_override_income", {
 });
 
 export type MusdtOverrideIncome = typeof musdtOverrideIncome.$inferSelect;
+
+// ── Merkle Distribution ───────────────────────────────────────────────────────
+
+export const distributionCycles = pgTable("distribution_cycles", {
+  cycle:       integer("cycle").primaryKey(),
+  merkleRoot:  varchar("merkle_root", { length: 66 }).notNull(),
+  totalPool:   varchar("total_pool",  { length: 78 }).notNull(),
+  committedAt: timestamp("committed_at").notNull().defaultNow(),
+  expiresAt:   timestamp("expires_at").notNull(),
+  txHash:      varchar("tx_hash", { length: 70 }),
+  reclaimed:   boolean("reclaimed").notNull().default(false),
+});
+export type DistributionCycle = typeof distributionCycles.$inferSelect;
+
+export const distributionProofs = pgTable("distribution_proofs", {
+  id:             serial("id").primaryKey(),
+  cycle:          integer("cycle").notNull(),
+  walletAddress:  varchar("wallet_address", { length: 42 }).notNull(),
+  binaryShare:    varchar("binary_share",    { length: 78 }).notNull(),
+  powerLegShare:  varchar("power_leg_share", { length: 78 }).notNull(),
+  newMatchedVol:  varchar("new_matched_vol", { length: 78 }).notNull(),
+  newPowerLegPts: varchar("new_power_leg_pts", { length: 78 }).notNull(),
+  proof:          text("proof").array().notNull(),
+}, (t) => [
+  uniqueIndex("dist_proof_cycle_wallet_idx").on(t.cycle, t.walletAddress),
+]);
+export type DistributionProof = typeof distributionProofs.$inferSelect;
 
 export interface HardwareProduct {
   id: string;

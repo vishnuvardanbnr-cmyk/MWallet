@@ -75,8 +75,7 @@ export const MVAULT_ABI = [
   "error ZeroAddress()",
   "error ZeroAmount()",
   "error TransferFailed()",
-  "error BinaryNotDistributed()",
-  "error BinaryAlreadyDistributed()",
+  "error NotDistributor()",
   "error BoardHandlerNotSet()",
   "error InsufficientBtcPoolForBoard()",
   "error EmptyPool()",
@@ -107,6 +106,8 @@ export const MVAULT_ABI = [
   "function totalUsers() view returns (uint256)",
   "function boardHandler() view returns (address)",
   "function stakingModule() view returns (address)",
+  "function distributor() view returns (address)",
+  "function setDistributor(address _distributor) external",
   // Views
   "function getBtcPoolInfo(address u) view returns (uint256 btcPoolBalance, uint256 totalBtcEarned)",
   "function canRebirth(address user) view returns (bool eligible, uint256 poolBalance)",
@@ -322,6 +323,29 @@ export function getMvaultViewContract(signerOrProvider: ethers.Signer | ethers.P
   return new ethers.Contract(MVAULT_VIEW_ADDRESS, MVAULT_VIEW_ABI, signerOrProvider);
 }
 
+// ── MvaultDistributor ─────────────────────────────────────────────────────────
+export const DISTRIBUTOR_ADDRESS: string =
+  import.meta.env.VITE_DISTRIBUTOR_ADDRESS || "";
+
+export const DISTRIBUTOR_ABI = [
+  "error AlreadyClaimed()",
+  "error InvalidProof()",
+  "error NothingToReclaim()",
+  "error ClaimWindowOpen()",
+  "error PoolMismatch()",
+  "function currentCycle() view returns (uint256)",
+  "function hasClaimed(uint256 cycle, address user) view returns (bool)",
+  "function distributions(uint256 cycle) view returns (bytes32 root, uint256 totalPool, uint256 claimedTotal, uint256 committedAt, bool reclaimed)",
+  "function claimDistribution(uint256 cycle, uint256 binaryShare, uint256 powerLegShare, uint256 newMatchedVol, uint256 newPowerLegPts, bytes32[] calldata proof) external",
+  "function commitDistribution(bytes32 root, uint256 totalPool) external",
+  "function reclaimExpired(uint256 cycle) external",
+];
+
+export function getMvaultDistributorContract(signerOrProvider: ethers.Signer | ethers.Provider) {
+  if (!DISTRIBUTOR_ADDRESS) throw new Error("VITE_DISTRIBUTOR_ADDRESS not configured — deploy MvaultDistributor first");
+  return new ethers.Contract(DISTRIBUTOR_ADDRESS, DISTRIBUTOR_ABI, signerOrProvider);
+}
+
 export function getDepositVaultContract(signerOrProvider: ethers.Signer | ethers.Provider) {
   return new ethers.Contract(DEPOSIT_VAULT_ADDRESS, BOARD_HANDLER_ABI, signerOrProvider);
 }
@@ -359,10 +383,15 @@ const CONTRACT_ERROR_MESSAGES: Record<string, string> = {
   ZeroAddress:                "Invalid address provided.",
   ZeroAmount:                 "Amount must be greater than zero.",
   TransferFailed:             "Token transfer failed. Check your balance and approval.",
-  BinaryNotDistributed:       "Binary income not yet distributed by admin.",
-  BinaryAlreadyDistributed:   "Binary income already distributed.",
+  NotDistributor:             "Only the distributor contract can call this function.",
   BoardHandlerNotSet:         "Board module not configured yet.",
   InsufficientBtcPoolForBoard:"Insufficient BTC pool balance to enter the board.",
+  // MvaultDistributor errors
+  AlreadyClaimed:             "You have already claimed your distribution for this cycle.",
+  InvalidProof:               "Invalid Merkle proof — proof may be stale or wallet mismatch.",
+  NothingToReclaim:           "Nothing to reclaim — claim window is still open or pool is empty.",
+  ClaimWindowOpen:            "Claim window is still open; wait for expiry to reclaim.",
+  PoolMismatch:               "Distribution pool amount does not match committed total.",
 };
 
 export function decodeContractError(err: any): string {

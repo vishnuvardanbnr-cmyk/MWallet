@@ -1,25 +1,32 @@
 /**
- * Binary & Power Leg Auto-Distributor (off-chain computation)
+ * Merkle-proof Binary & Power-Leg Distributor
  *
- * New contract uses applyBinaryDistribution / applyPowerLegDistribution which
- * require the admin to pre-compute shares off-chain, then submit them in a
- * single transaction.
- *
- * Step 1: Read all users from chain, compute binary shares, call applyBinaryDistribution
- * Step 2: Read power leg points from chain, compute shares, call applyPowerLegDistribution
+ * Flow:
+ *   1. Read all users from chain, compute binary + power-leg shares (same math as before)
+ *   2. Build a StandardMerkleTree where each leaf encodes:
+ *      (cycle, userAddress, binaryShare, powerLegShare, newMatchedVol, newPowerLegPts)
+ *   3. Call MvaultDistributor.commitDistribution(root, totalPool) — one tx, locks pool
+ *   4. Save all per-user proofs to the DB (users fetch via GET /api/distribution/proof/:address)
+ *   5. Users self-claim on-chain with their proof — admin cannot alter payouts after commit
  *
  * Requires env:
- *   DEPLOYER_PRIVATE_KEY   — wallet that is the contract owner/admin
- *   VITE_MVAULT_CONTRACT_ADDRESS (optional override, falls back to hardcoded)
- *   VITE_BSC_NETWORK       — "mainnet" | "testnet" (default: testnet)
+ *   DEPLOYER_PRIVATE_KEY              — wallet that is owner of MvaultDistributor
+ *   VITE_MVAULT_CONTRACT_ADDRESS      — MvaultContract address
+ *   VITE_DISTRIBUTOR_ADDRESS          — MvaultDistributor address
+ *   VITE_BSC_NETWORK                  — "mainnet" | "testnet" (default: testnet)
  */
 
 import { ethers } from "ethers";
+import { StandardMerkleTree } from "@openzeppelin/merkle-tree";
 import { log } from "./index";
+import { storage } from "./storage";
 
 const MVAULT_CONTRACT_ADDRESS =
   process.env.VITE_MVAULT_CONTRACT_ADDRESS ||
   "0x164E4c01958c623CeF48C7DF8C66deFbB5eB4f57";
+
+const DISTRIBUTOR_ADDRESS =
+  process.env.VITE_DISTRIBUTOR_ADDRESS || "";
 
 const RPC_TESTNET = [
   "https://bsc-testnet-rpc.publicnode.com",
@@ -33,35 +40,27 @@ const RPC_MAINNET = [
 const isMainnet = process.env.VITE_BSC_NETWORK === "mainnet";
 const RPC_LIST  = isMainnet ? RPC_MAINNET : RPC_TESTNET;
 
-const DISTRIBUTION_ABI = [
-  // Public state getters
+const MVAULT_ABI = [
   "function binaryPool() view returns (uint256)",
-  "function reservePool() view returns (uint256)",
-  "function adminPool() view returns (uint256)",
   "function totalUsers() view returns (uint256)",
   "function allUsers(uint256) view returns (address)",
-  // Full user struct
   "function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 matchedVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 powerLegPoints, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, string displayName, string email, string phone, string country, bool profileSet)",
-  // Distribution functions (new API)
-  "function applyBinaryDistribution(address[] users_arr, uint256[] shares, uint256[] powerLegPts, uint256[] newMatchedVols) external",
-  "function applyPowerLegDistribution(address[] users_arr, uint256[] shares, uint256 adminLeftover) external",
 ];
 
-// How often to attempt distribution (default: every 24 hours)
-const INTERVAL_MS = parseInt(process.env.DISTRIBUTION_INTERVAL_MS || "") || 24 * 60 * 60 * 1000;
+const DISTRIBUTOR_ABI = [
+  "function currentCycle() view returns (uint256)",
+  "function commitDistribution(bytes32 root, uint256 totalPool) external",
+];
 
-// Minimum binary pool (in MVT wei) required before distributing
+const INTERVAL_MS = parseInt(process.env.DISTRIBUTION_INTERVAL_MS || "") || 24 * 60 * 60 * 1000;
 const MIN_POOL_WEI = ethers.parseUnits("1", 18);
+const CLAIM_WINDOW_DAYS = 60;
 
 let isRunning = false;
 
 function getProvider(): ethers.JsonRpcProvider {
   for (const rpc of RPC_LIST) {
-    try {
-      return new ethers.JsonRpcProvider(rpc);
-    } catch {
-      continue;
-    }
+    try { return new ethers.JsonRpcProvider(rpc); } catch { continue; }
   }
   return new ethers.JsonRpcProvider(RPC_LIST[0]);
 }
@@ -78,33 +77,33 @@ export async function runDistribution(): Promise<void> {
     return;
   }
 
+  if (!DISTRIBUTOR_ADDRESS) {
+    log("VITE_DISTRIBUTOR_ADDRESS not set — skipping distribution", "distributor");
+    return;
+  }
+
   isRunning = true;
-  log("Starting binary & power leg distribution cycle…", "distributor");
+  log("Starting Merkle binary & power-leg distribution cycle…", "distributor");
 
   try {
     const provider = getProvider();
     const signer   = new ethers.Wallet(privateKey, provider);
-    const contract = new ethers.Contract(MVAULT_CONTRACT_ADDRESS, DISTRIBUTION_ABI, signer);
+    const mvault   = new ethers.Contract(MVAULT_CONTRACT_ADDRESS, MVAULT_ABI, signer);
+    const dist     = new ethers.Contract(DISTRIBUTOR_ADDRESS, DISTRIBUTOR_ABI, signer);
 
     // ── Read pool state ────────────────────────────────────────────────────────
-    const [binaryPool, totalUsersN] = await Promise.all([
-      contract.binaryPool() as Promise<bigint>,
-      contract.totalUsers() as Promise<bigint>,
+    const [binaryPool, totalUsersN, onChainCycle] = await Promise.all([
+      mvault.binaryPool()    as Promise<bigint>,
+      mvault.totalUsers()    as Promise<bigint>,
+      dist.currentCycle()    as Promise<bigint>,
     ]);
     const totalUsers = Number(totalUsersN);
+    const nextCycle  = Number(onChainCycle) + 1;
 
-    log(
-      `Pool state — Binary: ${ethers.formatUnits(binaryPool, 18)} MVT, Users: ${totalUsers}`,
-      "distributor"
-    );
+    log(`Pool: ${ethers.formatUnits(binaryPool, 18)} MVT  |  Users: ${totalUsers}  |  Next cycle: ${nextCycle}`, "distributor");
 
-    if (totalUsers === 0) {
-      log("No users — skipping distribution", "distributor");
-      return;
-    }
-
-    if (binaryPool < MIN_POOL_WEI) {
-      log(`Binary pool too small (${ethers.formatUnits(binaryPool, 18)}) — skipping this cycle`, "distributor");
+    if (totalUsers === 0 || binaryPool < MIN_POOL_WEI) {
+      log("Pool too small or no users — skipping", "distributor");
       return;
     }
 
@@ -115,7 +114,7 @@ export async function runDistribution(): Promise<void> {
     for (let i = 0; i < totalUsers; i += ADDR_BATCH) {
       const batch = await Promise.all(
         Array.from({ length: Math.min(ADDR_BATCH, totalUsers - i) }, (_, k) =>
-          contract.allUsers(i + k) as Promise<string>
+          mvault.allUsers(i + k) as Promise<string>
         )
       );
       userAddresses.push(...batch);
@@ -125,18 +124,14 @@ export async function runDistribution(): Promise<void> {
     log(`Reading ${userAddresses.length} user structs…`, "distributor");
     const STRUCT_BATCH = 20;
     type UserData = {
-      addr: string;
-      isActive: boolean;
-      leftSubVolume: bigint;
-      rightSubVolume: bigint;
-      matchedVolume: bigint;
-      powerLegPoints: bigint;
-      incomeLimit: bigint;
+      addr: string; isActive: boolean;
+      leftSubVolume: bigint; rightSubVolume: bigint;
+      matchedVolume: bigint; powerLegPoints: bigint;
     };
     const userData: UserData[] = [];
     for (let i = 0; i < userAddresses.length; i += STRUCT_BATCH) {
       const slice = userAddresses.slice(i, i + STRUCT_BATCH);
-      const infos = await Promise.all(slice.map(a => contract.users(a)));
+      const infos = await Promise.all(slice.map((a: string) => mvault.users(a)));
       for (let j = 0; j < slice.length; j++) {
         const u = infos[j];
         userData.push({
@@ -146,32 +141,35 @@ export async function runDistribution(): Promise<void> {
           rightSubVolume: u.rightSubVolume as bigint,
           matchedVolume:  u.matchedVolume  as bigint,
           powerLegPoints: u.powerLegPoints as bigint,
-          incomeLimit:    u.incomeLimit    as bigint,
         });
       }
     }
 
-    // ── STEP 1: Compute binary distribution ───────────────────────────────────
+    // ── Compute binary shares (70% of pool) ───────────────────────────────────
     const binary70 = (binaryPool * 70n) / 100n;
+    const powerLeg30 = binaryPool - binary70;
 
-    type BinaryEntry = {
-      addr: string;
-      newPairs: bigint;       // new matched volume this cycle
-      powerLegPts: bigint;    // unmatched excess on stronger leg
-      newMatchedVol: bigint;  // updated watermark = min(left, right)
+    type Entry = {
+      addr:          string;
+      binaryShare:   bigint;
+      powerLegShare: bigint;
+      newMatchedVol: bigint;
+      newPowerLegPts: bigint;
     };
 
-    const eligible: BinaryEntry[] = [];
+    // First pass: compute binary shares
+    type Eligible = { addr: string; newPairs: bigint; powerLegPts: bigint; newMatchedVol: bigint };
+    const eligible: Eligible[] = [];
     let totalNewPairs = 0n;
 
     for (const u of userData) {
       if (!u.isActive) continue;
-      const minSide = u.leftSubVolume < u.rightSubVolume ? u.leftSubVolume : u.rightSubVolume;
-      const maxSide = u.leftSubVolume > u.rightSubVolume ? u.leftSubVolume : u.rightSubVolume;
-      const newPairs = minSide > u.matchedVolume ? minSide - u.matchedVolume : 0n;
+      const minSide     = u.leftSubVolume  < u.rightSubVolume ? u.leftSubVolume  : u.rightSubVolume;
+      const maxSide     = u.leftSubVolume  > u.rightSubVolume ? u.leftSubVolume  : u.rightSubVolume;
+      const newPairs    = minSide > u.matchedVolume ? minSide - u.matchedVolume : 0n;
       if (newPairs === 0n) continue;
-      const newMatchedVol = minSide;                   // advance watermark to min(left,right)
-      const powerLegPts   = maxSide - newMatchedVol;   // excess on stronger side
+      const newMatchedVol = minSide;
+      const powerLegPts   = maxSide - newMatchedVol;
       eligible.push({ addr: u.addr, newPairs, powerLegPts, newMatchedVol });
       totalNewPairs += newPairs;
     }
@@ -183,76 +181,97 @@ export async function runDistribution(): Promise<void> {
 
     log(`Computing shares for ${eligible.length} users (${ethers.formatUnits(totalNewPairs, 18)} total new pairs)`, "distributor");
 
-    const binaryUsers:       string[]  = [];
-    const binaryShares:      bigint[]  = [];
-    const binaryPowerLegPts: bigint[]  = [];
-    const binaryMatchedVols: bigint[]  = [];
-
+    // Second pass: compute power-leg shares
+    let totalPts = 0n;
+    const pts: Map<string, bigint> = new Map();
     for (const e of eligible) {
-      const share = (e.newPairs * binary70) / totalNewPairs;
-      if (share === 0n) continue;
-      binaryUsers.push(e.addr);
-      binaryShares.push(share);
-      binaryPowerLegPts.push(e.powerLegPts);
-      binaryMatchedVols.push(e.newMatchedVol);
+      if (e.powerLegPts > 0n) {
+        pts.set(e.addr, e.powerLegPts);
+        totalPts += e.powerLegPts;
+      }
     }
 
-    if (binaryUsers.length === 0) {
+    // Build final entries with both shares
+    const entries: Entry[] = [];
+    let totalDistributed = 0n;
+
+    for (const e of eligible) {
+      const binaryShare = (e.newPairs * binary70) / totalNewPairs;
+      if (binaryShare === 0n) continue;
+
+      const myPts = pts.get(e.addr) ?? 0n;
+      const powerLegShare = (totalPts > 0n && myPts > 0n)
+        ? (myPts * powerLeg30) / totalPts
+        : 0n;
+
+      entries.push({
+        addr:           e.addr,
+        binaryShare,
+        powerLegShare,
+        newMatchedVol:  e.newMatchedVol,
+        newPowerLegPts: e.powerLegPts,
+      });
+      totalDistributed += binaryShare + powerLegShare;
+    }
+
+    if (entries.length === 0) {
       log("All computed shares are zero — skipping", "distributor");
       return;
     }
 
-    log(`Step 1 — applyBinaryDistribution for ${binaryUsers.length} users (pool: ${ethers.formatUnits(binaryPool, 18)} MVT)`, "distributor");
-    const tx1 = await contract.applyBinaryDistribution(
-      binaryUsers, binaryShares, binaryPowerLegPts, binaryMatchedVols,
-      { gasLimit: 5_000_000 }
-    );
-    log(`Step 1 tx sent: ${tx1.hash}`, "distributor");
-    const receipt1 = await tx1.wait();
-    log(`Step 1 confirmed in block ${receipt1?.blockNumber}`, "distributor");
+    // ── Build Merkle tree ──────────────────────────────────────────────────────
+    const cycleBig = BigInt(nextCycle);
+    const leafValues = entries.map(e => [
+      cycleBig,
+      e.addr,
+      e.binaryShare,
+      e.powerLegShare,
+      e.newMatchedVol,
+      e.newPowerLegPts,
+    ]);
 
-    // ── STEP 2: Compute power leg distribution ─────────────────────────────────
-    // Read updated power leg points after step 1
-    const powerLeg30 = binaryPool - binary70;
-    log(`Step 2 — computing power leg distribution (reserve: ${ethers.formatUnits(powerLeg30, 18)} MVT)`, "distributor");
+    const tree = StandardMerkleTree.of(leafValues, [
+      "uint256", "address", "uint256", "uint256", "uint256", "uint256"
+    ]);
 
-    // Re-read updated powerLegPoints from chain after step 1
-    const updatedInfos = await Promise.all(binaryUsers.map(a => contract.users(a)));
-    const powerLegEligible: { addr: string; pts: bigint }[] = [];
-    let totalPts = 0n;
-    for (let i = 0; i < binaryUsers.length; i++) {
-      const pts = updatedInfos[i].powerLegPoints as bigint;
-      if (pts > 0n) {
-        powerLegEligible.push({ addr: binaryUsers[i], pts });
-        totalPts += pts;
-      }
+    const root      = tree.root as `0x${string}`;
+    const totalPool = totalDistributed;
+
+    log(`Merkle root: ${root}  |  Total pool: ${ethers.formatUnits(totalPool, 18)} MVT  |  Entries: ${entries.length}`, "distributor");
+
+    // ── Commit distribution on-chain ───────────────────────────────────────────
+    log("Calling commitDistribution…", "distributor");
+    const tx = await dist.commitDistribution(root, totalPool, { gasLimit: 300_000 });
+    log(`Commit tx sent: ${tx.hash}`, "distributor");
+    const receipt = await tx.wait();
+    log(`Commit confirmed in block ${receipt?.blockNumber} — cycle ${nextCycle} active`, "distributor");
+
+    // ── Save cycle + proofs to DB ──────────────────────────────────────────────
+    const expiresAt = new Date(Date.now() + CLAIM_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    await storage.saveDistributionCycle(nextCycle, root, totalPool.toString(), expiresAt, tx.hash);
+
+    log(`Saving ${entries.length} proofs to DB…`, "distributor");
+    for (const [i, leaf] of tree.entries()) {
+      const proof = tree.getProof(i);
+      const [, addr, binaryShare, powerLegShare, newMatchedVol, newPowerLegPts] = leaf as [bigint, string, bigint, bigint, bigint, bigint];
+      await storage.saveDistributionProof(
+        nextCycle,
+        addr as string,
+        binaryShare.toString(),
+        powerLegShare.toString(),
+        newMatchedVol.toString(),
+        newPowerLegPts.toString(),
+        proof
+      );
     }
 
-    const plUsers:  string[] = [];
-    const plShares: bigint[] = [];
-    let distributedPl = 0n;
-
-    if (totalPts > 0n && powerLegEligible.length > 0) {
-      for (const e of powerLegEligible) {
-        const share = (e.pts * powerLeg30) / totalPts;
-        if (share === 0n) continue;
-        plUsers.push(e.addr);
-        plShares.push(share);
-        distributedPl += share;
-      }
+    // Return any undistributed pool dust (rounding) — handled by commitDistribution
+    const adminLeftover = binaryPool - totalPool;
+    if (adminLeftover > 0n) {
+      log(`Pool dust: ${ethers.formatUnits(adminLeftover, 18)} MVT — returned to adminPool by commitDistribution`, "distributor");
     }
 
-    const adminLeftover = powerLeg30 - distributedPl;
-    log(`Step 2 — applyPowerLegDistribution for ${plUsers.length} users, adminLeftover: ${ethers.formatUnits(adminLeftover, 18)} MVT`, "distributor");
-
-    const tx2 = await contract.applyPowerLegDistribution(
-      plUsers, plShares, adminLeftover,
-      { gasLimit: 3_000_000 }
-    );
-    log(`Step 2 tx sent: ${tx2.hash}`, "distributor");
-    const receipt2 = await tx2.wait();
-    log(`Step 2 confirmed in block ${receipt2?.blockNumber}`, "distributor");
-    log("Distribution cycle complete ✓", "distributor");
+    log(`Distribution cycle ${nextCycle} complete ✓  —  ${entries.length} users can now claim`, "distributor");
 
   } catch (err: any) {
     const msg = err?.shortMessage || err?.reason || err?.message || String(err);
@@ -267,13 +286,16 @@ export function startDistributor(): void {
     log("DEPLOYER_PRIVATE_KEY not set — auto-distributor disabled", "distributor");
     return;
   }
+  if (!DISTRIBUTOR_ADDRESS) {
+    log("VITE_DISTRIBUTOR_ADDRESS not set — auto-distributor disabled", "distributor");
+    return;
+  }
 
   log(
-    `Auto-distributor started — interval: ${INTERVAL_MS / 1000 / 60} minutes (${isMainnet ? "mainnet" : "testnet"})`,
+    `Merkle auto-distributor started — interval: ${INTERVAL_MS / 1000 / 60} min (${isMainnet ? "mainnet" : "testnet"})`,
     "distributor"
   );
 
-  // Run once shortly after startup (5 minutes delay to let server settle)
   const STARTUP_DELAY = 5 * 60 * 1000;
   setTimeout(() => {
     runDistribution();

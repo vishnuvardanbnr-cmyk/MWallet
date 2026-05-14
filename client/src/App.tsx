@@ -260,6 +260,7 @@ function App() {
                         mvtPrice={web3.mvtPrice}
                         binaryPairs={web3.binaryPairs}
                         formatAmount={web3.formatAmount}
+                        walletAddress={web3.account ?? undefined}
                       />
                     </Route>
                     <Route path="/binary">

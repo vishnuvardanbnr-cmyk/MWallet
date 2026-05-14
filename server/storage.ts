@@ -1,4 +1,4 @@
-import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome, usdtDeposits, type UsdtDeposit, leadershipRewards, type LeadershipReward, musdtStakingPlans, type MusdtStakingPlan, type InsertMusdtStakingPlan, musdtOverrideIncome, type MusdtOverrideIncome, mTokenPurchaseBatches, type MTokenPurchaseBatch, type InsertTokenBatch } from "@shared/schema";
+import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome, usdtDeposits, type UsdtDeposit, leadershipRewards, type LeadershipReward, musdtStakingPlans, type MusdtStakingPlan, type InsertMusdtStakingPlan, musdtOverrideIncome, type MusdtOverrideIncome, mTokenPurchaseBatches, type MTokenPurchaseBatch, type InsertTokenBatch, distributionCycles, type DistributionCycle, distributionProofs, type DistributionProof } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -87,6 +87,12 @@ export interface IStorage {
   getStakedBatch(walletAddress: string, planId: number): Promise<MTokenPurchaseBatch | undefined>;
   deductFromBatch(batchId: number, amount: string): Promise<MTokenPurchaseBatch>;
   getBatchesByPlan(planId: number): Promise<MTokenPurchaseBatch[]>;
+  // Merkle Distribution
+  saveDistributionCycle(cycle: number, merkleRoot: string, totalPool: string, expiresAt: Date, txHash?: string): Promise<DistributionCycle>;
+  getLatestDistributionCycle(): Promise<DistributionCycle | undefined>;
+  getDistributionCycle(cycle: number): Promise<DistributionCycle | undefined>;
+  saveDistributionProof(cycle: number, walletAddress: string, binaryShare: string, powerLegShare: string, newMatchedVol: string, newPowerLegPts: string, proof: string[]): Promise<DistributionProof>;
+  getDistributionProof(cycle: number, walletAddress: string): Promise<DistributionProof | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -664,6 +670,47 @@ export class DatabaseStorage implements IStorage {
     return db.select().from(mTokenPurchaseBatches)
       .where(eq(mTokenPurchaseBatches.stakingPlanId, planId))
       .orderBy(mTokenPurchaseBatches.purchasedAt);
+  }
+
+  async saveDistributionCycle(cycle: number, merkleRoot: string, totalPool: string, expiresAt: Date, txHash?: string): Promise<DistributionCycle> {
+    const [row] = await db.insert(distributionCycles)
+      .values({ cycle, merkleRoot, totalPool, expiresAt, txHash: txHash ?? null })
+      .onConflictDoUpdate({
+        target: distributionCycles.cycle,
+        set: { merkleRoot, totalPool, expiresAt, txHash: txHash ?? null, reclaimed: false },
+      })
+      .returning();
+    return row;
+  }
+
+  async getLatestDistributionCycle(): Promise<DistributionCycle | undefined> {
+    const [row] = await db.select().from(distributionCycles)
+      .orderBy(desc(distributionCycles.cycle))
+      .limit(1);
+    return row;
+  }
+
+  async getDistributionCycle(cycle: number): Promise<DistributionCycle | undefined> {
+    const [row] = await db.select().from(distributionCycles).where(eq(distributionCycles.cycle, cycle));
+    return row;
+  }
+
+  async saveDistributionProof(cycle: number, walletAddress: string, binaryShare: string, powerLegShare: string, newMatchedVol: string, newPowerLegPts: string, proof: string[]): Promise<DistributionProof> {
+    const addr = walletAddress.toLowerCase();
+    const [row] = await db.insert(distributionProofs)
+      .values({ cycle, walletAddress: addr, binaryShare, powerLegShare, newMatchedVol, newPowerLegPts, proof })
+      .onConflictDoUpdate({
+        target: [distributionProofs.cycle, distributionProofs.walletAddress],
+        set: { binaryShare, powerLegShare, newMatchedVol, newPowerLegPts, proof },
+      })
+      .returning();
+    return row;
+  }
+
+  async getDistributionProof(cycle: number, walletAddress: string): Promise<DistributionProof | undefined> {
+    const [row] = await db.select().from(distributionProofs)
+      .where(and(eq(distributionProofs.cycle, cycle), eq(distributionProofs.walletAddress, walletAddress.toLowerCase())));
+    return row;
   }
 }
 

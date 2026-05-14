@@ -125,9 +125,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint256 public adminPool;
     uint256 public rankPool;
 
-    // Binary distribution state
-    uint256 private _powerLeg30Reserve;
-    bool    private _binaryDistributed;
+    // Distributor module (MvaultDistributor — Merkle-proof claim system)
+    address public distributor;
 
     // ── Board Matrix tracking ──────────────────────────────────────────────────
     mapping(address => uint256) public boardEntryCount;
@@ -223,8 +222,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     error NotEligibleForRebirth();
     error IncomeNotExhausted();
     error CannotDowngradePackage();
-    error BinaryNotDistributed();
-    error BinaryAlreadyDistributed();
+    error NotDistributor();
     error BoardHandlerNotSet();
     error InsufficientBtcPoolForBoard();
     error NotBoardHandler();
@@ -264,6 +262,16 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     function setStakingModule(address _staking) external onlyOwner {
         if (_staking == address(0)) revert ZeroAddress();
         stakingModule = IMvaultStaking(_staking);
+    }
+
+    function setDistributor(address _distributor) external onlyOwner {
+        if (_distributor == address(0)) revert ZeroAddress();
+        distributor = _distributor;
+    }
+
+    modifier onlyDistributor() {
+        if (msg.sender != distributor) revert NotDistributor();
+        _;
     }
 
     modifier onlyStakingModule() {
@@ -987,73 +995,42 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // BINARY INCOME DISTRIBUTION  (admin — Step 1 of 2)
+    // DISTRIBUTOR CALLBACKS  (called only by MvaultDistributor)
+    //
+    // The old applyBinaryDistribution / applyPowerLegDistribution push-model
+    // has been replaced by a Merkle-proof pull system (MvaultDistributor.sol).
+    // Users self-claim with cryptographic proofs — admin cannot alter payouts
+    // after the Merkle root is committed.
     // ─────────────────────────────────────────────────────────────────────────
 
-    /**
-     * @notice STEP 1: Apply pre-computed binary distributions.
-     *         The admin script reads user volumes via RPC, computes shares off-chain,
-     *         then calls this with the results. Each entry's powerLegPts is the
-     *         cumulative power-leg points for that user (newVolume / 1e18).
-     */
-    function applyBinaryDistribution(
-        address[] calldata users_arr,
-        uint256[] calldata shares,
-        uint256[] calldata powerLegPts,
-        uint256[] calldata newMatchedVols
-    ) external onlyOwner {
-        if (_binaryDistributed) revert BinaryAlreadyDistributed();
+    /// @notice Drain binaryPool for a new distribution cycle.
+    ///         Called by MvaultDistributor.commitDistribution().
+    function distributor_lockPool() external onlyDistributor returns (uint256 pool) {
         if (binaryPool == 0) revert EmptyPool();
-
-        uint256 pool   = binaryPool;
-        binaryPool     = 0;
-        uint256 binary70   = (pool * 70) / 100;
-        _powerLeg30Reserve = pool - binary70;
-
-        for (uint256 i = 0; i < users_arr.length; i++) {
-            address u = users_arr[i];
-            users[u].mvtBalance    += shares[i];
-            users[u].totalReceived += shares[i];
-            users[u].powerLegPoints = powerLegPts[i];
-            users[u].matchedVolume  = newMatchedVols[i];
-            emit BinaryIncomePaid(u, powerLegPts[i], shares[i]);
-            _recordTx(u, TX_BINARY_INCOME, shares[i], 0, address(0));
-        }
-
-        _binaryDistributed = true;
-        emit BinaryIncomeDistributed(pool, binary70, pool - binary70, users_arr.length);
+        pool       = binaryPool;
+        binaryPool = 0;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // POWER LEG DISTRIBUTION  (admin — Step 2 of 2)
-    // ─────────────────────────────────────────────────────────────────────────
+    /// @notice Credit a user's MVT balance after they prove their leaf.
+    ///         Called by MvaultDistributor.claimDistribution().
+    function distributor_creditUser(
+        address user,
+        uint256 mvtAmount,
+        uint256 newMatchedVol,
+        uint256 newPowerLegPts
+    ) external onlyDistributor {
+        users[user].mvtBalance     += mvtAmount;
+        users[user].totalReceived  += mvtAmount;
+        users[user].matchedVolume   = newMatchedVol;
+        users[user].powerLegPoints  = newPowerLegPts;
+        emit BinaryIncomePaid(user, newPowerLegPts, mvtAmount);
+        _recordTx(user, TX_BINARY_INCOME, mvtAmount, 0, address(0));
+    }
 
-    /**
-     * @notice STEP 2: Apply pre-computed power-leg distributions.
-     *         adminLeftover = any reserve not distributed (goes to adminPool).
-     */
-    function applyPowerLegDistribution(
-        address[] calldata users_arr,
-        uint256[] calldata shares,
-        uint256   adminLeftover
-    ) external onlyOwner {
-        if (!_binaryDistributed) revert BinaryNotDistributed();
-
-        uint256 reserve = _powerLeg30Reserve;
-        for (uint256 i = 0; i < users_arr.length; i++) {
-            address u = users_arr[i];
-            uint256 pts = users[u].powerLegPoints;
-            users[u].mvtBalance    += shares[i];
-            users[u].totalReceived += shares[i];
-            users[u].powerLegPoints = 0;
-            emit PowerLegIncomePaid(u, pts, shares[i]);
-            _recordTx(u, TX_POWERLEG, shares[i], 0, address(0));
-        }
-
-        adminPool          += adminLeftover;
-        _powerLeg30Reserve  = 0;
-        _binaryDistributed  = false;
-        emit PowerLegDistributed(reserve, users_arr.length);
+    /// @notice Return unclaimed/excess pool to adminPool.
+    ///         Called by MvaultDistributor on expired cycle reclaim or rounding dust.
+    function distributor_returnToAdmin(uint256 amount) external onlyDistributor {
+        adminPool += amount;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

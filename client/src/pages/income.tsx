@@ -1,14 +1,19 @@
-import { Users, GitBranch, Coins, TrendingUp, Layers, Info, ArrowDownLeft, ArrowDownRight } from "lucide-react";
+import { useState } from "react";
+import { Users, GitBranch, Coins, TrendingUp, Layers, Info, ArrowDownLeft, ArrowDownRight, ShieldCheck, Loader2, CheckCircle2 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { formatTokenAmount } from "@/lib/contract";
+import { Button } from "@/components/ui/button";
+import { formatTokenAmount, getMvaultDistributorContract, DISTRIBUTOR_ADDRESS } from "@/lib/contract";
 import type { UserInfo, MvtPrice, BinaryPairs } from "@/hooks/use-web3";
 import { useLocation } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import { ethers } from "ethers";
 
 interface IncomeProps {
   userInfo: UserInfo;
   mvtPrice: MvtPrice;
   binaryPairs: BinaryPairs;
   formatAmount: (val: bigint) => string;
+  walletAddress?: string;
 }
 
 const LEVEL_RATES: { level: number; pct: string; value: string; dirReq: number }[] = [
@@ -35,8 +40,22 @@ function usdFmt(mvt: bigint, price: bigint) {
   return `$${(mvtNum * priceNum).toFixed(2)}`;
 }
 
-export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmount }: IncomeProps) {
+interface DistProofResp {
+  cycle: number;
+  proof: string[] | null;
+  binaryShare?: string;
+  powerLegShare?: string;
+  newMatchedVol?: string;
+  newPowerLegPts?: string;
+  totalMvt?: string;
+  expiresAt?: string;
+}
+
+export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmount, walletAddress }: IncomeProps) {
   const [, setLocation] = useLocation();
+  const [claiming, setClaiming] = useState(false);
+  const [claimTx, setClaimTx]   = useState<string | null>(null);
+  const [claimErr, setClaimErr] = useState<string | null>(null);
 
   const directCount = Number(userInfo.directCount);
   const leftCount = Number(userInfo.leftSubUsers);
@@ -52,6 +71,43 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
   const incomeCap = incomeLimitCapNum > 0 ? incomeLimitCapNum : 390;
   const incomeUsed = incomeCap - parseFloat(formatTokenAmount(userInfo.incomeLimit, 18));
   const incomeProgress = Math.min(100, (incomeUsed / incomeCap) * 100);
+
+  // ── Fetch Merkle proof for wallet ─────────────────────────────────────────
+  const { data: distProof, isLoading: proofLoading } = useQuery<DistProofResp>({
+    queryKey: ["/api/distribution/proof", walletAddress],
+    enabled:  !!walletAddress && !!DISTRIBUTOR_ADDRESS,
+    refetchInterval: 60_000,
+  });
+
+  const hasPendingClaim = !!(distProof?.proof && distProof.totalMvt && BigInt(distProof.totalMvt) > 0n && !claimTx);
+  const pendingMvt = distProof?.totalMvt ? parseFloat(formatTokenAmount(BigInt(distProof.totalMvt), 18)) : 0;
+
+  async function handleClaim() {
+    if (!distProof?.proof || !walletAddress) return;
+    setClaimErr(null);
+    setClaiming(true);
+    try {
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const signer   = await provider.getSigner();
+      const dist     = getMvaultDistributorContract(signer);
+      const tx = await dist.claimDistribution(
+        BigInt(distProof.cycle),
+        BigInt(distProof.binaryShare   ?? "0"),
+        BigInt(distProof.powerLegShare ?? "0"),
+        BigInt(distProof.newMatchedVol ?? "0"),
+        BigInt(distProof.newPowerLegPts ?? "0"),
+        distProof.proof,
+        { gasLimit: 250_000 },
+      );
+      const receipt = await tx.wait();
+      setClaimTx(receipt.hash as string);
+    } catch (err: any) {
+      const msg = err?.shortMessage || err?.reason || err?.message || "Claim failed";
+      setClaimErr(msg.slice(0, 120));
+    } finally {
+      setClaiming(false);
+    }
+  }
 
   return (
     <div className="p-4 sm:p-6 space-y-6 relative z-10">
@@ -128,6 +184,90 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
         </div>
       </div>
 
+      {/* ── Merkle Claim Card ─────────────────────────────────────────────────── */}
+      {DISTRIBUTOR_ADDRESS && walletAddress && (
+        <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.075s" }} data-testid="card-distribution-claim">
+          <div className="flex items-center gap-2.5 mb-4">
+            <div className="h-9 w-9 rounded-xl bg-emerald-500/15 flex items-center justify-center">
+              <ShieldCheck className="h-4.5 w-4.5 text-emerald-400" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>
+                <span className="gradient-text">Binary Distribution Claim</span>
+              </h2>
+              <p className="text-[10px] text-muted-foreground">Trustless Merkle-proof self-claim — no admin required</p>
+            </div>
+          </div>
+
+          {proofLoading ? (
+            <div className="flex items-center gap-2 py-3 text-muted-foreground text-xs">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Checking for pending distribution…
+            </div>
+          ) : claimTx ? (
+            <div className="flex flex-col gap-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+                <p className="text-xs text-emerald-400 font-medium">Claim confirmed — MVT credited to your account</p>
+              </div>
+              <p className="text-[10px] text-muted-foreground font-mono break-all">Tx: {claimTx}</p>
+            </div>
+          ) : hasPendingClaim ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Binary Share</p>
+                  <p className="text-sm font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-binary-share">
+                    {parseFloat(formatTokenAmount(BigInt(distProof!.binaryShare ?? "0"), 18)).toFixed(4)} MVT
+                  </p>
+                </div>
+                <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Power Leg Share</p>
+                  <p className="text-sm font-bold text-blue-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-power-leg-share">
+                    {parseFloat(formatTokenAmount(BigInt(distProof!.powerLegShare ?? "0"), 18)).toFixed(4)} MVT
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/15">
+                <div>
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Total Claimable</p>
+                  <p className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-total-claimable">
+                    {pendingMvt.toFixed(4)} MVT
+                  </p>
+                  <p className="text-[9px] text-muted-foreground mt-0.5">Cycle #{distProof!.cycle}</p>
+                </div>
+                <Button
+                  onClick={handleClaim}
+                  disabled={claiming}
+                  data-testid="button-claim-distribution"
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4"
+                >
+                  {claiming ? <><Loader2 className="h-3 w-3 animate-spin mr-1.5" />Claiming…</> : "Claim MVT"}
+                </Button>
+              </div>
+              {claimErr && (
+                <div className="flex items-start gap-2 p-2.5 rounded-xl bg-red-500/[0.06] border border-red-500/15">
+                  <Info className="h-3.5 w-3.5 text-red-400/70 shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-red-400">{claimErr}</p>
+                </div>
+              )}
+              {distProof?.expiresAt && (
+                <p className="text-[10px] text-muted-foreground text-right">
+                  Claim expires: {new Date(distProof.expiresAt).toLocaleDateString()}
+                </p>
+              )}
+            </div>
+          ) : (
+            <div className="py-3 text-center">
+              <p className="text-xs text-muted-foreground">No pending distribution for this cycle</p>
+              <p className="text-[10px] text-muted-foreground/60 mt-1">
+                {distProof?.cycle ? `Latest cycle: #${distProof.cycle}` : "Distribution runs every 24 hours"}
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Binary Income */}
       <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.08s" }} data-testid="card-binary-income">
         <div className="flex items-center justify-between mb-4">
@@ -160,14 +300,14 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
         {newPairs > 0 && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
             <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <p className="text-xs text-emerald-400 font-medium">{newPairs} new pair{newPairs !== 1 ? "s" : ""} pending — admin distributes binary income per cycle</p>
+            <p className="text-xs text-emerald-400 font-medium">{newPairs} new pair{newPairs !== 1 ? "s" : ""} pending — claim your binary income above when the next cycle commits</p>
           </div>
         )}
 
         <div className="mt-4 grid grid-cols-2 gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
           <div className="text-center">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Binary Pool (30%)</p>
-            <p className="text-xs font-medium">Of every $130 activation</p>
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Binary Pool (70%)</p>
+            <p className="text-xs font-medium">Of binary pool per cycle</p>
           </div>
           <div className="text-center">
             <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Power Leg (30%)</p>

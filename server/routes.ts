@@ -1319,5 +1319,33 @@ export async function registerRoutes(
     }
   });
 
+  // ── Distribution proof (Merkle claim) ─────────────────────────────────────
+  app.get("/api/distribution/proof/:address", async (req, res) => {
+    try {
+      const walletAddress = req.params.address.toLowerCase();
+      const latestCycle = await storage.getLatestDistributionCycle();
+      if (!latestCycle) {
+        return res.json({ cycle: 0, proof: null });
+      }
+      const proof = await storage.getDistributionProof(latestCycle.cycle, walletAddress);
+      if (!proof) {
+        return res.json({ cycle: latestCycle.cycle, proof: null });
+      }
+      res.json({
+        cycle:          proof.cycle,
+        binaryShare:    proof.binaryShare,
+        powerLegShare:  proof.powerLegShare,
+        newMatchedVol:  proof.newMatchedVol,
+        newPowerLegPts: proof.newPowerLegPts,
+        proof:          proof.proof,
+        expiresAt:      latestCycle.expiresAt,
+        merkleRoot:     latestCycle.merkleRoot,
+        totalMvt:       (BigInt(proof.binaryShare) + BigInt(proof.powerLegShare)).toString(),
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   return httpServer;
 }
