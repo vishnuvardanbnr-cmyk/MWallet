@@ -31,6 +31,7 @@ import PaidStakingPage from "@/pages/paid-staking";
 import RegisterForPage from "@/pages/register-for";
 import RebirthAccountPage from "@/pages/rebirth-account";
 import SellTokensPage from "@/pages/sell-tokens";
+import RankPage from "@/pages/rank";
 
 function ScrollToTop() {
   const [location, setLocation] = useLocation();
@@ -363,6 +364,12 @@ function App() {
                         approveToken={web3.approveToken}
                         fetchUserData={web3.fetchUserData}
                         contractMvtBalance={web3.contractMvtBalance}
+                      />
+                    </Route>
+                    <Route path="/rank">
+                      <RankPage
+                        userInfo={web3.userInfo!}
+                        formatAmount={web3.formatAmount}
                       />
                     </Route>
                     <Route path="/store">

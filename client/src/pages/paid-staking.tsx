@@ -53,6 +53,7 @@ export default function PaidStakingPage({
 }: Props) {
   const { toast } = useToast();
   const [, setLocation] = useLocation();
+  const [pageError, setPageError]             = useState<string | null>(null);
   const [activeTab, setActiveTab]             = useState<"flexible" | "locked">("flexible");
   const [stakeSource, setStakeSource]         = useState<"wallet" | "balance">("wallet");
   const [usdtInput, setUsdtInput]             = useState("");
@@ -97,7 +98,9 @@ export default function PaidStakingPage({
   const loadWalletData = useCallback(async () => {
     if (!account) return;
     try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const ethereum = (window as any).ethereum;
+      if (!ethereum) { setPageError(null); return; }
+      const provider = new ethers.BrowserProvider(ethereum);
       const usdt = getTokenContract(provider);
       const mvault = getMvaultContract(provider);
       const [allow, bal, info] = await Promise.all([
@@ -108,7 +111,10 @@ export default function PaidStakingPage({
       setUsdtAllowance(allow as bigint);
       setWalletUsdt(bal as bigint);
       setContractUsdt(info.usdtBalance as bigint);
-    } catch {}
+      setPageError(null);
+    } catch (e: any) {
+      console.error("loadWalletData error:", e);
+    }
   }, [account]);
 
   useEffect(() => { loadPositions(); loadWalletData(); }, [loadPositions, loadWalletData]);
@@ -737,7 +743,7 @@ export default function PaidStakingPage({
         <div className="space-y-3 text-[11px] text-muted-foreground">
           <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.04] space-y-1">
             <p className="text-xs font-semibold text-foreground mb-1.5">On Stake (both types)</p>
-            {LEVEL_RATES.map((r, i) => (
+            {STAKE_LEVEL_RATES.map((r: number, i: number) => (
               <div key={i} className="flex justify-between">
                 <span>L{i + 1} upline gets</span>
                 <span className="font-medium text-emerald-400">{r}% USDT immediately</span>

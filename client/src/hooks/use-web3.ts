@@ -33,6 +33,8 @@ export interface UserInfo {
   mainAccount: string;
   rebirthCount: bigint;
   joinedAt: bigint;
+  rank: number;             // 0=Member 1=Bronze 2=Silver 3=Gold 4=Platinum 5=Diamond 6=DoubleDiamond 7=Crown
+  teamSalesUsdt: bigint;    // total team sales USDT (used for rank)
 }
 
 export interface MvtPrice {
@@ -173,6 +175,8 @@ export function useWeb3() {
         mainAccount:     info.mainAccount,
         rebirthCount:    info.rebirthCount,
         joinedAt:        info.joinedAt,
+        rank:            Number(info.rank ?? 0),
+        teamSalesUsdt:   info.teamSalesUsdt ?? 0n,
       };
 
       setIsRegistered(ui.isRegistered);

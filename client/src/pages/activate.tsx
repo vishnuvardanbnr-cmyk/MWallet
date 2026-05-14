@@ -2,18 +2,17 @@ import { useState, useEffect } from "react";
 import { useToast } from "@/hooks/use-toast";
 import {
   Loader2, LogOut, Zap, CheckCircle2, AlertCircle,
-  RefreshCw, ArrowRight, Shield, TrendingUp, Users, Wallet, Coins,
+  RefreshCw, ArrowRight, Shield, TrendingUp, Users, Wallet, Coins, Star,
 } from "lucide-react";
 import { shortenAddress, getTokenContract, MVAULT_CONTRACT_ADDRESS, formatTokenAmount } from "@/lib/contract";
 import { Logo } from "@/components/logo";
-import { Badge } from "@/components/ui/badge";
 import { ethers } from "ethers";
 
 interface ActivatePageProps {
   account: string;
   approveToken: (amount?: string) => Promise<void>;
   activatePackage: (pkg?: number) => Promise<void>;
-  activateFromBalance: () => Promise<void>;
+  activateFromBalance: (pkg?: number) => Promise<void>;
   fetchUserData: () => Promise<void>;
   disconnect: () => void;
   virtualUsdtBalance?: bigint;
@@ -30,24 +29,51 @@ function parseContractError(err: any): string {
   return msg.slice(0, 120) || "Transaction failed. Please try again.";
 }
 
-const DISTRIBUTION = [
-  { icon: TrendingUp, label: "Level Income", sub: "Up to 15 sponsor levels", pct: 40, color: "text-amber-300",  bar: "bg-amber-400",   bg: "bg-amber-400/10",  border: "border-amber-400/20" },
-  { icon: Users,      label: "Binary Pool",  sub: "Matched pair rewards",    pct: 30, color: "text-blue-300",   bar: "bg-blue-500",    bg: "bg-blue-500/10",   border: "border-blue-500/20"  },
-  { icon: Shield,     label: "Reserve",      sub: "Ecosystem growth fund",   pct: 30, color: "text-violet-300", bar: "bg-violet-500",  bg: "bg-violet-500/10", border: "border-violet-500/20" },
+const PACKAGES = [
+  {
+    pkg: 1,
+    label: "Starter",
+    price: 55,
+    cap: 165,
+    color: "amber",
+    icon: Star,
+    desc: "Entry-level package · Earn up to $165 (3×)",
+    distribution: [
+      { label: "Level Income", pct: 40, color: "text-amber-300", bar: "bg-amber-400", bg: "bg-amber-400/10", border: "border-amber-400/20" },
+      { label: "Binary Pool",  pct: 30, color: "text-blue-300",  bar: "bg-blue-500",  bg: "bg-blue-500/10",  border: "border-blue-500/20"  },
+      { label: "Reserve",      pct: 30, color: "text-violet-300",bar: "bg-violet-500",bg: "bg-violet-500/10",border: "border-violet-500/20" },
+    ],
+  },
+  {
+    pkg: 2,
+    label: "Pro",
+    price: 130,
+    cap: 390,
+    color: "yellow",
+    icon: Zap,
+    desc: "Full package · Earn up to $390 (3×)",
+    distribution: [
+      { label: "Level Income", pct: 40, color: "text-amber-300", bar: "bg-amber-400", bg: "bg-amber-400/10", border: "border-amber-400/20" },
+      { label: "Binary Pool",  pct: 30, color: "text-blue-300",  bar: "bg-blue-500",  bg: "bg-blue-500/10",  border: "border-blue-500/20"  },
+      { label: "Reserve",      pct: 30, color: "text-violet-300",bar: "bg-violet-500",bg: "bg-violet-500/10",border: "border-violet-500/20" },
+    ],
+  },
 ];
 
 export default function ActivatePage({ account, approveToken, activatePackage, activateFromBalance, fetchUserData, disconnect, virtualUsdtBalance }: ActivatePageProps) {
   const { toast } = useToast();
-  const [approved,   setApproved]   = useState(false);
-  const [approving,  setApproving]  = useState(false);
-  const [activating, setActivating] = useState(false);
+  const [selectedPkg, setSelectedPkg]   = useState(2); // default Pro
+  const [approved,   setApproved]       = useState(false);
+  const [approving,  setApproving]      = useState(false);
+  const [activating, setActivating]     = useState(false);
   const [activatingInternal, setActivatingInternal] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
-  const [usdtBalance, setUsdtBalance] = useState<bigint | null>(null);
-  const [allowance,   setAllowance]   = useState<bigint>(0n);
+  const [refreshing, setRefreshing]     = useState(false);
+  const [usdtBalance, setUsdtBalance]   = useState<bigint | null>(null);
+  const [allowance,   setAllowance]     = useState<bigint>(0n);
   const [activeMethod, setActiveMethod] = useState<"wallet" | "internal">("wallet");
 
-  const PACKAGE_PRICE = ethers.parseUnits("130", 18);
+  const pkg = PACKAGES.find(p => p.pkg === selectedPkg)!;
+  const PACKAGE_PRICE = ethers.parseUnits(pkg.price.toString(), 18);
 
   const virtualBalanceNum = virtualUsdtBalance ? parseFloat(formatTokenAmount(virtualUsdtBalance, 18)) : 0;
   const hasVirtualFunds = virtualUsdtBalance !== undefined && virtualUsdtBalance >= PACKAGE_PRICE;
@@ -63,10 +89,11 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
       setUsdtBalance(bal);
       setAllowance(allow);
       if ((allow as bigint) >= PACKAGE_PRICE) setApproved(true);
+      else setApproved(false);
     } catch {}
   };
 
-  useEffect(() => { fetchBalances(); }, [account]);
+  useEffect(() => { fetchBalances(); }, [account, selectedPkg]);
 
   const balanceNum = usdtBalance !== null ? parseFloat(formatTokenAmount(usdtBalance, 18)) : null;
   const hasFunds   = usdtBalance !== null && usdtBalance >= PACKAGE_PRICE;
@@ -75,9 +102,9 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
   const handleApprove = async () => {
     setApproving(true);
     try {
-      await approveToken("130");
+      await approveToken(pkg.price.toString());
       setApproved(true);
-      toast({ title: "USDT Approved", description: "You can now activate your account." });
+      toast({ title: "USDT Approved", description: `You can now activate the ${pkg.label} package.` });
       await fetchBalances();
     } catch (err: any) {
       toast({ title: "Approval Failed", description: parseContractError(err), variant: "destructive" });
@@ -87,8 +114,8 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
   const handleActivate = async () => {
     setActivating(true);
     try {
-      await activatePackage();
-      toast({ title: "Account Activated!", description: "Welcome to M-Vault. Start earning now." });
+      await activatePackage(selectedPkg);
+      toast({ title: "Account Activated!", description: `${pkg.label} package activated. Welcome to M-Vault!` });
       await fetchUserData();
     } catch (err: any) {
       toast({ title: "Activation Failed", description: parseContractError(err), variant: "destructive" });
@@ -98,8 +125,8 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
   const handleActivateFromBalance = async () => {
     setActivatingInternal(true);
     try {
-      await activateFromBalance();
-      toast({ title: "Account Activated!", description: "Activated using your contract balance. Welcome to M-Vault!" });
+      await activateFromBalance(selectedPkg);
+      toast({ title: "Account Activated!", description: `${pkg.label} package activated using your contract balance!` });
       await fetchUserData();
     } catch (err: any) {
       toast({ title: "Activation Failed", description: parseContractError(err), variant: "destructive" });
@@ -112,9 +139,14 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
     setRefreshing(false);
   };
 
+  // Reset approval when package changes
+  const handleSelectPackage = (p: number) => {
+    setSelectedPkg(p);
+    setApproved(false);
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
-      {/* Background glow */}
       <div className="absolute top-[-15%] left-[-10%] w-[500px] h-[500px] rounded-full bg-amber-600/[0.07] blur-[200px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[400px] h-[400px] rounded-full bg-yellow-500/[0.05] blur-[180px] pointer-events-none" />
 
@@ -130,7 +162,42 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
           </button>
         </div>
 
-        {/* Method tabs */}
+        {/* Package selection */}
+        <div className="glass-card rounded-2xl p-4 space-y-3">
+          <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">Select Package</p>
+          <div className="grid grid-cols-2 gap-2">
+            {PACKAGES.map(p => {
+              const Icon = p.icon;
+              const isSelected = selectedPkg === p.pkg;
+              return (
+                <button
+                  key={p.pkg}
+                  onClick={() => handleSelectPackage(p.pkg)}
+                  data-testid={`button-package-${p.pkg}`}
+                  className={`relative rounded-xl p-4 border text-left transition-all ${
+                    isSelected
+                      ? "bg-amber-500/15 border-amber-500/40"
+                      : "bg-white/[0.03] border-white/[0.07] hover:bg-white/[0.06]"
+                  }`}
+                >
+                  {isSelected && (
+                    <div className="absolute top-2 right-2">
+                      <CheckCircle2 className="h-3.5 w-3.5 text-amber-400" />
+                    </div>
+                  )}
+                  <Icon className={`h-5 w-5 mb-2 ${isSelected ? "text-amber-300" : "text-muted-foreground"}`} />
+                  <p className={`text-base font-bold ${isSelected ? "text-amber-300" : ""}`} style={{ fontFamily: "var(--font-display)" }}>
+                    ${p.price}
+                  </p>
+                  <p className={`text-[11px] font-semibold ${isSelected ? "text-amber-200" : "text-muted-foreground"}`}>{p.label}</p>
+                  <p className="text-[10px] text-muted-foreground/60 mt-0.5">Cap: ${p.cap}</p>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Method tabs (show when has virtual funds) */}
         {hasVirtualFunds && (
           <div className="flex gap-1 p-1 rounded-xl bg-white/[0.03] border border-white/[0.06]">
             <button
@@ -157,12 +224,9 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
               <div className="h-14 w-14 mx-auto rounded-2xl bg-gradient-to-br from-emerald-500/25 to-green-400/10 border border-emerald-400/15 flex items-center justify-center mb-3">
                 <Coins className="h-7 w-7 text-emerald-300" />
               </div>
-              <h1 className="text-2xl font-bold text-emerald-300" style={{ fontFamily: "var(--font-display)" }}>
-                Internal Activation
-              </h1>
-              <p className="text-xs text-muted-foreground">Use your contract USDT balance to activate</p>
+              <h1 className="text-2xl font-bold text-emerald-300" style={{ fontFamily: "var(--font-display)" }}>Internal Activation</h1>
+              <p className="text-xs text-muted-foreground">Use your contract USDT balance — {pkg.label} (${pkg.price})</p>
             </div>
-
             <div className="rounded-xl bg-white/[0.03] border border-white/[0.07] p-4">
               <div className="flex justify-between items-center">
                 <span className="text-xs text-muted-foreground flex items-center gap-1.5">
@@ -175,12 +239,11 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
               <div className="mt-2 h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
                 <div
                   className="h-full rounded-full bg-gradient-to-r from-emerald-600 to-emerald-400 transition-all duration-700"
-                  style={{ width: `${Math.min(100, (virtualBalanceNum / 130) * 100)}%` }}
+                  style={{ width: `${Math.min(100, (virtualBalanceNum / pkg.price) * 100)}%` }}
                 />
               </div>
-              <p className="text-[10px] text-emerald-400/70 mt-1">Sufficient to activate ($130 required)</p>
+              <p className="text-[10px] text-emerald-400/70 mt-1">Sufficient to activate (${pkg.price} required)</p>
             </div>
-
             <button
               onClick={handleActivateFromBalance}
               disabled={activatingInternal}
@@ -190,7 +253,7 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
             >
               {activatingInternal
                 ? <><Loader2 className="h-4 w-4 animate-spin" /> Activating…</>
-                : <><ArrowRight className="h-4 w-4" /> Activate Using Contract Balance</>
+                : <><ArrowRight className="h-4 w-4" /> Activate {pkg.label} Using Contract Balance</>
               }
             </button>
           </div>
@@ -199,15 +262,13 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
         {/* Wallet Activation */}
         {(activeMethod === "wallet" || !hasVirtualFunds) && (
           <div className="glass-card rounded-2xl p-6 space-y-6">
-
-            {/* Header */}
             <div className="text-center space-y-2">
               <div className="h-14 w-14 mx-auto rounded-2xl bg-gradient-to-br from-amber-500/25 to-yellow-400/10 border border-amber-400/15 flex items-center justify-center mb-3">
                 <Zap className="h-7 w-7 text-yellow-300" />
               </div>
               <h1 className="text-2xl font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }}
                 data-testid="text-page-title">Activate Account</h1>
-              <p className="text-xs text-muted-foreground">One-time $130 USDT · Earn up to $390 (3×)</p>
+              <p className="text-xs text-muted-foreground">{pkg.label} package · ${pkg.price} USDT · Earn up to ${pkg.cap} (3×)</p>
             </div>
 
             {/* Balance row */}
@@ -225,7 +286,6 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
                   </span>
                 )}
               </div>
-
               {usdtBalance !== null && (
                 <>
                   <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
@@ -233,12 +293,12 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
                       className={`h-full rounded-full transition-all duration-700 ${hasFunds
                         ? "bg-gradient-to-r from-emerald-600 to-emerald-400"
                         : "bg-gradient-to-r from-red-600 to-orange-400"}`}
-                      style={{ width: `${Math.min(100, (balanceNum ?? 0) / 130 * 100)}%` }}
+                      style={{ width: `${Math.min(100, (balanceNum ?? 0) / pkg.price * 100)}%` }}
                     />
                   </div>
                   <div className="flex justify-between items-center">
                     <span className="text-[10px] text-muted-foreground/60">
-                      {hasFunds ? "Sufficient to activate" : `Need $${Math.max(0, 130 - (balanceNum ?? 0)).toFixed(2)} more`}
+                      {hasFunds ? "Sufficient to activate" : `Need $${Math.max(0, pkg.price - (balanceNum ?? 0)).toFixed(2)} more`}
                     </span>
                     <span className="text-[10px] font-mono text-muted-foreground/50">
                       {shortenAddress(account)}
@@ -248,12 +308,11 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
               )}
             </div>
 
-            {/* Low balance warning */}
             {!hasFunds && usdtBalance !== null && (
               <div className="flex items-start gap-2.5 p-3 rounded-xl bg-red-500/8 border border-red-500/15">
                 <AlertCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
                 <p className="text-xs text-red-400/90 leading-relaxed">
-                  You need at least <strong>$130 USDT</strong> in your wallet to activate. Please top up and refresh.
+                  You need at least <strong>${pkg.price} USDT</strong> in your wallet to activate. Please top up and refresh.
                 </p>
               </div>
             )}
@@ -276,7 +335,6 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
 
             {/* Action buttons */}
             <div className="space-y-2.5">
-              {/* Step 1 — Approve */}
               {!approved ? (
                 <button
                   onClick={handleApprove}
@@ -287,7 +345,7 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
                 >
                   {approving
                     ? <><Loader2 className="h-4 w-4 animate-spin" /> Approving USDT…</>
-                    : <><CheckCircle2 className="h-4 w-4" /> Step 1 — Approve $130 USDT</>
+                    : <><CheckCircle2 className="h-4 w-4" /> Step 1 — Approve ${pkg.price} USDT</>
                   }
                 </button>
               ) : (
@@ -296,7 +354,6 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
                 </div>
               )}
 
-              {/* Step 2 — Activate */}
               <button
                 onClick={handleActivate}
                 disabled={activating || !approved || !hasFunds}
@@ -310,12 +367,11 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
               >
                 {activating
                   ? <><Loader2 className="h-4 w-4 animate-spin" /> Activating…</>
-                  : <><ArrowRight className="h-4 w-4" /> Step 2 — Activate Account</>
+                  : <><ArrowRight className="h-4 w-4" /> Step 2 — Activate {pkg.label} (${pkg.price})</>
                 }
               </button>
             </div>
 
-            {/* Refresh */}
             <button
               onClick={handleRefresh}
               disabled={refreshing}
@@ -328,32 +384,25 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
           </div>
         )}
 
-        {/* Distribution card */}
+        {/* Distribution breakdown */}
         <div className="glass-card rounded-2xl p-5 space-y-4">
           <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-            How $130 Activation is Split
+            How ${pkg.price} Activation is Split
           </p>
-
-          {/* Visual bar */}
           <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5">
-            {DISTRIBUTION.map(d => (
+            {pkg.distribution.map(d => (
               <div key={d.label} className={`${d.bar} opacity-75`} style={{ width: `${d.pct}%` }} />
             ))}
           </div>
-
           <div className="space-y-2.5">
-            {DISTRIBUTION.map(d => (
+            {pkg.distribution.map(d => (
               <div key={d.label} className={`flex items-center gap-3 p-2.5 rounded-xl ${d.bg} border ${d.border}`}>
-                <d.icon className={`h-4 w-4 ${d.color} shrink-0`} />
                 <div className="flex-1 min-w-0">
                   <p className="text-xs font-semibold">{d.label}</p>
-                  <p className="text-[10px] text-muted-foreground">{d.sub}</p>
                 </div>
                 <div className="text-right shrink-0">
-                  <p className={`text-sm font-bold ${d.color}`} style={{ fontFamily: "var(--font-display)" }}>
-                    {d.pct}%
-                  </p>
-                  <p className="text-[10px] text-muted-foreground">${130 * d.pct / 100}</p>
+                  <p className={`text-sm font-bold ${d.color}`} style={{ fontFamily: "var(--font-display)" }}>{d.pct}%</p>
+                  <p className="text-[10px] text-muted-foreground">${pkg.price * d.pct / 100}</p>
                 </div>
               </div>
             ))}

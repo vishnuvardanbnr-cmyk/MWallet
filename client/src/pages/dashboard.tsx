@@ -1,8 +1,9 @@
 import { useState, useCallback, useEffect } from "react";
-import { DollarSign, TrendingUp, TrendingDown, Coins, RefreshCw, Copy, User, Users, Wallet, Zap, Shield, Bitcoin, RotateCcw, Info, ChevronRight, Check, ExternalLink } from "lucide-react";
+import { DollarSign, TrendingUp, TrendingDown, Coins, RefreshCw, Copy, User, Users, Wallet, Zap, Shield, Bitcoin, RotateCcw, Info, ChevronRight, Check, ExternalLink, Award, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { formatTokenAmount, shortenAddress, getMvaultContract } from "@/lib/contract";
 import type { UserInfo, MvtPrice, BinaryPairs, ProfileOnChain } from "@/hooks/use-web3";
+import { getRankInfo } from "@/pages/rank";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
 import { ethers } from "ethers";
@@ -106,6 +107,8 @@ export default function Dashboard({
     })();
   }, [account, isSubAccount]);
 
+  const rankInfo = getRankInfo(userInfo.rank ?? 0);
+
   const buyPriceNum = parseFloat(formatTokenAmount(mvtPrice.buyPrice, 18));
   const sellPriceNum = parseFloat(formatTokenAmount(mvtPrice.sellPrice, 18));
 
@@ -144,9 +147,19 @@ export default function Dashboard({
               {profileOnChain?.displayName || shortenAddress(account)} · {isSubAccount ? "Sub-account" : "Main account"}
             </p>
           </div>
-          <button onClick={() => fetchUserData()} className="p-2 rounded-lg hover:bg-white/[0.04] text-muted-foreground hover:text-foreground transition-all" data-testid="button-refresh-dashboard">
-            <RefreshCw className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setLocation("/rank")}
+              className={`flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg border text-[11px] font-semibold transition-all hover:opacity-90 ${rankInfo.bg} ${rankInfo.border} ${rankInfo.color}`}
+              data-testid="button-rank-badge"
+            >
+              <Award className="h-3.5 w-3.5" />
+              {rankInfo.name}
+            </button>
+            <button onClick={() => fetchUserData()} className="p-2 rounded-lg hover:bg-white/[0.04] text-muted-foreground hover:text-foreground transition-all" data-testid="button-refresh-dashboard">
+              <RefreshCw className="h-4 w-4" />
+            </button>
+          </div>
         </div>
 
         {isSubAccount && (
@@ -225,6 +238,33 @@ export default function Dashboard({
           </button>
         </div>
       </div>
+
+      {/* Income Limit reached → Upgrade/Reactivate CTA */}
+      {userInfo.isActive && incomeLimitNum <= 0 && incomeLimitCapNum > 0 && (
+        <div className="glass-card rounded-2xl p-4 border border-orange-500/30 slide-in" style={{ animationDelay: "0.05s" }} data-testid="card-income-limit-reached">
+          <div className="flex items-start gap-3">
+            <div className="h-9 w-9 rounded-xl bg-orange-500/15 flex items-center justify-center shrink-0">
+              <AlertTriangle className="h-4.5 w-4.5 text-orange-400" />
+            </div>
+            <div className="flex-1 min-w-0">
+              <p className="text-sm font-bold text-orange-300" style={{ fontFamily: "var(--font-display)" }}>
+                Income Limit Reached
+              </p>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                You've earned your full ${incomeCap.toFixed(0)} cap. {pkgPriceNum <= 55 ? "Upgrade to Pro ($130) to unlock a $390 cap, or reactivate at $55 to reset your limit." : "Reactivate your $130 package to reset your income limit."}
+              </p>
+              <button
+                onClick={() => setLocation("/activate")}
+                className="mt-2.5 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-orange-500/15 border border-orange-500/25 text-sm font-semibold text-orange-300 hover:bg-orange-500/20 transition-all"
+                data-testid="button-upgrade-reactivate"
+              >
+                <Zap className="h-4 w-4" />
+                {pkgPriceNum <= 55 ? "Upgrade / Reactivate" : "Reactivate Now"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Income Limit & Rebirth Pool */}
       <div className="grid grid-cols-2 gap-4 slide-in" style={{ animationDelay: "0.06s" }}>

@@ -81,6 +81,9 @@ function formatTime(date: string | Date) {
 interface SupportProps {
   account: string;
   isAdmin?: boolean;
+  getAdminPoolBalances?: () => Promise<{ binaryPool: bigint; powerLegReserve: bigint; adminPool: bigint; totalUsers: number }>;
+  distributeBinaryIncome?: (_totalUserCount: number) => Promise<void>;
+  distributePowerLeg?: (_totalUserCount: number) => Promise<void>;
 }
 
 function NewTicketForm({ onSubmit, onCancel }: { onSubmit: (subject: string, category: string, message: string, priority: string) => void; onCancel: () => void }) {
@@ -88,10 +91,16 @@ function NewTicketForm({ onSubmit, onCancel }: { onSubmit: (subject: string, cat
   const [category, setCategory] = useState("general");
   const [message, setMessage] = useState("");
   const [priority, setPriority] = useState("normal");
+  const [submitting, setSubmitting] = useState(false);
 
-  const handleSubmit = () => {
+  const handleSubmit = async () => {
     if (!subject.trim() || !message.trim()) return;
-    onSubmit(subject.trim(), category, message.trim(), priority);
+    setSubmitting(true);
+    try {
+      await onSubmit(subject.trim(), category, message.trim(), priority);
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -170,13 +179,13 @@ function NewTicketForm({ onSubmit, onCancel }: { onSubmit: (subject: string, cat
           </button>
           <button
             onClick={handleSubmit}
-            disabled={!subject.trim() || !message.trim()}
+            disabled={!subject.trim() || !message.trim() || submitting}
             className="flex-1 glow-button text-white font-bold py-2.5 px-4 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2"
             data-testid="button-submit-ticket"
             style={{ fontFamily: 'var(--font-display)' }}
           >
-            <Send className="h-4 w-4" />
-            Submit Ticket
+            {submitting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+            {submitting ? "Submitting…" : "Submit Ticket"}
           </button>
         </div>
       </div>
