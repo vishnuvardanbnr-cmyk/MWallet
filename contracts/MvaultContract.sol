@@ -1286,6 +1286,22 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     }
 
     /**
+     * @notice MANAGER/OWNER: Batch-set user rank levels (0=unranked 1=M1…5=M5).
+     *         Called by the off-chain distributor after evaluating qualifications.
+     */
+    function setUserRanks(address[] calldata addrs, uint8[] calldata ranks_) external {
+        require(msg.sender == manager || msg.sender == owner(), "!auth");
+        require(addrs.length == ranks_.length, "!len");
+        for (uint256 i; i < addrs.length; i++) {
+            uint8 old = users[addrs[i]].rank;
+            if (old != ranks_[i]) {
+                users[addrs[i]].rank = ranks_[i];
+                emit RankUpdated(addrs[i], old, ranks_[i]);
+            }
+        }
+    }
+
+    /**
      * @notice ADMIN: Distribute rankPool to rank holders.
      *         Admin computes recipients off-chain and submits pre-computed amounts.
      *         adminLeftover = any reserve not allocated (added back to adminPool).

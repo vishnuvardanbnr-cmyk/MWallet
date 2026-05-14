@@ -1,4 +1,4 @@
-import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome, usdtDeposits, type UsdtDeposit, leadershipRewards, type LeadershipReward, musdtStakingPlans, type MusdtStakingPlan, type InsertMusdtStakingPlan, musdtOverrideIncome, type MusdtOverrideIncome, mTokenPurchaseBatches, type MTokenPurchaseBatch, type InsertTokenBatch, distributionCycles, type DistributionCycle, distributionProofs, type DistributionProof } from "@shared/schema";
+import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome, usdtDeposits, type UsdtDeposit, leadershipRewards, type LeadershipReward, musdtStakingPlans, type MusdtStakingPlan, type InsertMusdtStakingPlan, musdtOverrideIncome, type MusdtOverrideIncome, mTokenPurchaseBatches, type MTokenPurchaseBatch, type InsertTokenBatch, distributionCycles, type DistributionCycle, distributionProofs, type DistributionProof, kvStore } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -95,6 +95,9 @@ export interface IStorage {
   saveDistributionProof(cycle: number, walletAddress: string, binaryShare: string, powerLegShare: string, newMatchedVol: string, newPowerLegPts: string, proof: string[]): Promise<DistributionProof>;
   saveDistributionProofsBulk(proofs: Array<{ cycle: number; walletAddress: string; binaryShare: string; powerLegShare: string; newMatchedVol: string; newPowerLegPts: string; proof: string[] }>): Promise<void>;
   getDistributionProof(cycle: number, walletAddress: string): Promise<DistributionProof | undefined>;
+  // Key-Value store (used by distributors to persist state like lastBlock)
+  getKv(key: string): Promise<string | null>;
+  setKv(key: string, value: string): Promise<void>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -739,6 +742,17 @@ export class DatabaseStorage implements IStorage {
     const [row] = await db.select().from(distributionProofs)
       .where(and(eq(distributionProofs.cycle, cycle), eq(distributionProofs.walletAddress, walletAddress.toLowerCase())));
     return row;
+  }
+
+  async getKv(key: string): Promise<string | null> {
+    const [row] = await db.select().from(kvStore).where(eq(kvStore.key, key));
+    return row?.value ?? null;
+  }
+
+  async setKv(key: string, value: string): Promise<void> {
+    await db.insert(kvStore)
+      .values({ key, value })
+      .onConflictDoUpdate({ target: kvStore.key, set: { value, updatedAt: new Date() } });
   }
 }
 

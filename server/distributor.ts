@@ -353,6 +353,340 @@ export async function runDistribution(): Promise<void> {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// RANK DISTRIBUTION
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Rank income % per slot (index = slot 1-5; 0 is unused)
+const RANK_PCT = [0n, 10n, 20n, 20n, 20n, 30n];
+
+// M1 on-chain qualification thresholds
+const M1_MIN_DIRECTS   = 5n;
+const M1_MIN_TEAM_USDT = ethers.parseUnits("2000", 18);
+// Higher-rank subtree counts
+const M2_MIN_M1 = 2;
+const M3_MIN_M2 = 4;
+const M4_MIN_M3 = 4;
+const M5_MIN_M4 = 4;
+
+const RANK_STRUCT_BATCH = 200;   // getRankBatch per call
+const SET_RANKS_BATCH   = 100;   // setUserRanks per tx
+const BLOCK_CHUNK       = 2_000; // getLogs block window (public RPC limit)
+
+const MVAULT_RANK_ABI = [
+  "function rankPool() view returns (uint256)",
+  "function totalUsers() view returns (uint256)",
+  "function setUserRanks(address[], uint8[]) external",
+  "function applyRankIncome(address[], uint256[], uint256) external",
+  "event Activated(address indexed user, uint256 mvtMinted, uint256 grossMvt, uint256 levelAmt, uint256 binaryAmt, uint256 adminAmt)",
+];
+
+const MVAULT_VIEW_RANK_ABI = [
+  "function getUserSlice(uint256 offset, uint256 limit) view returns (address[])",
+  "function getRankBatch(address[] addrs) view returns (tuple(bool isActive, uint8 rank, address sponsor, uint256 directCount, uint256 teamSalesUsdt, uint256 leftSubVolume, uint256 rightSubVolume)[])",
+];
+
+type RankEntry = {
+  isActive:      boolean;
+  rank:          number;   // on-chain rank (may be stale until setUserRanks)
+  sponsor:       string;   // lowercase
+  directCount:   bigint;
+  teamSalesUsdt: bigint;
+  leftSubVolume: bigint;
+  rightSubVolume:bigint;
+};
+
+let isRankRunning = false;
+
+export async function runRankDistribution(): Promise<void> {
+  if (isRankRunning) {
+    log("Rank distribution already in progress — skipping", "rank-dist");
+    return;
+  }
+
+  const managerKey = process.env.DEPLOYER_PRIVATE_KEY;
+  const adminKey   = process.env.ADMIN_PRIVATE_KEY;
+
+  if (!managerKey) {
+    log("DEPLOYER_PRIVATE_KEY not set — skipping rank distribution", "rank-dist");
+    return;
+  }
+  if (!adminKey) {
+    log("ADMIN_PRIVATE_KEY not set — skipping rank distribution (needed for applyRankIncome)", "rank-dist");
+    return;
+  }
+  if (!MVAULT_VIEW_ADDRESS) {
+    log("VITE_MVAULT_VIEW_ADDRESS not set — skipping rank distribution", "rank-dist");
+    return;
+  }
+
+  isRankRunning = true;
+  const t0 = Date.now();
+  log("Starting rank distribution cycle…", "rank-dist");
+
+  try {
+    const provider      = getProvider();
+    const managerSigner = new ethers.Wallet(managerKey, provider);
+    const adminSigner   = new ethers.Wallet(adminKey,   provider);
+
+    const mvault        = new ethers.Contract(MVAULT_CONTRACT_ADDRESS, MVAULT_RANK_ABI, provider);
+    const mvaultMgr     = new ethers.Contract(MVAULT_CONTRACT_ADDRESS, MVAULT_RANK_ABI, managerSigner);
+    const mvaultAdmin   = new ethers.Contract(MVAULT_CONTRACT_ADDRESS, MVAULT_RANK_ABI, adminSigner);
+    const mvView        = new ethers.Contract(MVAULT_VIEW_ADDRESS, MVAULT_VIEW_RANK_ABI, provider);
+
+    // ── 1. Check rankPool ────────────────────────────────────────────────────
+    const [rankPool, totalUsersN] = await Promise.all([
+      withRetry(() => mvault.rankPool()    as Promise<bigint>),
+      withRetry(() => mvault.totalUsers()  as Promise<bigint>),
+    ]);
+    const totalUsers = Number(totalUsersN);
+    log(`RankPool: ${ethers.formatUnits(rankPool, 18)} MVT | Users: ${totalUsers}`, "rank-dist");
+
+    // ── 2. Load all addresses ────────────────────────────────────────────────
+    const userAddresses: string[] = [];
+    for (let i = 0; i < totalUsers; i += ADDR_BATCH) {
+      const slice = await withRetry(() =>
+        mvView.getUserSlice(i, ADDR_BATCH) as Promise<string[]>
+      );
+      userAddresses.push(...slice);
+    }
+
+    // ── 3. Load rank data ────────────────────────────────────────────────────
+    log(`Loading rank data (batch ${RANK_STRUCT_BATCH})…`, "rank-dist");
+    const rankMap = new Map<string, RankEntry>();
+
+    for (let i = 0; i < userAddresses.length; i += RANK_STRUCT_BATCH) {
+      const batch   = userAddresses.slice(i, i + RANK_STRUCT_BATCH);
+      const results = await withRetry(() =>
+        mvView.getRankBatch(batch) as Promise<any[]>
+      );
+      for (let j = 0; j < batch.length; j++) {
+        const r   = results[j];
+        const sp  = (r.sponsor as string).toLowerCase();
+        if (sp === ethers.ZeroAddress.toLowerCase() && !r.isActive) continue; // unregistered
+        rankMap.set(batch[j].toLowerCase(), {
+          isActive:      r.isActive,
+          rank:          Number(r.rank),
+          sponsor:       sp,
+          directCount:   r.directCount   as bigint,
+          teamSalesUsdt: r.teamSalesUsdt as bigint,
+          leftSubVolume: r.leftSubVolume  as bigint,
+          rightSubVolume:r.rightSubVolume as bigint,
+        });
+      }
+    }
+    log(`Rank data loaded: ${rankMap.size} users`, "rank-dist");
+
+    // ── 4. Build sponsor→children map ────────────────────────────────────────
+    const children = new Map<string, string[]>();
+    for (const [addr, u] of rankMap) {
+      const sp = u.sponsor;
+      if (sp && sp !== ethers.ZeroAddress.toLowerCase()) {
+        if (!children.has(sp)) children.set(sp, []);
+        children.get(sp)!.push(addr);
+      }
+    }
+
+    // ── 5. Evaluate ranks in 5 passes ────────────────────────────────────────
+    const computedRank = new Map<string, number>(); // addr → evaluated rank
+
+    // Pass 1: M1 (on-chain criteria only)
+    for (const [addr, u] of rankMap) {
+      if (!u.isActive) { computedRank.set(addr, 0); continue; }
+      const isM1 =
+        u.directCount   >= M1_MIN_DIRECTS   &&
+        u.teamSalesUsdt >= M1_MIN_TEAM_USDT &&
+        u.leftSubVolume  > 0n               &&
+        u.rightSubVolume > 0n;
+      computedRank.set(addr, isM1 ? 1 : 0);
+    }
+
+    // Helper: count downline members with computedRank >= minRank
+    function countSubtree(root: string, minRank: number, seen = new Set<string>()): number {
+      if (seen.has(root)) return 0;
+      seen.add(root);
+      let count = 0;
+      for (const child of (children.get(root) ?? [])) {
+        if ((computedRank.get(child) ?? 0) >= minRank) count++;
+        count += countSubtree(child, minRank, seen);
+      }
+      return count;
+    }
+
+    // Passes 2-5: M2→M5
+    const higherPassConfig = [
+      { target: 2, minSubRank: 1, minCount: M2_MIN_M1 },
+      { target: 3, minSubRank: 2, minCount: M3_MIN_M2 },
+      { target: 4, minSubRank: 3, minCount: M4_MIN_M3 },
+      { target: 5, minSubRank: 4, minCount: M5_MIN_M4 },
+    ];
+    for (const { target, minSubRank, minCount } of higherPassConfig) {
+      for (const [addr, u] of rankMap) {
+        if (!u.isActive || (computedRank.get(addr) ?? 0) < target - 1) continue;
+        const cnt = countSubtree(addr, minSubRank);
+        if (cnt >= minCount) computedRank.set(addr, target);
+      }
+    }
+
+    // ── 6. Apply rank changes on-chain ───────────────────────────────────────
+    const toUpdate: Array<{ addr: string; newRank: number }> = [];
+    for (const [addr, u] of rankMap) {
+      const computed = computedRank.get(addr) ?? 0;
+      if (computed !== u.rank) toUpdate.push({ addr, newRank: computed });
+    }
+
+    if (toUpdate.length > 0) {
+      log(`Updating ${toUpdate.length} user ranks on-chain…`, "rank-dist");
+      for (let i = 0; i < toUpdate.length; i += SET_RANKS_BATCH) {
+        const chunk = toUpdate.slice(i, i + SET_RANKS_BATCH);
+        const tx = await withRetry(() =>
+          mvaultMgr.setUserRanks(
+            chunk.map(c => c.addr),
+            chunk.map(c => c.newRank),
+            { gasLimit: 500_000 }
+          ) as Promise<any>
+        );
+        await tx.wait();
+        log(`  Batch ${Math.floor(i / SET_RANKS_BATCH) + 1}: ${chunk.length} ranks updated`, "rank-dist");
+        // Update local map so income step uses fresh ranks
+        for (const c of chunk) {
+          const u = rankMap.get(c.addr);
+          if (u) u.rank = c.newRank;
+        }
+      }
+    } else {
+      log("No rank changes this cycle", "rank-dist");
+    }
+
+    // ── 7. Skip income if pool is empty ──────────────────────────────────────
+    if (rankPool === 0n) {
+      log("RankPool is zero — rank updates done, no income to distribute", "rank-dist");
+      return;
+    }
+
+    // ── 8. Read Activated events since last distribution ─────────────────────
+    const lastBlockStr = await storage.getKv("lastRankDistributionBlock");
+    const lastBlock    = lastBlockStr ? Number(lastBlockStr) : 0;
+    const currentBlock = await provider.getBlockNumber();
+
+    log(`Reading Activated events block ${lastBlock + 1} → ${currentBlock}…`, "rank-dist");
+
+    const activatedSig = "Activated(address,uint256,uint256,uint256,uint256,uint256)";
+    const topic0       = ethers.id(activatedSig);
+    const activations: Array<{ user: string; grossMvt: bigint }> = [];
+
+    const iface = new ethers.Interface(MVAULT_RANK_ABI);
+    for (let from = lastBlock + 1; from <= currentBlock; from += BLOCK_CHUNK) {
+      const to   = Math.min(from + BLOCK_CHUNK - 1, currentBlock);
+      const logs = await withRetry(() =>
+        provider.getLogs({ address: MVAULT_CONTRACT_ADDRESS, topics: [topic0], fromBlock: from, toBlock: to })
+      );
+      for (const l of logs) {
+        const parsed = iface.parseLog(l);
+        if (!parsed) continue;
+        activations.push({ user: (parsed.args[0] as string).toLowerCase(), grossMvt: parsed.args[2] as bigint });
+      }
+    }
+    log(`Found ${activations.length} activations since block ${lastBlock}`, "rank-dist");
+
+    if (activations.length === 0) {
+      log("No new activations — skipping rank income step", "rank-dist");
+      await storage.setKv("lastRankDistributionBlock", String(currentBlock));
+      return;
+    }
+
+    // ── 9. Compute per-address shares ────────────────────────────────────────
+    // For each activation, walk up sponsor chain filling 5 rank slots.
+    // Slot N is filled by the FIRST upline with rank >= N.
+    // A person with rank R fills all unfilled slots 1…R simultaneously.
+    const sharesMap    = new Map<string, bigint>();
+    let   totalComputed = 0n;
+    let   adminLeftover = 0n;
+
+    for (const { user, grossMvt } of activations) {
+      const rankAmt  = (grossMvt * 10n) / 100n;
+      const filled   = [false, false, false, false, false, false]; // index 1-5
+      let   remaining = rankAmt;
+      let   cur       = rankMap.get(user)?.sponsor ?? null;
+
+      while (cur && cur !== ethers.ZeroAddress.toLowerCase() && remaining > 0n) {
+        const u = rankMap.get(cur);
+        if (u && u.rank > 0) {
+          for (let slot = 1; slot <= u.rank && slot <= 5; slot++) {
+            if (!filled[slot]) {
+              const share = (rankAmt * RANK_PCT[slot]) / 100n;
+              sharesMap.set(cur, (sharesMap.get(cur) ?? 0n) + share);
+              totalComputed += share;
+              remaining     -= share;
+              filled[slot]   = true;
+            }
+          }
+        }
+        cur = u?.sponsor ?? null;
+        if (filled[1] && filled[2] && filled[3] && filled[4] && filled[5]) break;
+      }
+
+      // Unfilled slots → admin
+      adminLeftover += remaining;
+    }
+
+    if (sharesMap.size === 0 || totalComputed === 0n) {
+      log("No rank income recipients computed — leftover goes to admin", "rank-dist");
+      // Still call applyRankIncome to drain the pool and credit admin
+      const tx = await withRetry(() =>
+        mvaultAdmin.applyRankIncome([], [], rankPool, { gasLimit: 200_000 }) as Promise<any>
+      );
+      await tx.wait();
+      await storage.setKv("lastRankDistributionBlock", String(currentBlock));
+      return;
+    }
+
+    // ── 10. Scale raw shares to fit actual rankPool ───────────────────────────
+    // totalComputed + adminLeftover should ≈ total rankAmt from events.
+    // rankPool may differ slightly (e.g. activations before genesis block).
+    // Scale so sum(shares) + adminLeftover_actual = rankPool.
+    const rawTotal       = totalComputed + adminLeftover;
+    const recipients: string[]  = [];
+    const scaledShares: bigint[] = [];
+    let   sumScaled = 0n;
+
+    for (const [addr, raw] of sharesMap) {
+      // Scale: scaled = raw * rankPool / rawTotal
+      const scaled = rawTotal > 0n ? (raw * rankPool) / rawTotal : 0n;
+      if (scaled === 0n) continue;
+      recipients.push(addr);
+      scaledShares.push(scaled);
+      sumScaled += scaled;
+    }
+
+    const leftoverActual = rankPool > sumScaled ? rankPool - sumScaled : 0n;
+    log(
+      `Distributing ${ethers.formatUnits(sumScaled, 18)} MVT to ${recipients.length} recipients` +
+      ` | admin leftover ${ethers.formatUnits(leftoverActual, 18)} MVT`,
+      "rank-dist"
+    );
+
+    // ── 11. Call applyRankIncome (onlyOwner) ─────────────────────────────────
+    const tx = await withRetry(() =>
+      mvaultAdmin.applyRankIncome(recipients, scaledShares, leftoverActual, { gasLimit: 1_000_000 }) as Promise<any>
+    );
+    log(`applyRankIncome tx: ${tx.hash}`, "rank-dist");
+    const receipt = await tx.wait();
+    log(`Confirmed block ${receipt?.blockNumber}`, "rank-dist");
+
+    await storage.setKv("lastRankDistributionBlock", String(currentBlock));
+
+    const elapsed = ((Date.now() - t0) / 1000).toFixed(1);
+    log(`Rank distribution complete ✓ | ${recipients.length} recipients | ${elapsed}s`, "rank-dist");
+
+  } catch (err: any) {
+    const msg = err?.shortMessage || err?.reason || err?.message || String(err);
+    log(`Rank distribution error: ${msg}`, "rank-dist");
+  } finally {
+    isRankRunning = false;
+  }
+}
+
 export function startDistributor(): void {
   if (!process.env.DEPLOYER_PRIVATE_KEY) {
     log("DEPLOYER_PRIVATE_KEY not set — auto-distributor disabled", "distributor");
@@ -376,4 +710,13 @@ export function startDistributor(): void {
     runDistribution();
     setInterval(runDistribution, INTERVAL_MS);
   }, STARTUP_DELAY);
+
+  // Rank distribution runs on the same interval, offset by 2 minutes
+  const RANK_STARTUP_DELAY = STARTUP_DELAY + 2 * 60 * 1000;
+  setTimeout(() => {
+    runRankDistribution();
+    setInterval(runRankDistribution, INTERVAL_MS);
+  }, RANK_STARTUP_DELAY);
+
+  log("Rank auto-distributor scheduled (offset 2 min after binary)", "rank-dist");
 }

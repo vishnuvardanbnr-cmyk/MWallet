@@ -302,6 +302,56 @@ contract MvaultView {
         }
     }
 
+    // ── Rank distributor batch reader ─────────────────────────────────────────
+
+    struct RankBatchEntry {
+        bool    isActive;
+        uint8   rank;
+        address sponsor;
+        uint256 directCount;
+        uint256 teamSalesUsdt;
+        uint256 leftSubVolume;
+        uint256 rightSubVolume;
+    }
+
+    /**
+     * @notice Returns the 7 fields needed by the off-chain rank distributor
+     *         for a batch of addresses in a single eth_call.
+     */
+    function getRankBatch(address[] calldata addrs)
+        external view returns (RankBatchEntry[] memory data)
+    {
+        data = new RankBatchEntry[](addrs.length);
+        for (uint256 i = 0; i < addrs.length; i++) {
+            (
+                bool _reg, bool _act,
+                address _sp, uint256 _dc, address _bp, bool _pl, address _lc, address _rc,
+                uint256 _l, uint256 _r, uint256 _m,
+                uint256 _mb, uint256 _tr, uint256 _ts, uint256 _il, uint256 _ub,
+                uint256 _rp, uint256 _tue, uint256 _bb, uint256 _tbe,
+                uint256 _p,
+                uint256 _pp, uint256 _ilc, address _ma, uint256 _rb,
+                uint8 _rk, uint256 _tsu, uint256 _ja,
+                string memory _dn, string memory _em, string memory _ph, string memory _co,
+                bool _prs
+            ) = mvault.users(addrs[i]);
+            _bp; _pl; _lc; _rc; _m;
+            _mb; _tr; _ts; _il; _ub; _rp; _tue; _bb; _tbe;
+            _p; _pp; _ilc; _ma; _rb; _ja;
+            _dn; _em; _ph; _co; _prs;
+            if (!_reg) continue;
+            data[i] = RankBatchEntry({
+                isActive:      _act,
+                rank:          _rk,
+                sponsor:       _sp,
+                directCount:   _dc,
+                teamSalesUsdt: _tsu,
+                leftSubVolume: _l,
+                rightSubVolume: _r
+            });
+        }
+    }
+
     // ── Contract addresses ────────────────────────────────────────────────────
 
     function getMvaultAddress()       external view returns (address) { return address(mvault); }

@@ -306,6 +306,12 @@ export const distributionProofs = pgTable("distribution_proofs", {
 ]);
 export type DistributionProof = typeof distributionProofs.$inferSelect;
 
+export const kvStore = pgTable("kv_store", {
+  key:       varchar("key",        { length: 255 }).primaryKey(),
+  value:     text("value").notNull(),
+  updatedAt: timestamp("updated_at").defaultNow(),
+});
+
 export interface HardwareProduct {
   id: string;
   name: string;
