@@ -65,7 +65,7 @@ interface IMvaultBoardMatrix {
 //   L1 → 0 directs   L2–L4 → 2 directs   L5–L7 → 5 directs   L8–L15 → 10 directs
 //
 // Binary distribution (admin, 2-step per cycle):
-//   Step 1 distributeBinaryIncome:  70% to pair matchers; sets powerLegPoints = newPairs×10
+//   Step 1 distributeBinaryIncome:  70% to pair matchers; sets powerLegPoints = newPairs×3 (STARTER) or newPairs×5 (PRO)
 //   Step 2 distributePowerLeg:      30% proportional to powerLegPoints; resets points to 0
 //
 // Virtual MVT balance:
@@ -938,7 +938,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
     /**
      * @notice STEP 1: Distribute 70% of binaryPool to users with new pair matches.
-     *         Sets powerLegPoints = newPairs × 10 for matching users.
+     *         Sets powerLegPoints = newPairs × 3 (STARTER $55) or newPairs × 5 (PRO $130) for matching users.
      *         Call distributePowerLeg() after processing all batches to close the cycle.
      *
      * @param offset  Start index in allUsers array.
@@ -992,7 +992,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
             uint256 share = (binary70 * newPairs) / totalNewPairs;
             users[u].mvtBalance      += share;
             users[u].totalReceived   += share;
-            users[u].powerLegPoints  += newPairs * 10;
+            uint256 ptsPerPair = users[u].packagePrice == PRICE_PRO ? 5 : 3;
+            users[u].powerLegPoints  += newPairs * ptsPerPair;
             users[u].matchedPairs     = pairs;
             emit BinaryIncomePaid(u, newPairs, share);
             _recordTx(u, TX_BINARY_INCOME, share, 0, address(0));
