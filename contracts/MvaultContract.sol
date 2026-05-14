@@ -31,24 +31,28 @@ interface IMvaultBoardMatrix {
 // ─────────────────────────────────────────────────────────────────────────────
 // MvaultContract
 //
-// Activation ($130 USDT):
-//   $130 → MvaultToken mints MVT (token keeps 10% for liquidity)
-//   Gross MVT (pre-deduction, e.g. 1,300) is the basis for all splits:
+// Packages (chosen at activation):
+//   pkg=1  STARTER  $55   → income limit $165  (3×)
+//   pkg=2  PRO      $130  → income limit $390  (3×)
+//
+// Activation:
+//   Chosen pkg price → MvaultToken mints MVT (token keeps 10% for liquidity)
+//   Gross MVT (pre-deduction) is the basis for all splits:
 //     30% → level income   (10 upline levels)
 //     30% → binaryPool     (admin distributes per cycle)
 //     30% → adminPool      (admin free pool)
 //     10% → liquidity      (handled by MvaultToken internally)
 //
-// Income limit  = 3 × $130 = $390 USDT per user.
+// Income limit  = 3 × pkg price per user.
 //   When user sells MVT → USDT first fills income limit → excess to rebirthPool.
 //   Once incomeLimit = 0 all sell proceeds go to rebirthPool.
 //
 // Rebirth:
-//   Requires rebirthPool ≥ $130.
+//   Requires rebirthPool ≥ user's packagePrice.
 //   On rebirth(subAccount):
-//     • $130 deducted from rebirthPool  → funds sub-account activation.
-//     • $130 transferred from rebirthPool → credited to main account usdtBalance.
-//     • incomeLimit resets to $390.
+//     • packagePrice deducted from rebirthPool  → funds sub-account activation.
+//     • packagePrice transferred from rebirthPool → credited to main account usdtBalance.
+//     • incomeLimit resets to user's incomeLimitCap.
 //     • Sub-account registered + activated (same distributions).
 //     • Sub-account's level-income sponsor = main account's sponsor
 //       → so sub-account's L1 income goes to the person who referred the main account.
@@ -76,9 +80,15 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     IMvaultToken        public           mvaultToken;
     IMvaultBoardMatrix  public           boardHandler;
 
-    // ── Constants ─────────────────────────────────────────────────────────────
-    uint256 public constant PACKAGE_PRICE  = 130 * 1e18; // $130 USDT (18 decimals)
-    uint256 public constant INCOME_LIMIT   = 390 * 1e18; // 3 × $130 per activation cycle
+    // ── Package constants ──────────────────────────────────────────────────────
+    // pkg=1  STARTER : $55  → income limit $165 (3×)
+    // pkg=2  PRO     : $130 → income limit $390 (3×)
+    uint256 public constant PRICE_STARTER  = 55  * 1e18;
+    uint256 public constant INCOME_STARTER = 165 * 1e18;
+    uint256 public constant PRICE_PRO      = 130 * 1e18;
+    uint256 public constant INCOME_PRO     = 390 * 1e18;
+
+    // ── Pool allocation constants ──────────────────────────────────────────────
     uint256 public constant LEVEL_ALLOC    = 30;          // % of gross MVT → level income (10 levels)
     uint256 public constant BINARY_ALLOC   = 30;          // % of gross MVT → binary pool
     uint256 public constant ADMIN_ALLOC    = 30;          // % of gross MVT → admin free pool
@@ -114,6 +124,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 totalBtcEarned;   // lifetime BTC pool credits
         // Power leg (resets each cycle)
         uint256 powerLegPoints;
+        // Package
+        uint256 packagePrice;     // activation price paid ($55 or $130)
+        uint256 incomeLimitCap;   // max income per cycle (3 × packagePrice)
         // Rebirth
         address mainAccount;      // if sub-account → points to main; else address(0)
         uint256 rebirthCount;
@@ -239,6 +252,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     error ZeroAddress();
     error ZeroAmount();
     error TransferFailed();
+    error InvalidPackage();
     error BinaryNotDistributed();
     error BinaryAlreadyDistributed();
     error BoardHandlerNotSet();
@@ -414,54 +428,73 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────────────────
 
     /**
-     * @notice Pay $130 USDT and activate.
-     *         Caller must have pre-approved this contract for PACKAGE_PRICE USDT.
+     * @dev Resolves package params from pkg index.
+     *      pkg=1 → STARTER ($55 / $165 limit)
+     *      pkg=2 → PRO     ($130 / $390 limit)
      */
-    function activate() external nonReentrant {
+    function _pkgParams(uint8 pkg) internal pure returns (uint256 price, uint256 incomeCap) {
+        if (pkg == 1) return (PRICE_STARTER, INCOME_STARTER);
+        if (pkg == 2) return (PRICE_PRO,     INCOME_PRO);
+        revert InvalidPackage();
+    }
+
+    /**
+     * @notice Pay USDT and activate. Choose your package:
+     *         pkg=1 → STARTER $55  (income limit $165)
+     *         pkg=2 → PRO     $130 (income limit $390)
+     *         Caller must have pre-approved this contract for the chosen package price.
+     */
+    function activate(uint8 pkg) external nonReentrant {
         User storage u = users[msg.sender];
         if (!u.isRegistered) revert NotRegistered();
         if (u.isActive)      revert AlreadyActive();
 
-        bool ok = usdtToken.transferFrom(msg.sender, address(this), PACKAGE_PRICE);
+        (uint256 price, uint256 incomeCap) = _pkgParams(pkg);
+        bool ok = usdtToken.transferFrom(msg.sender, address(this), price);
         if (!ok) revert TransferFailed();
 
-        _doActivate(msg.sender);
+        _doActivate(msg.sender, price, incomeCap);
     }
 
     /**
      * @notice Activate using your in-contract USDT balance (usdtBalance).
      *         Useful if you have accumulated USDT from income/unstaking and want to
      *         self-activate without an external wallet transfer.
-     *         Caller must be registered but not yet active, and have >= $130 virtual USDT.
+     *         pkg=1 → STARTER ($55)   pkg=2 → PRO ($130)
      */
-    function activateFromBalance() external nonReentrant {
+    function activateFromBalance(uint8 pkg) external nonReentrant {
         User storage u = users[msg.sender];
-        if (!u.isRegistered)       revert NotRegistered();
-        if (u.isActive)            revert AlreadyActive();
-        if (u.usdtBalance < PACKAGE_PRICE) revert InsufficientUsdtBalance();
+        if (!u.isRegistered) revert NotRegistered();
+        if (u.isActive)      revert AlreadyActive();
 
-        u.usdtBalance -= PACKAGE_PRICE;
-        _doActivate(msg.sender);
+        (uint256 price, uint256 incomeCap) = _pkgParams(pkg);
+        if (u.usdtBalance < price) revert InsufficientUsdtBalance();
+
+        u.usdtBalance -= price;
+        _doActivate(msg.sender, price, incomeCap);
     }
 
     /**
      * @notice Register a NEW wallet address and immediately activate it.
      *         Caller (msg.sender) becomes the direct sponsor of `newUser`.
-     *         $130 USDT is deducted from the caller's in-contract virtual usdtBalance.
+     *         USDT is deducted from the caller's in-contract virtual usdtBalance.
      *         No external wallet approval needed — uses earned income already in the contract.
-     *         Caller must be registered, active, and have >= $130 virtual USDT. `newUser` must not yet be registered.
+     *         pkg=1 → STARTER ($55)   pkg=2 → PRO ($130)
      */
     function registerAndActivateFor(
         address newUser,
         address binaryParent,
-        bool    placeLeft
+        bool    placeLeft,
+        uint8   pkg
     ) external nonReentrant {
-        if (newUser == address(0))                        revert("Invalid address");
-        if (newUser == msg.sender)                        revert("Cannot register yourself");
-        if (!users[msg.sender].isRegistered)              revert NotRegistered();
-        if (!users[msg.sender].isActive)                  revert("Caller not active");
-        if (users[newUser].isRegistered)                  revert AlreadyRegistered();
-        if (users[msg.sender].usdtBalance < PACKAGE_PRICE) revert InsufficientUsdtBalance();
+        if (newUser == address(0))           revert("Invalid address");
+        if (newUser == msg.sender)           revert("Cannot register yourself");
+        if (!users[msg.sender].isRegistered) revert NotRegistered();
+        if (!users[msg.sender].isActive)     revert("Caller not active");
+        if (users[newUser].isRegistered)     revert AlreadyRegistered();
+
+        (uint256 price, uint256 incomeCap) = _pkgParams(pkg);
+        if (users[msg.sender].usdtBalance < price) revert InsufficientUsdtBalance();
 
         // Determine binary parent (default = caller), then auto-find open slot on-chain
         address startFrom = (binaryParent != address(0) && users[binaryParent].isRegistered)
@@ -470,8 +503,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
         (address parent, bool actualLeft) = _findSlotOnSide(startFrom, placeLeft);
 
-        // Deduct $130 from caller's virtual USDT balance (USDT already held by this contract)
-        users[msg.sender].usdtBalance -= PACKAGE_PRICE;
+        // Deduct from caller's virtual USDT balance (USDT already held by this contract)
+        users[msg.sender].usdtBalance -= price;
 
         // Register newUser with caller as sponsor
         _createUser(newUser, msg.sender, parent, actualLeft, address(0));
@@ -485,24 +518,26 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         emit Registered(newUser, msg.sender, parent, placeLeft);
 
         // Activate newUser (USDT already in contract)
-        _doActivate(newUser);
+        _doActivate(newUser, price, incomeCap);
 
         emit RegisteredAndActivatedFor(msg.sender, newUser, msg.sender, placeLeft);
     }
 
     /**
      * @dev Core activation logic.  USDT must already be in this contract before calling.
+     *      pkgPrice   — amount paid ($55e18 or $130e18)
+     *      incomeCap  — max income this cycle ($165e18 or $390e18)
      */
-    function _doActivate(address user) internal {
+    function _doActivate(address user, uint256 pkgPrice, uint256 incomeCap) internal {
         // Snapshot buy price BEFORE minting (price rises after)
         uint256 buyPrice = mvaultToken.getBuyPrice();
-        // Gross MVT = what $130 buys at current price (e.g. 1,300 MVT at 0.1 USDT)
-        uint256 grossMvt = (PACKAGE_PRICE * 1e18) / buyPrice;
+        // Gross MVT = what pkgPrice buys at current price
+        uint256 grossMvt = (pkgPrice * 1e18) / buyPrice;
 
         // Approve token contract and mint
-        usdtToken.approve(address(mvaultToken), PACKAGE_PRICE);
+        usdtToken.approve(address(mvaultToken), pkgPrice);
         uint256 before = mvaultToken.balanceOf(address(this));
-        mvaultToken.addLiquidityAndMint(address(this), PACKAGE_PRICE);
+        mvaultToken.addLiquidityAndMint(address(this), pkgPrice);
         uint256 minted = mvaultToken.balanceOf(address(this)) - before; // actual 90%
 
         // Split on GROSS basis: 30% level + 30% binary + 30% admin + 10% liquidity (in MVT token)
@@ -515,13 +550,15 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         binaryPool += binaryAmt;
         adminPool  += adminAmt + dust;
 
-        users[user].isActive    = true;
-        users[user].incomeLimit = INCOME_LIMIT; // $390
+        users[user].isActive       = true;
+        users[user].incomeLimit    = incomeCap;
+        users[user].packagePrice   = pkgPrice;
+        users[user].incomeLimitCap = incomeCap;
 
         _distributeLevelIncome(user, grossMvt, levelAmt);
 
         emit Activated(user, minted, grossMvt, levelAmt, binaryAmt, adminAmt);
-        _recordTx(user, TX_ACTIVATION, PACKAGE_PRICE, 0, address(0));
+        _recordTx(user, TX_ACTIVATION, pkgPrice, 0, address(0));
     }
 
     /**
@@ -697,14 +734,14 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
         User storage u = users[msg.sender];
         if (!u.isActive) revert NotActive();
-        if (u.rebirthPool < PACKAGE_PRICE) revert InsufficientRebirthPool();
+        if (u.rebirthPool < u.packagePrice) revert InsufficientRebirthPool();
         if (users[subAccount].isRegistered) revert SubAccountAlreadyRegistered();
 
-        // ── 1. Deduct $130 for sub-account activation ────────────────────────
-        u.rebirthPool -= PACKAGE_PRICE;
+        // ── 1. Deduct package price for sub-account activation ───────────────
+        u.rebirthPool -= u.packagePrice;
 
         // ── 2. Reset income limit to full ─────────────────────────────────────
-        u.incomeLimit = INCOME_LIMIT;
+        u.incomeLimit = u.incomeLimitCap;
 
         // ── 3. Move remaining rebirth pool → main wallet through income limit ──
         // Credits the remainder to usdtBalance up to the newly reset income limit.
@@ -736,7 +773,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         _updateAncestorCounts(subAccount);
 
         // ── 5 & 6. Activate sub-account (USDT already in contract) ───────────
-        _doActivate(subAccount);
+        // Sub-account inherits the same package tier as the main account.
+        _doActivate(subAccount, u.packagePrice, u.incomeLimitCap);
 
         u.rebirthCount++;
 
@@ -754,7 +792,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         User storage u = users[msg.sender];
         if (!u.isActive)               revert NotActive();
         if (u.rebirthPool == 0)        revert("No rebirth balance to claim");
-        if (u.rebirthPool >= PACKAGE_PRICE) revert("Use rebirth() - pool is >= $130");
+        if (u.rebirthPool >= u.packagePrice) revert("Use rebirth() - pool is >= package price");
 
         uint256 claim    = u.rebirthPool;
         u.rebirthPool    = 0;
@@ -1189,7 +1227,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      */
     function canRebirth(address user) external view returns (bool eligible, uint256 poolBalance) {
         poolBalance = users[user].rebirthPool;
-        eligible    = poolBalance >= PACKAGE_PRICE;
+        eligible    = users[user].packagePrice > 0 && poolBalance >= users[user].packagePrice;
     }
 
     function getCurrentBinaryPairs(address u) external view returns (uint256 currentPairs, uint256 newPairs) {
