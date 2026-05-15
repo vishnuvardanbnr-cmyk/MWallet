@@ -75,7 +75,8 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
   const directCount  = Number(userInfo.directCount);
   const leftCount    = fmtVol(userInfo.leftSubUsers);
   const rightCount   = fmtVol(userInfo.rightSubUsers);
-  const newPairs     = Number(binaryPairs.newPairs);
+  const newPairs     = fmtVol(binaryPairs.newPairs);
+  const hasNewPairs  = binaryPairs.newPairs > 0n;
   const matchedPairs = Number(userInfo.matchedPairs);
 
   const incomeLimitCapNum = parseFloat(formatTokenAmount(userInfo.incomeLimitCap, 18));
@@ -369,10 +370,10 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
           </div>
         </div>
 
-        {newPairs > 0 && (
+        {hasNewPairs && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
             <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <p className="text-xs text-emerald-400 font-medium">{newPairs} new pair{newPairs !== 1 ? "s" : ""} pending — claim your income above after the next daily cycle</p>
+            <p className="text-xs text-emerald-400 font-medium">{newPairs} USDT volume pending — claim your income above after the next daily cycle</p>
           </div>
         )}
 

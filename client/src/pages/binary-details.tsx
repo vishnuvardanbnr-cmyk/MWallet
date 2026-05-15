@@ -27,8 +27,9 @@ export default function BinaryDetails({ userInfo, mvtPrice, binaryPairs, formatA
   const rightVol = userInfo.rightSubUsers;
   const matchedPairs = Number(userInfo.matchedPairs);
   const powerLegPts = Number(userInfo.powerLegPoints);
-  const currentPairs = Number(binaryPairs.currentPairs);
-  const newPairs = Number(binaryPairs.newPairs);
+  const currentPairs = fmtVol(binaryPairs.currentPairs);
+  const newPairs = fmtVol(binaryPairs.newPairs);
+  const hasNewPairs = binaryPairs.newPairs > 0n;
   const rebirthCount = Number(userInfo.rebirthCount);
 
   const stronger = leftVol >= rightVol ? "left" : "right";
@@ -89,10 +90,10 @@ export default function BinaryDetails({ userInfo, mvtPrice, binaryPairs, formatA
             <p className="text-[10px] text-muted-foreground">since last distribution</p>
           </div>
         </div>
-        {newPairs > 0 && (
+        {hasNewPairs && (
           <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
             <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <p className="text-xs text-emerald-400 font-medium">{newPairs} new pair{newPairs !== 1 ? "s" : ""} pending — waiting for admin distribution cycle</p>
+            <p className="text-xs text-emerald-400 font-medium">{newPairs} USDT volume pending — waiting for admin distribution cycle</p>
           </div>
         )}
       </div>
