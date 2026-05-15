@@ -17,6 +17,7 @@ export const RANKS = [
     border: "border-slate-400/20",
     bar: "bg-slate-400",
     incomePercent: null,
+    slotLabel: null,
     qualification: null,
     icon: Users,
     desc: "Complete qualification to earn rank income",
@@ -29,7 +30,8 @@ export const RANKS = [
     bg: "bg-amber-400/10",
     border: "border-amber-400/20",
     bar: "bg-amber-400",
-    incomePercent: 10,
+    incomePercent: 1,
+    slotLabel: "Slot 1 · 1% per activation",
     qualification: { type: "direct", directSponsors: 5, teamSalesUsd: 2000, minLegs: 2, downlineRank: null, downlineCount: 0 },
     icon: Award,
     desc: "5 direct sponsors · $2,000 team sales (2 legs)",
@@ -42,7 +44,8 @@ export const RANKS = [
     bg: "bg-cyan-400/10",
     border: "border-cyan-400/20",
     bar: "bg-cyan-400",
-    incomePercent: 20,
+    incomePercent: 2,
+    slotLabel: "Slot 2 · 2% per activation",
     qualification: { type: "downline", directSponsors: 0, teamSalesUsd: 0, minLegs: 0, downlineRank: "M1", downlineCount: 2 },
     icon: Zap,
     desc: "2 M1 qualifiers in your downline",
@@ -55,7 +58,8 @@ export const RANKS = [
     bg: "bg-violet-400/10",
     border: "border-violet-400/20",
     bar: "bg-violet-400",
-    incomePercent: 20,
+    incomePercent: 2,
+    slotLabel: "Slot 3 · 2% per activation",
     qualification: { type: "downline", directSponsors: 0, teamSalesUsd: 0, minLegs: 0, downlineRank: "M2", downlineCount: 4 },
     icon: Star,
     desc: "4 M2 qualifiers in your downline",
@@ -68,7 +72,8 @@ export const RANKS = [
     bg: "bg-emerald-400/10",
     border: "border-emerald-400/20",
     bar: "bg-emerald-400",
-    incomePercent: 20,
+    incomePercent: 2,
+    slotLabel: "Slot 4 · 2% per activation",
     qualification: { type: "downline", directSponsors: 0, teamSalesUsd: 0, minLegs: 0, downlineRank: "M3", downlineCount: 4 },
     icon: TrendingUp,
     desc: "4 M3 qualifiers in your downline",
@@ -81,7 +86,8 @@ export const RANKS = [
     bg: "bg-amber-300/10",
     border: "border-amber-300/20",
     bar: "bg-amber-300",
-    incomePercent: 30,
+    incomePercent: 3,
+    slotLabel: "Slot 5 · 3% per activation",
     qualification: { type: "downline", directSponsors: 0, teamSalesUsd: 0, minLegs: 0, downlineRank: "M4", downlineCount: 4 },
     icon: Star,
     desc: "4 M4 qualifiers in your downline",
@@ -129,12 +135,15 @@ export default function RankPage({ userInfo }: RankPageProps) {
           <div className="h-8 w-8 rounded-lg bg-amber-500/15 flex items-center justify-center shrink-0 mt-0.5">
             <Info className="h-4 w-4 text-amber-400" />
           </div>
-          <div className="space-y-1.5 text-[11px] text-muted-foreground leading-relaxed">
+          <div className="space-y-2 text-[11px] text-muted-foreground leading-relaxed">
             <p>
-              <span className="text-amber-300 font-semibold">Rank income is based on sponsor/level placement</span> — not the binary tree.
+              <span className="text-amber-300 font-semibold">Rank income is paid directly from each activation</span> — based on your position in the sponsor tree, not the binary tree.
             </p>
             <p>
-              When an account activates under you, you earn a percentage of the activation fee based on your rank. If someone between you and that activation reaches the same rank as you, they receive that income instead.
+              Each activation has <span className="text-white font-semibold">5 rank slots</span> (1% + 2% + 2% + 2% + 3% = 10% of the activation fee). Going up the sponsor chain from the new member, the system finds the first person at each rank and pays them their slot.
+            </p>
+            <p>
+              <span className="text-amber-300 font-semibold">Compression rule:</span> if an M2 (or higher) is the closest ranked person above an activation and there is no M1 between them, that M2 also collects the M1 slot. The first person at each rank wins that slot — lower ranks below you cannot block you.
             </p>
           </div>
         </div>
@@ -158,7 +167,8 @@ export default function RankPage({ userInfo }: RankPageProps) {
               <p className={`text-2xl font-bold ${rankInfo.color}`} style={{ fontFamily: "var(--font-display)" }}>
                 {rankInfo.incomePercent}%
               </p>
-              <p className="text-[10px] text-muted-foreground mt-0.5">on activations</p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">per activation</p>
+              <p className="text-[9px] text-muted-foreground/60 mt-0.5">(+ unfilled lower slots)</p>
             </div>
           )}
         </div>
@@ -262,9 +272,12 @@ export default function RankPage({ userInfo }: RankPageProps) {
 
                 <div className="text-right shrink-0 flex flex-col items-end gap-1">
                   {r.incomePercent !== null ? (
-                    <p className={`text-sm font-bold ${isAchieved ? r.color : "text-muted-foreground/50"}`}>
-                      {r.incomePercent}%
-                    </p>
+                    <>
+                      <p className={`text-sm font-bold ${isAchieved ? r.color : "text-muted-foreground/50"}`}>
+                        {r.incomePercent}%
+                      </p>
+                      <p className="text-[9px] text-muted-foreground/50">slot {r.level}</p>
+                    </>
                   ) : (
                     <p className="text-xs text-muted-foreground/40">—</p>
                   )}
@@ -276,8 +289,9 @@ export default function RankPage({ userInfo }: RankPageProps) {
         </div>
 
         {/* Legend */}
-        <div className="mt-4 pt-4 border-t border-white/[0.06] flex items-center gap-4 flex-wrap">
-          <p className="text-[10px] text-muted-foreground">Income % = share of activation fee you receive from each activation in your sponsor downline</p>
+        <div className="mt-4 pt-4 border-t border-white/[0.06] space-y-1.5">
+          <p className="text-[10px] text-muted-foreground">% shown = your slot's share of each activation fee (M1=1%, M2=2%, M3=2%, M4=2%, M5=3%)</p>
+          <p className="text-[10px] text-muted-foreground/60">Higher ranks also collect any unfilled lower slots — compression sends unclaimed slots up the chain</p>
         </div>
       </div>
 
