@@ -421,6 +421,8 @@ export function useWeb3() {
         12: { type: "Staked",               isIncome: false, currency: "USDT", detail: ()  => "USDT staked for MVT" },
         13: { type: "Unstaked",             isIncome: true,  currency: "USDT", detail: ()  => "USDT credited from unstake" },
         14: { type: "Rebirth Claim",        isIncome: true,  currency: "USDT", detail: ()  => "Partial rebirth pool claimed to wallet" },
+        15: { type: "Reactivation",         isIncome: false, currency: "USDT", detail: ()  => "Account reactivated" },
+        16: { type: "Rank Income",          isIncome: true,  currency: "MVT",  detail: (r) => `Rank M${Number(r.level)} income` },
       };
 
       // Fetch stored TX records (includes Stake/Unstake since contract now records them)

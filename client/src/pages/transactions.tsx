@@ -65,8 +65,9 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
       case "Board Reward":        return Trophy;
       case "Staked":              return Lock;
       case "Unstaked":            return Unlock;
-      case "Staking Level Income": return Users;
       case "Rebirth Claim":       return Repeat2;
+      case "Reactivation":        return Package;
+      case "Rank Income":         return Star;
       default:                    return Coins;
     }
   };
@@ -87,8 +88,9 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
       case "Board Reward":        return { text: "text-yellow-300",  bg: "bg-yellow-600/10",  border: "border-yellow-600/10" };
       case "Staked":              return { text: "text-blue-400",    bg: "bg-blue-500/10",    border: "border-blue-500/10" };
       case "Unstaked":            return { text: "text-purple-400",  bg: "bg-purple-500/10",  border: "border-purple-500/10" };
-      case "Staking Level Income": return { text: "text-teal-400",   bg: "bg-teal-500/10",    border: "border-teal-500/10" };
       case "Rebirth Claim":       return { text: "text-violet-400", bg: "bg-violet-500/10",  border: "border-violet-500/10" };
+      case "Reactivation":        return { text: "text-amber-400",  bg: "bg-amber-500/10",   border: "border-amber-500/10" };
+      case "Rank Income":         return { text: "text-amber-300",  bg: "bg-amber-300/10",   border: "border-amber-300/10" };
       default:                    return { text: "text-muted-foreground", bg: "bg-white/[0.05]", border: "border-white/[0.05]" };
     }
   };
