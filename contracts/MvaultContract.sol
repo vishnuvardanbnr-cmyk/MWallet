@@ -616,7 +616,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         _updateAncestorVolumes(user, pkgPrice);
         _updateTeamStats(user, pkgPrice);
         _distributeLevelIncome(user, grossMvt, levelAmt);
-        rankPool += rankAmt;
+        _distributeRankIncome(user, grossMvt, rankAmt);
 
         emit Activated(user, minted, grossMvt, levelAmt, binaryAmt, adminAmt);
         _recordTx(user, TX_ACTIVATION, pkgPrice, 0, address(0));
@@ -673,6 +673,46 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (lvl == 9)  return (grossMvt * 2)   / 1000;  //  0.2%
         if (lvl == 10) return (grossMvt * 2)   / 1000;  //  0.2%
         return 0;
+    }
+
+    /**
+     * @dev Immediately distributes the rank portion of a new activation up the
+     *      sponsor chain.  Walks up to 50 hops looking for uplines with rank > 0.
+     *
+     *      Each rank slot pays exactly 1% of grossMvt (= 10% of rankAmt).
+     *      A person with rank R fills all unfilled slots 1…R simultaneously.
+     *      Unfilled slots and the fixed 5% remainder → adminPool.
+     *
+     *      Option B: if an upline has hit their incomeLimit (rank or otherwise),
+     *      that slot is NOT skipped — income goes to admin (consistent with level income).
+     */
+    function _distributeRankIncome(address from, uint256 grossMvt, uint256 rankAmt) internal {
+        uint256 perSlot = grossMvt / 100;   // exactly 1% of grossMvt per slot
+        uint8   filled  = 0;                // bitmask: bit k set ⟹ slot k is filled
+        uint256 paid    = 0;
+        address cur     = users[from].sponsor;
+
+        for (uint256 depth = 0; depth < 50 && cur != address(0); depth++) {
+            uint8 r = users[cur].rank;
+            if (r > 5) r = 5;
+            if (r > 0) {
+                for (uint8 slot = 1; slot <= r; slot++) {
+                    uint8 bit = uint8(1 << slot);
+                    if (filled & bit == 0) {
+                        filled |= bit;
+                        users[cur].mvtBalance    += perSlot;
+                        users[cur].totalReceived += perSlot;
+                        paid += perSlot;
+                        emit RankIncomePaid(cur, from, slot, perSlot);
+                        _recordTx(cur, TX_RANK_INCOME, perSlot, slot, from);
+                    }
+                }
+            }
+            if (filled == 0x3E) break;   // bits 1-5 all set → all slots filled
+            cur = users[cur].sponsor;
+        }
+
+        adminPool += rankAmt - paid;   // unfilled slots + fixed 5% remainder → admin
     }
 
     /** @dev Minimum directs needed to qualify at each level. */
@@ -962,7 +1002,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         _updateAncestorVolumes(user, pkgPrice);
         _updateTeamStats(user, pkgPrice);
         _distributeLevelIncome(user, grossMvt, levelAmt);
-        rankPool += rankAmt;
+        _distributeRankIncome(user, grossMvt, rankAmt);
 
         emit Reactivated(user, pkgPrice, grossMvt, upgraded);
         _recordTx(user, TX_REACTIVATION, pkgPrice, 0, address(0));
@@ -1302,28 +1342,19 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice ADMIN: Distribute rankPool to rank holders.
-     *         Admin computes recipients off-chain and submits pre-computed amounts.
-     *         adminLeftover = any reserve not allocated (added back to adminPool).
+     * @notice MANAGER/OWNER: Flush any legacy rankPool balance → adminPool.
+     *         Rank income is now distributed on-chain at activation time via
+     *         _distributeRankIncome(), so rankPool should always be 0.
+     *         This function exists only as a safety drain for any accumulated
+     *         balance from before the on-chain distribution upgrade.
      */
-    function applyRankIncome(
-        address[] calldata users_arr,
-        uint256[] calldata shares,
-        uint256   adminLeftover
-    ) external onlyOwner {
+    function drainRankPool() external {
+        require(msg.sender == manager || msg.sender == owner(), "!auth");
         if (rankPool == 0) revert EmptyPool();
         uint256 pool = rankPool;
         rankPool = 0;
-        for (uint256 i = 0; i < users_arr.length; i++) {
-            address u = users_arr[i];
-            uint8   r = users[u].rank;
-            users[u].mvtBalance    += shares[i];
-            users[u].totalReceived += shares[i];
-            emit RankIncomePaid(u, address(0), r, shares[i]);
-            _recordTx(u, TX_RANK_INCOME, shares[i], r, address(0));
-        }
-        adminPool += adminLeftover;
-        emit RankIncomeDistributed(pool, users_arr.length);
+        adminPool += pool;
+        emit RankIncomeDistributed(pool, 0);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

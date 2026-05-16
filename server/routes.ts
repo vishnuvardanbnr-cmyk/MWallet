@@ -1329,8 +1329,8 @@ export async function registerRoutes(
         : "https://bsc-testnet-rpc.publicnode.com";
       const provider = new ethers.JsonRpcProvider(RPC);
 
-      const MVAULT = process.env.VITE_MVAULT_CONTRACT_ADDRESS || "0xcF110A7D5D2D5e2Df14db910f137A9f6681247d2";
-      const VIEW   = process.env.VITE_MVAULT_VIEW_ADDRESS   || "0x76C90Aab0FCF2a79c0A8Ea9aCae14Eb6305215b2";
+      const MVAULT = process.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x87AF11ab6756341ae045F50C2EE432E51eaC056d";
+      const VIEW   = process.env.VITE_MVAULT_VIEW_ADDRESS   || "0x9B0fF60969aA1Bd2a9B17a9a556279613750bC20";
 
       const mvault = new ethers.Contract(MVAULT, [
         "function binaryPool() view returns (uint256)",

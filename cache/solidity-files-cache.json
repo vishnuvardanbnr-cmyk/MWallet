@@ -587,8 +587,8 @@
       ]
     },
     "/home/runner/workspace/contracts/MvaultContract.sol": {
-      "lastModificationDate": 1778778410836,
-      "contentHash": "c6083c1e16bf7aa85b7d247559f0c5d6",
+      "lastModificationDate": 1778918407938,
+      "contentHash": "624928862bd8566533d5c5c28cd14b16",
       "sourceName": "contracts/MvaultContract.sol",
       "solcConfig": {
         "version": "0.8.27",
