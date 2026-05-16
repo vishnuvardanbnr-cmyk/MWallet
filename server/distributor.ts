@@ -687,6 +687,222 @@ export async function runRankDistribution(): Promise<void> {
   }
 }
 
+// ─────────────────────────────────────────────────────────────────────────────
+// INSTANT RANK CHECK  (rank evaluation + setUserRanks only, no income step)
+// Called immediately whenever a new Activated event is detected.
+// ─────────────────────────────────────────────────────────────────────────────
+
+let isRankCheckRunning = false;
+
+export async function runRankCheck(): Promise<void> {
+  if (isRankCheckRunning) {
+    log("Rank check already in progress — skipping", "rank-check");
+    return;
+  }
+  const managerKey = process.env.DEPLOYER_PRIVATE_KEY;
+  if (!managerKey) {
+    log("DEPLOYER_PRIVATE_KEY not set — skipping rank check", "rank-check");
+    return;
+  }
+  if (!MVAULT_VIEW_ADDRESS) {
+    log("VITE_MVAULT_VIEW_ADDRESS not set — skipping rank check", "rank-check");
+    return;
+  }
+
+  isRankCheckRunning = true;
+  const t0 = Date.now();
+  log("Instant rank check starting…", "rank-check");
+
+  try {
+    const provider      = getProvider();
+    const managerSigner = new ethers.Wallet(managerKey, provider);
+    const mvault        = new ethers.Contract(MVAULT_CONTRACT_ADDRESS, MVAULT_RANK_ABI, provider);
+    const mvaultMgr     = new ethers.Contract(MVAULT_CONTRACT_ADDRESS, MVAULT_RANK_ABI, managerSigner);
+    const mvView        = new ethers.Contract(MVAULT_VIEW_ADDRESS, MVAULT_VIEW_RANK_ABI, provider);
+
+    // 1. Total users
+    const totalUsersN = await withRetry(() => mvault.totalUsers() as Promise<bigint>);
+    const totalUsers  = Number(totalUsersN);
+    log(`Checking ranks for ${totalUsers} users…`, "rank-check");
+
+    // 2. Load all addresses
+    const userAddresses: string[] = [];
+    for (let i = 0; i < totalUsers; i += ADDR_BATCH) {
+      const slice = await withRetry(() => mvView.getUserSlice(i, ADDR_BATCH) as Promise<string[]>);
+      userAddresses.push(...slice);
+    }
+
+    // 3. Load rank data for all users
+    const rankMap = new Map<string, RankEntry>();
+    for (let i = 0; i < userAddresses.length; i += RANK_STRUCT_BATCH) {
+      const batch   = userAddresses.slice(i, i + RANK_STRUCT_BATCH);
+      const results = await withRetry(() => mvView.getRankBatch(batch) as Promise<any[]>);
+      for (let j = 0; j < batch.length; j++) {
+        const r  = results[j];
+        const sp = (r.sponsor as string).toLowerCase();
+        if (sp === ethers.ZeroAddress.toLowerCase() && !r.isActive) continue;
+        rankMap.set(batch[j].toLowerCase(), {
+          isActive:       r.isActive,
+          rank:           Number(r.rank),
+          sponsor:        sp,
+          directCount:    r.directCount    as bigint,
+          teamSalesUsdt:  r.teamSalesUsdt  as bigint,
+          leftSubVolume:  r.leftSubVolume  as bigint,
+          rightSubVolume: r.rightSubVolume as bigint,
+        });
+      }
+    }
+
+    // 4. Build sponsor → children map
+    const children = new Map<string, string[]>();
+    for (const [addr, u] of rankMap) {
+      const sp = u.sponsor;
+      if (sp && sp !== ethers.ZeroAddress.toLowerCase()) {
+        if (!children.has(sp)) children.set(sp, []);
+        children.get(sp)!.push(addr);
+      }
+    }
+
+    // 5. Evaluate ranks — 5 passes (identical logic to runRankDistribution)
+    const computedRank = new Map<string, number>();
+
+    // Pass 1: M1
+    for (const [addr, u] of rankMap) {
+      if (!u.isActive) { computedRank.set(addr, 0); continue; }
+      const isM1 =
+        u.directCount   >= M1_MIN_DIRECTS   &&
+        u.teamSalesUsdt >= M1_MIN_TEAM_USDT &&
+        u.leftSubVolume  > 0n               &&
+        u.rightSubVolume > 0n;
+      computedRank.set(addr, isM1 ? 1 : 0);
+    }
+
+    function countSubtreeCheck(root: string, minRank: number, seen = new Set<string>()): number {
+      if (seen.has(root)) return 0;
+      seen.add(root);
+      let count = 0;
+      for (const child of (children.get(root) ?? [])) {
+        if ((computedRank.get(child) ?? 0) >= minRank) count++;
+        count += countSubtreeCheck(child, minRank, seen);
+      }
+      return count;
+    }
+
+    // Passes 2-5: M2→M5
+    const higherPassConfig = [
+      { target: 2, minSubRank: 1, minCount: M2_MIN_M1 },
+      { target: 3, minSubRank: 2, minCount: M3_MIN_M2 },
+      { target: 4, minSubRank: 3, minCount: M4_MIN_M3 },
+      { target: 5, minSubRank: 4, minCount: M5_MIN_M4 },
+    ];
+    for (const { target, minSubRank, minCount } of higherPassConfig) {
+      for (const [addr, u] of rankMap) {
+        if (!u.isActive || (computedRank.get(addr) ?? 0) < target - 1) continue;
+        const cnt = countSubtreeCheck(addr, minSubRank);
+        if (cnt >= minCount) computedRank.set(addr, target);
+      }
+    }
+
+    // 6. Apply rank changes on-chain
+    const toUpdate: Array<{ addr: string; newRank: number }> = [];
+    for (const [addr, u] of rankMap) {
+      const computed = computedRank.get(addr) ?? 0;
+      if (computed !== u.rank) toUpdate.push({ addr, newRank: computed });
+    }
+
+    if (toUpdate.length > 0) {
+      log(`Instant rank update: ${toUpdate.length} users changed`, "rank-check");
+      for (let i = 0; i < toUpdate.length; i += SET_RANKS_BATCH) {
+        const chunk = toUpdate.slice(i, i + SET_RANKS_BATCH);
+        const tx = await withRetry(() =>
+          mvaultMgr.setUserRanks(
+            chunk.map(c => c.addr),
+            chunk.map(c => c.newRank),
+            { gasLimit: 500_000 }
+          ) as Promise<any>
+        );
+        await tx.wait();
+        log(`  Batch ${Math.floor(i / SET_RANKS_BATCH) + 1}: ${chunk.length} ranks set on-chain`, "rank-check");
+      }
+    } else {
+      log("No rank changes detected", "rank-check");
+    }
+
+    log(`Instant rank check done ✓ | ${((Date.now() - t0) / 1000).toFixed(1)}s`, "rank-check");
+  } catch (err: any) {
+    const msg = err?.shortMessage || err?.reason || err?.message || String(err);
+    log(`Rank check error: ${msg}`, "rank-check");
+  } finally {
+    isRankCheckRunning = false;
+  }
+}
+
+// ── Event listener: polls every 30 s for new Activated events ────────────────
+// Debounces 10 s so rapid activations trigger only one rank check run.
+
+let _rankCheckTimer: ReturnType<typeof setTimeout> | null = null;
+let _lastListenerBlock = 0;
+
+function scheduleRankCheck() {
+  if (_rankCheckTimer) return; // already scheduled
+  _rankCheckTimer = setTimeout(async () => {
+    _rankCheckTimer = null;
+    await runRankCheck();
+  }, 10_000); // 10-second debounce
+}
+
+export async function startRankEventListener(): Promise<void> {
+  const managerKey = process.env.DEPLOYER_PRIVATE_KEY;
+  if (!managerKey || !MVAULT_VIEW_ADDRESS) {
+    log("Rank event listener disabled (missing keys/view address)", "rank-check");
+    return;
+  }
+
+  log("Rank event listener started — polling every 30 s", "rank-check");
+
+  const POLL_INTERVAL = 30_000; // 30 seconds
+  const topic0 = ethers.id("Activated(address,uint256,uint256,uint256,uint256,uint256)");
+
+  async function poll() {
+    try {
+      const provider    = getProvider();
+      const currentBlock = await provider.getBlockNumber();
+
+      if (_lastListenerBlock === 0) {
+        // First run: set baseline to current block (don't re-scan history)
+        _lastListenerBlock = currentBlock;
+        return;
+      }
+
+      if (currentBlock <= _lastListenerBlock) return;
+
+      const fromBlock = _lastListenerBlock + 1;
+      const toBlock   = Math.min(fromBlock + BLOCK_CHUNK - 1, currentBlock);
+
+      const logs = await provider.getLogs({
+        address:   MVAULT_CONTRACT_ADDRESS,
+        topics:    [topic0],
+        fromBlock,
+        toBlock,
+      });
+
+      _lastListenerBlock = toBlock;
+
+      if (logs.length > 0) {
+        log(`Event listener: ${logs.length} activation(s) detected — scheduling rank check`, "rank-check");
+        scheduleRankCheck();
+      }
+    } catch (err: any) {
+      const msg = err?.shortMessage || err?.message || String(err);
+      log(`Rank event listener poll error: ${msg}`, "rank-check");
+    }
+  }
+
+  // Run once immediately to set baseline block, then poll on interval
+  await poll();
+  setInterval(poll, POLL_INTERVAL);
+}
+
 export function startDistributor(): void {
   if (!process.env.DEPLOYER_PRIVATE_KEY) {
     log("DEPLOYER_PRIVATE_KEY not set — auto-distributor disabled", "distributor");
@@ -719,4 +935,8 @@ export function startDistributor(): void {
   }, RANK_STARTUP_DELAY);
 
   log("Rank auto-distributor scheduled (offset 2 min after binary)", "rank-dist");
+
+  // Instant rank listener — starts after 1 min to let server settle
+  setTimeout(() => startRankEventListener(), 60_000);
+  log("Instant rank event listener scheduled (starts in 1 min)", "rank-check");
 }
