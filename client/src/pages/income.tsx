@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Users, GitBranch, Coins, TrendingUp, Layers, Info, ArrowDownLeft, ArrowDownRight, ShieldCheck, Loader2, CheckCircle2, ChevronDown, ChevronUp } from "lucide-react";
+import { Users, GitBranch, Coins, TrendingUp, Layers, Info, ArrowDownLeft, ArrowDownRight, ShieldCheck, Loader2, CheckCircle2, ChevronDown, ChevronUp, Zap, Activity } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { formatTokenAmount, getMvaultDistributorContract, DISTRIBUTOR_ADDRESS } from "@/lib/contract";
@@ -47,6 +47,17 @@ function usdFmt(mvt: bigint, price: bigint) {
   return `$${(mvtNum * priceNum).toFixed(2)}`;
 }
 
+interface EstimateResp {
+  binaryPool:          string;
+  newPairs:            string;
+  powerLegVolume:      string;
+  expectedBinaryMvt:   string;
+  expectedPowerLegMvt: string;
+  totalNewPairs:       string;
+  eligibleUsers:       number;
+  yourSharePct:        string;
+}
+
 interface CycleEntry {
   cycle: number;
   binaryShare: string;
@@ -83,6 +94,14 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
   const incomeCap     = incomeLimitCapNum > 0 ? incomeLimitCapNum : 390;
   const incomeUsed    = incomeCap - parseFloat(formatTokenAmount(userInfo.incomeLimit, 18));
   const incomeProgress = Math.min(100, (incomeUsed / incomeCap) * 100);
+
+  // ── Fetch next-distribution estimate ─────────────────────────────────────
+  const { data: estimate, isLoading: estLoading } = useQuery<EstimateResp>({
+    queryKey: ["/api/binary/estimate", walletAddress],
+    enabled:  !!walletAddress,
+    refetchInterval: 5 * 60_000, // refresh every 5 min
+    staleTime: 2 * 60_000,
+  });
 
   // ── Fetch all Merkle proofs for this wallet ───────────────────────────────
   const { data: proofsData, isLoading: proofLoading } = useQuery<ProofsResp>({
@@ -337,6 +356,108 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
               <p className="text-xs text-muted-foreground">No pending distributions for your wallet</p>
               <p className="text-[10px] text-muted-foreground/60 mt-1">Distribution runs every 24 hours — claim any time after it runs</p>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* ── Expected Income Estimate ────────────────────────────────────────── */}
+      {walletAddress && (
+        <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.078s" }} data-testid="card-expected-income">
+          <div className="flex items-center gap-2.5 mb-4">
+            <div className="h-9 w-9 rounded-xl bg-amber-500/15 flex items-center justify-center">
+              <Activity className="h-4.5 w-4.5 text-amber-400" />
+            </div>
+            <div>
+              <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>
+                <span className="gradient-text">Expected Next Distribution</span>
+              </h2>
+              <p className="text-[10px] text-muted-foreground">Live estimate based on current pool &amp; your leg volumes</p>
+            </div>
+          </div>
+
+          {estLoading ? (
+            <div className="flex items-center gap-2 py-3 text-muted-foreground text-xs">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Calculating estimate from chain…
+            </div>
+          ) : estimate ? (
+            <div className="space-y-3">
+              {/* Pool size */}
+              <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Current Binary Pool</span>
+                <span className="text-sm font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-est-pool">
+                  {parseFloat(ethers.formatUnits(estimate.binaryPool, 18)).toLocaleString(undefined, { maximumFractionDigits: 2 })} MVT
+                </span>
+              </div>
+
+              {/* Binary + Power leg expected */}
+              <div className="grid grid-cols-2 gap-3">
+                <div className="p-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/15 text-center">
+                  <Zap className="h-3.5 w-3.5 text-emerald-400 mx-auto mb-1" />
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Binary Income (70%)</p>
+                  <p className="text-base font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-est-binary">
+                    {parseFloat(ethers.formatUnits(estimate.expectedBinaryMvt, 18)).toFixed(4)} MVT
+                  </p>
+                  {mvtPrice.sellPrice > 0n && (
+                    <p className="text-[9px] text-muted-foreground mt-0.5">
+                      ≈ {usdFmt(BigInt(estimate.expectedBinaryMvt), mvtPrice.sellPrice)}
+                    </p>
+                  )}
+                </div>
+                <div className="p-3 rounded-xl bg-blue-500/[0.06] border border-blue-500/15 text-center">
+                  <GitBranch className="h-3.5 w-3.5 text-blue-400 mx-auto mb-1" />
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Power Leg (30%)</p>
+                  <p className="text-base font-bold text-blue-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-est-powerleg">
+                    {parseFloat(ethers.formatUnits(estimate.expectedPowerLegMvt, 18)).toFixed(4)} MVT
+                  </p>
+                  {mvtPrice.sellPrice > 0n && (
+                    <p className="text-[9px] text-muted-foreground mt-0.5">
+                      ≈ {usdFmt(BigInt(estimate.expectedPowerLegMvt), mvtPrice.sellPrice)}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              {/* Your pairs & share */}
+              <div className="grid grid-cols-3 gap-2 text-center">
+                <div className="px-2 py-2 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Your New Pairs</p>
+                  <p className="text-xs font-semibold" data-testid="text-est-newpairs">
+                    {fmtVol(BigInt(estimate.newPairs))}
+                  </p>
+                </div>
+                <div className="px-2 py-2 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Power Leg Vol</p>
+                  <p className="text-xs font-semibold" data-testid="text-est-powerlegvol">
+                    {fmtVol(BigInt(estimate.powerLegVolume))}
+                  </p>
+                </div>
+                <div className="px-2 py-2 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Your Share</p>
+                  <p className="text-xs font-semibold text-amber-400" data-testid="text-est-share">
+                    {estimate.yourSharePct}%
+                  </p>
+                </div>
+              </div>
+
+              {/* Footer note */}
+              <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-500/[0.05] border border-amber-500/10">
+                <Info className="h-3.5 w-3.5 text-amber-400/70 shrink-0 mt-0.5" />
+                <p className="text-[10px] text-muted-foreground">
+                  Estimate across <span className="text-foreground">{estimate.eligibleUsers}</span> eligible users &amp; total new pairs of <span className="text-foreground">{fmtVol(BigInt(estimate.totalNewPairs))}</span>. Actual income is calculated at distribution time and may differ.
+                </p>
+              </div>
+
+              {/* No pairs warning */}
+              {estimate.newPairs === "0" && (
+                <div className="flex items-start gap-2 p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.05]">
+                  <Info className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0 mt-0.5" />
+                  <p className="text-[10px] text-muted-foreground">No new matched pairs yet — you need volume on both left and right legs to earn binary income.</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="text-xs text-muted-foreground py-3 text-center">Could not load estimate</p>
           )}
         </div>
       )}

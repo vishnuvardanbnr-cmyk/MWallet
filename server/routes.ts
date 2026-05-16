@@ -1319,6 +1319,115 @@ export async function registerRoutes(
     }
   });
 
+  // ── Binary estimate — simulate next distribution for one wallet ──────────
+  app.get("/api/binary/estimate/:address", async (req, res) => {
+    try {
+      const target = req.params.address.toLowerCase();
+      const { ethers } = await import("ethers");
+      const RPC = process.env.VITE_BSC_NETWORK === "mainnet"
+        ? "https://bsc-rpc.publicnode.com"
+        : "https://bsc-testnet-rpc.publicnode.com";
+      const provider = new ethers.JsonRpcProvider(RPC);
+
+      const MVAULT = process.env.VITE_MVAULT_CONTRACT_ADDRESS || "0xcF110A7D5D2D5e2Df14db910f137A9f6681247d2";
+      const VIEW   = process.env.VITE_MVAULT_VIEW_ADDRESS   || "0x76C90Aab0FCF2a79c0A8Ea9aCae14Eb6305215b2";
+
+      const mvault = new ethers.Contract(MVAULT, [
+        "function binaryPool() view returns (uint256)",
+        "function totalUsers() view returns (uint256)",
+        "function allUsers(uint256) view returns (address)",
+      ], provider);
+
+      const mvView = new ethers.Contract(VIEW, [
+        "function getUserSlice(uint256 offset, uint256 limit) view returns (address[])",
+        "function getDistributorBatch(address[] addrs) view returns (bool[] isActive, uint256[] leftSubVolume, uint256[] rightSubVolume, uint256[] matchedVolume, uint256[] powerLegPoints)",
+      ], provider);
+
+      const [binaryPool, totalUsersN] = await Promise.all([
+        mvault.binaryPool()   as Promise<bigint>,
+        mvault.totalUsers()   as Promise<bigint>,
+      ]);
+      const totalUsers = Number(totalUsersN);
+
+      if (totalUsers === 0 || binaryPool === 0n) {
+        return res.json({ binaryPool: "0", newPairs: "0", powerLegVolume: "0", expectedBinaryMvt: "0", expectedPowerLegMvt: "0", totalNewPairs: "0", eligibleUsers: 0, yourSharePct: "0" });
+      }
+
+      // Read all addresses in slices of 500
+      const ADDR_BATCH = 500;
+      const addrs: string[] = [];
+      for (let i = 0; i < totalUsers; i += ADDR_BATCH) {
+        const slice = await mvView.getUserSlice(i, ADDR_BATCH) as string[];
+        addrs.push(...slice);
+      }
+
+      // Read 5-field batch data
+      const STRUCT_BATCH = 200;
+      type UserRow = { addr: string; isActive: boolean; left: bigint; right: bigint; matched: bigint; powerPts: bigint };
+      const rows: UserRow[] = [];
+      for (let i = 0; i < addrs.length; i += STRUCT_BATCH) {
+        const batch = addrs.slice(i, i + STRUCT_BATCH);
+        const [isActive, left, right, matched, powerPts] = await mvView.getDistributorBatch(batch) as [boolean[], bigint[], bigint[], bigint[], bigint[]];
+        for (let j = 0; j < batch.length; j++) {
+          rows.push({ addr: batch[j].toLowerCase(), isActive: isActive[j], left: left[j], right: right[j], matched: matched[j], powerPts: powerPts[j] });
+        }
+      }
+
+      // Same algorithm as distributor.ts step 3
+      const binary70   = (binaryPool * 70n) / 100n;
+      const powerLeg30 = binaryPool - binary70;
+
+      type Eligible = { addr: string; newPairs: bigint; powerLegPts: bigint; newMatchedVol: bigint };
+      const eligible: Eligible[] = [];
+      let totalNewPairs = 0n;
+      let totalPts = 0n;
+
+      for (const u of rows) {
+        if (!u.isActive) continue;
+        const minSide  = u.left < u.right ? u.left  : u.right;
+        const maxSide  = u.left < u.right ? u.right : u.left;
+        const newPairs = minSide > u.matched ? minSide - u.matched : 0n;
+        if (newPairs === 0n) continue;
+        const newMatchedVol = minSide;
+        const pts           = maxSide - newMatchedVol;
+        eligible.push({ addr: u.addr, newPairs, powerLegPts: pts, newMatchedVol });
+        totalNewPairs += newPairs;
+        if (pts > 0n) totalPts += pts;
+      }
+
+      // Find the target user's entry
+      const me = eligible.find(e => e.addr === target);
+      const myNewPairs     = me?.newPairs     ?? 0n;
+      const myPowerLegPts  = me?.powerLegPts  ?? 0n;
+
+      // Also get the user's raw power leg volume (max - min) even if not eligible
+      const meRow = rows.find(r => r.addr === target);
+      const rawMinSide   = meRow ? (meRow.left < meRow.right ? meRow.left  : meRow.right) : 0n;
+      const rawMaxSide   = meRow ? (meRow.left < meRow.right ? meRow.right : meRow.left)  : 0n;
+      const powerLegVol  = rawMaxSide - rawMinSide;
+
+      const expectedBinaryMvt   = totalNewPairs > 0n ? (myNewPairs  * binary70)   / totalNewPairs : 0n;
+      const expectedPowerLegMvt = totalPts      > 0n ? (myPowerLegPts * powerLeg30) / totalPts     : 0n;
+
+      const yourSharePct = totalNewPairs > 0n
+        ? Number((myNewPairs * 10000n) / totalNewPairs) / 100
+        : 0;
+
+      res.json({
+        binaryPool:          binaryPool.toString(),
+        newPairs:            myNewPairs.toString(),
+        powerLegVolume:      powerLegVol.toString(),
+        expectedBinaryMvt:   expectedBinaryMvt.toString(),
+        expectedPowerLegMvt: expectedPowerLegMvt.toString(),
+        totalNewPairs:       totalNewPairs.toString(),
+        eligibleUsers:       eligible.length,
+        yourSharePct:        yourSharePct.toFixed(2),
+      });
+    } catch (err: any) {
+      res.status(500).json({ message: err.message });
+    }
+  });
+
   // ── Distribution proofs (all unclaimed cycles for a wallet) ───────────────
   app.get("/api/distribution/proofs/:address", async (req, res) => {
     try {
