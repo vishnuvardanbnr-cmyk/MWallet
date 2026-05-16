@@ -1281,15 +1281,69 @@ export async function registerRoutes(
   // ── Admin: trigger binary + power leg distribution from backend ─────────────
   const ADMIN_WALLET = (process.env.VITE_ADMIN_WALLET || "0x04E8c5B49dE683c5B44eF1269Bd5ee4f338868C4").toLowerCase();
 
+  // Helper — renders a simple HTML status page readable in any browser
+  function adminHtml(title: string, lines: string[]) {
+    return `<!DOCTYPE html><html><head><title>M-Vault Admin</title>
+    <style>body{background:#0a0a0f;color:#e2e8f0;font-family:monospace;padding:40px;max-width:600px;margin:auto}
+    h2{color:#f59e0b}pre{background:#111;padding:16px;border-radius:8px;border:1px solid #333;white-space:pre-wrap}
+    .ok{color:#34d399}.err{color:#f87171}</style></head><body>
+    <h2>M-Vault · ${title}</h2><pre>${lines.join("\n")}</pre>
+    <p style="color:#666;font-size:12px;margin-top:24px">Time: ${new Date().toUTCString()}</p>
+    </body></html>`;
+  }
+
+  // POST (existing — kept for backward compat)
   app.post("/api/admin/distribute", async (req, res) => {
     const caller = (req.body?.callerAddress || "").toLowerCase();
     if (caller !== ADMIN_WALLET) {
       return res.status(403).json({ message: "Forbidden" });
     }
     const { runDistribution } = await import("./distributor");
-    // Run async — don't block the HTTP response
     runDistribution().catch(() => {});
     res.json({ ok: true, message: "Distribution started on the backend" });
+  });
+
+  // GET — bookmarkable URL: /api/admin/run/distribute/<adminWallet>
+  app.get("/api/admin/run/distribute/:key", async (req, res) => {
+    if (req.params.key.toLowerCase() !== ADMIN_WALLET) {
+      res.status(403).send(adminHtml("Forbidden", ["❌ Invalid admin key."]));
+      return;
+    }
+    const { runDistribution } = await import("./distributor");
+    runDistribution().catch(() => {});
+    res.send(adminHtml("Binary + Power-Leg Distribution", [
+      "✅ Distribution job started on the server.",
+      "",
+      "The job runs in the background and may take several minutes.",
+      "Check VPS logs:  pm2 logs mvault --lines 100",
+      "",
+      "This triggers:",
+      "  • Binary matching (left ↔ right volume pairs)",
+      "  • Power-leg points distribution",
+      "  • Merkle root committed on-chain",
+    ]));
+  });
+
+  // GET — bookmarkable URL: /api/admin/run/rank-check/<adminWallet>
+  app.get("/api/admin/run/rank-check/:key", async (req, res) => {
+    if (req.params.key.toLowerCase() !== ADMIN_WALLET) {
+      res.status(403).send(adminHtml("Forbidden", ["❌ Invalid admin key."]));
+      return;
+    }
+    const { runRankCheck } = await import("./distributor");
+    runRankCheck().catch(() => {});
+    res.send(adminHtml("Rank Eligibility Check", [
+      "✅ Rank check job started on the server.",
+      "",
+      "The job runs in the background and may take 1–2 minutes.",
+      "Check VPS logs:  pm2 logs mvault --lines 100",
+      "",
+      "This triggers:",
+      "  • Full M1–M5 eligibility evaluation for all users",
+      "  • setUserRanks() called via manager wallet for eligible users",
+      "  • onchain_users DB snapshot refreshed",
+      "  • Downline rank counts cached in KV store",
+    ]));
   });
 
   // POST /api/activation/notify — called by frontend immediately after an activation
