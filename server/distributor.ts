@@ -977,6 +977,10 @@ export function startDistributor(): void {
 
   log("Rank auto-distributor scheduled (offset 2 min after binary)", "rank-dist");
 
-  // Instant rank listener is available via startRankEventListener() if needed,
-  // but primary rank claim flow is user-triggered via POST /api/rank/claim.
+  // Event-driven rank watcher: polls BSC every 30 s for new Activated events.
+  // On any new activation, auto-triggers runRankCheck() → setUserRanks() via
+  // manager wallet, with a 10 s debounce to batch rapid activations.
+  // Starts 60 s after server boot to let the server settle.
+  setTimeout(() => startRankEventListener(), 60_000);
+  log("Rank event watcher scheduled (starts in 1 min, polls every 30 s)", "rank-check");
 }
