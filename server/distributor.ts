@@ -936,7 +936,6 @@ export function startDistributor(): void {
 
   log("Rank auto-distributor scheduled (offset 2 min after binary)", "rank-dist");
 
-  // Instant rank listener — starts after 1 min to let server settle
-  setTimeout(() => startRankEventListener(), 60_000);
-  log("Instant rank event listener scheduled (starts in 1 min)", "rank-check");
+  // Instant rank listener is available via startRankEventListener() if needed,
+  // but primary rank claim flow is user-triggered via POST /api/rank/claim.
 }

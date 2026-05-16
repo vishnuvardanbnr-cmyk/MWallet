@@ -369,6 +369,7 @@ function App() {
                     <Route path="/rank">
                       <RankPage
                         userInfo={web3.userInfo!}
+                        account={web3.account!}
                       />
                     </Route>
                     <Route path="/store">

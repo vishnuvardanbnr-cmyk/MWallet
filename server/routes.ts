@@ -1292,6 +1292,69 @@ export async function registerRoutes(
     res.json({ ok: true, message: "Distribution started on the backend" });
   });
 
+  // POST /api/rank/claim — user triggers their own rank eligibility check
+  // Runs the full M1-M5 evaluation and calls setUserRanks on-chain if eligible.
+  app.post("/api/rank/claim", async (req, res) => {
+    try {
+      const { address } = req.body ?? {};
+      if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address)) {
+        return res.status(400).json({ message: "Invalid address" });
+      }
+
+      const { ethers } = await import("ethers");
+      const { runRankCheck } = await import("./distributor");
+
+      const MVAULT = process.env.VITE_MVAULT_CONTRACT_ADDRESS || "";
+      if (!MVAULT) return res.status(500).json({ message: "Contract address not configured" });
+
+      const isMainnet = process.env.VITE_BSC_NETWORK === "mainnet";
+      const RPC = isMainnet
+        ? "https://bsc-rpc.publicnode.com"
+        : "https://bsc-testnet-rpc.publicnode.com";
+      const provider = new ethers.JsonRpcProvider(RPC);
+
+      const USERS_ABI = [
+        "function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 matchedVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 powerLegPoints, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, string displayName, string email, string phone, string country, bool profileSet)",
+      ];
+      const mvault = new ethers.Contract(MVAULT, USERS_ABI, provider);
+
+      const userBefore = await mvault.users(address);
+      if (!userBefore.isRegistered) {
+        return res.status(400).json({ message: "Address is not registered" });
+      }
+      if (!userBefore.isActive) {
+        return res.status(400).json({ message: "Account must be active to claim a rank" });
+      }
+
+      const oldRank = Number(userBefore.rank);
+      const RANK_NAMES = ["Unranked", "M1", "M2", "M3", "M4", "M5"];
+
+      if (oldRank >= 5) {
+        return res.json({ oldRank, newRank: 5, upgraded: false, message: "Already at maximum rank M5" });
+      }
+
+      // Run full multi-pass rank evaluation for all users (updates anyone who qualifies)
+      await runRankCheck();
+
+      // Re-read this user's rank after the evaluation
+      const userAfter = await mvault.users(address);
+      const newRank = Number(userAfter.rank);
+      const upgraded = newRank > oldRank;
+
+      return res.json({
+        oldRank,
+        newRank,
+        upgraded,
+        message: upgraded
+          ? `Congratulations! Your rank has been upgraded from ${RANK_NAMES[oldRank]} to ${RANK_NAMES[newRank]}`
+          : `Not yet eligible — your current rank is ${RANK_NAMES[oldRank]}`,
+      });
+    } catch (err: any) {
+      const msg = err?.shortMessage || err?.reason || err?.message || String(err);
+      return res.status(500).json({ message: `Rank check failed: ${msg}` });
+    }
+  });
+
   app.get("/api/admin/pool-status", async (_req, res) => {
     try {
       const { ethers } = await import("ethers");

@@ -1,10 +1,15 @@
+import { useState } from "react";
 import { useLocation } from "wouter";
-import { Award, Star, Zap, TrendingUp, Users, ChevronRight, CheckCircle2, Lock, Info } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { Award, Star, Zap, TrendingUp, Users, ChevronRight, CheckCircle2, Lock, Info, XCircle, Loader2, ShieldCheck } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
+import { apiRequest } from "@/lib/queryClient";
 import type { UserInfo } from "@/hooks/use-web3";
+import { ethers } from "ethers";
 
 interface RankPageProps {
   userInfo: UserInfo;
+  account: string;
 }
 
 export const RANKS = [
@@ -104,19 +109,69 @@ function usdFmt(n: number) {
   return `$${n.toLocaleString()}`;
 }
 
-export default function RankPage({ userInfo }: RankPageProps) {
+const M1_MIN_DIRECTS   = 5n;
+const M1_MIN_TEAM_USDT = ethers.parseUnits("2000", 18);
+
+export default function RankPage({ userInfo, account }: RankPageProps) {
   const [, setLocation] = useLocation();
+  const [claimResult, setClaimResult] = useState<{
+    upgraded: boolean;
+    oldRank: number;
+    newRank: number;
+    message: string;
+  } | null>(null);
 
   const currentRank = Math.max(0, Math.min(userInfo.rank ?? 0, RANKS.length - 1));
-  const rankInfo = RANKS[currentRank];
-  const nextRank = RANKS[currentRank + 1] ?? null;
-  const RankIcon = rankInfo.icon;
+  const rankInfo    = RANKS[currentRank];
+  const nextRank    = RANKS[currentRank + 1] ?? null;
+  const RankIcon    = rankInfo.icon;
 
-  const directCount = Number(userInfo.directCount ?? 0n);
-  const teamSalesNum = Number((userInfo.teamSalesUsdt ?? 0n) / 10n ** 16n) / 100;
+  const directCount  = userInfo.directCount  ?? 0n;
+  const teamSalesWei = userInfo.teamSalesUsdt ?? 0n;
+  const leftVol      = userInfo.leftSubUsers  ?? 0n;
+  const rightVol     = userInfo.rightSubUsers ?? 0n;
+  const teamSalesNum = Number(teamSalesWei / 10n ** 16n) / 100;
 
-  const m1DirectProgress = Math.min(100, (directCount / 5) * 100);
-  const m1SalesProgress = Math.min(100, (teamSalesNum / 2000) * 100);
+  const m1DirectOk = directCount >= M1_MIN_DIRECTS;
+  const m1SalesOk  = teamSalesWei >= M1_MIN_TEAM_USDT;
+  const m1LegsOk   = leftVol > 0n && rightVol > 0n;
+  const m1LocalEligible = m1DirectOk && m1SalesOk && m1LegsOk;
+
+  const m1DirectProgress = Math.min(100, (Number(directCount) / 5) * 100);
+  const m1SalesProgress  = Math.min(100, (teamSalesNum / 2000) * 100);
+
+  const canClaim = userInfo.isActive && currentRank < 5;
+
+  const claimMutation = useMutation({
+    mutationFn: () =>
+      apiRequest("POST", "/api/rank/claim", { address: account }).then(r => r.json()),
+    onSuccess: (data) => {
+      setClaimResult(data);
+    },
+    onError: (err: any) => {
+      setClaimResult({
+        upgraded: false,
+        oldRank: currentRank,
+        newRank: currentRank,
+        message: err?.message || "Rank check failed — please try again",
+      });
+    },
+  });
+
+  function CriterionRow({ ok, label, value }: { ok: boolean; label: string; value: string }) {
+    return (
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          {ok
+            ? <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+            : <XCircle className="h-4 w-4 text-rose-400/70 shrink-0" />
+          }
+          <span className="text-[12px] text-muted-foreground">{label}</span>
+        </div>
+        <span className={`text-[12px] font-semibold ${ok ? "text-emerald-400" : "text-rose-400"}`}>{value}</span>
+      </div>
+    );
+  }
 
   return (
     <div className="p-4 sm:p-6 space-y-6 relative z-10">
@@ -143,7 +198,7 @@ export default function RankPage({ userInfo }: RankPageProps) {
               Each activation has <span className="text-white font-semibold">5 rank slots</span> (1% + 2% + 2% + 2% + 3% = 10% of the activation fee). Going up the sponsor chain from the new member, the system finds the first person at each rank and pays them their slot.
             </p>
             <p>
-              <span className="text-amber-300 font-semibold">Compression rule:</span> if an M2 (or higher) is the closest ranked person above an activation and there is no M1 between them, that M2 also collects the M1 slot. The first person at each rank wins that slot — lower ranks below you cannot block you.
+              <span className="text-amber-300 font-semibold">Compression rule:</span> if an M2 (or higher) is the closest ranked person above an activation and there is no M1 between them, that M2 also collects the M1 slot.
             </p>
           </div>
         </div>
@@ -173,27 +228,48 @@ export default function RankPage({ userInfo }: RankPageProps) {
           )}
         </div>
 
-        {/* M1 progress (only show if unranked or M1) */}
+        {/* M1 criteria checklist — always show when rank < 1 */}
         {currentRank === 0 && (
           <div className="mt-6 space-y-3 pt-4 border-t border-white/[0.06]">
             <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">Progress toward M1</p>
-            <div className="space-y-2.5">
+
+            {/* Checklist */}
+            <div className="space-y-2.5 mb-3">
+              <CriterionRow
+                ok={m1DirectOk}
+                label="Direct sponsors (min 5)"
+                value={`${Number(directCount)} / 5`}
+              />
+              <CriterionRow
+                ok={m1SalesOk}
+                label="Team sales (min $2,000)"
+                value={`${usdFmt(teamSalesNum)} / $2,000`}
+              />
+              <CriterionRow
+                ok={m1LegsOk}
+                label="Both legs active"
+                value={m1LegsOk ? "Yes" : "No"}
+              />
+            </div>
+
+            {/* Progress bars */}
+            <div className="space-y-2">
               <div>
-                <div className="flex justify-between text-[11px] mb-1">
+                <div className="flex justify-between text-[10px] mb-1">
                   <span className="text-muted-foreground">Direct Sponsors</span>
-                  <span className="text-amber-400" data-testid="text-direct-progress">{directCount} / 5</span>
+                  <span className={m1DirectOk ? "text-emerald-400" : "text-amber-400"} data-testid="text-direct-progress">{Number(directCount)} / 5</span>
                 </div>
-                <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
-                  <div className="h-full rounded-full bg-amber-400 transition-all duration-700" style={{ width: `${Math.max(2, m1DirectProgress)}%` }} data-testid="bar-direct-progress" />
+                <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                  <div className={`h-full rounded-full transition-all duration-700 ${m1DirectOk ? "bg-emerald-400" : "bg-amber-400"}`} style={{ width: `${Math.max(2, m1DirectProgress)}%` }} data-testid="bar-direct-progress" />
                 </div>
               </div>
               <div>
-                <div className="flex justify-between text-[11px] mb-1">
-                  <span className="text-muted-foreground">Team Sales (2+ legs)</span>
-                  <span className="text-amber-400" data-testid="text-sales-progress">{usdFmt(teamSalesNum)} / $2,000</span>
+                <div className="flex justify-between text-[10px] mb-1">
+                  <span className="text-muted-foreground">Team Sales</span>
+                  <span className={m1SalesOk ? "text-emerald-400" : "text-amber-400"} data-testid="text-sales-progress">{usdFmt(teamSalesNum)} / $2,000</span>
                 </div>
-                <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
-                  <div className="h-full rounded-full bg-amber-400 transition-all duration-700" style={{ width: `${Math.max(2, m1SalesProgress)}%` }} data-testid="bar-sales-progress" />
+                <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
+                  <div className={`h-full rounded-full transition-all duration-700 ${m1SalesOk ? "bg-emerald-400" : "bg-amber-400"}`} style={{ width: `${Math.max(2, m1SalesProgress)}%` }} data-testid="bar-sales-progress" />
                 </div>
               </div>
             </div>
@@ -203,17 +279,78 @@ export default function RankPage({ userInfo }: RankPageProps) {
         {/* Next rank requirement (M2-M5) */}
         {nextRank && currentRank > 0 && nextRank.qualification?.type === "downline" && (
           <div className="mt-5 pt-4 border-t border-white/[0.06]">
-            <p className="text-[11px] text-muted-foreground mb-2">
+            <p className="text-[11px] text-muted-foreground mb-3">
               To reach <span className={`font-semibold ${nextRank.color}`}>{nextRank.name}</span>: qualify{" "}
               <span className="font-semibold text-white">{nextRank.qualification.downlineCount} {nextRank.qualification.downlineRank}</span> members in your downline
             </p>
-            <div className="flex items-center gap-2 text-[10px] text-muted-foreground/70">
-              <Info className="h-3 w-3 shrink-0" />
-              Downline rank counts are verified on-chain at distribution time
-            </div>
           </div>
         )}
       </div>
+
+      {/* Eligibility Claim Card */}
+      {canClaim && (
+        <div className="glass-card rounded-2xl p-5 border border-violet-500/20 slide-in" style={{ animationDelay: "0.03s" }} data-testid="card-rank-claim">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="h-9 w-9 rounded-xl bg-violet-500/15 flex items-center justify-center">
+              <ShieldCheck className="h-4 w-4 text-violet-400" />
+            </div>
+            <div>
+              <p className="text-sm font-bold text-violet-300" style={{ fontFamily: "var(--font-display)" }}>
+                {currentRank === 0 ? "Claim M1 Rank" : `Claim ${nextRank?.name ?? "Next"} Rank`}
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                {currentRank === 0
+                  ? m1LocalEligible
+                    ? "All M1 criteria met — request your rank on-chain"
+                    : "Complete M1 requirements, then request verification"
+                  : "Request a downline rank count check on-chain"
+                }
+              </p>
+            </div>
+          </div>
+
+          {/* Result banner */}
+          {claimResult && !claimMutation.isPending && (
+            <div className={`mb-4 p-3 rounded-xl border text-[12px] font-medium ${
+              claimResult.upgraded
+                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
+                : "bg-white/[0.04] border-white/[0.08] text-muted-foreground"
+            }`} data-testid="text-claim-result">
+              {claimResult.upgraded && (
+                <CheckCircle2 className="inline h-4 w-4 mr-1.5 mb-0.5 text-emerald-400" />
+              )}
+              {claimResult.message}
+            </div>
+          )}
+
+          <button
+            onClick={() => {
+              setClaimResult(null);
+              claimMutation.mutate();
+            }}
+            disabled={claimMutation.isPending}
+            data-testid="button-claim-rank"
+            className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-semibold transition-all
+              ${claimMutation.isPending
+                ? "bg-white/[0.04] border-white/[0.08] text-muted-foreground cursor-not-allowed"
+                : currentRank === 0 && m1LocalEligible
+                  ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/15"
+                  : "bg-violet-500/10 border-violet-500/20 text-violet-400 hover:bg-violet-500/15"
+              }`}
+          >
+            {claimMutation.isPending
+              ? <><Loader2 className="h-4 w-4 animate-spin" /> Verifying on-chain…</>
+              : currentRank === 0 && m1LocalEligible
+                ? <><ShieldCheck className="h-4 w-4" /> Claim M1 Rank Now</>
+                : <><ShieldCheck className="h-4 w-4" /> Check Eligibility & Claim Rank</>
+            }
+          </button>
+
+          <p className="mt-2 text-center text-[10px] text-muted-foreground/50">
+            The server will verify your full downline and set your rank on-chain immediately if eligible.
+          </p>
+        </div>
+      )}
 
       {/* Rank Ladder */}
       <div className="glass-card rounded-2xl p-6 slide-in" style={{ animationDelay: "0.04s" }} data-testid="card-rank-ladder">
@@ -231,8 +368,8 @@ export default function RankPage({ userInfo }: RankPageProps) {
           {RANKS.map((r, idx) => {
             const Icon = r.icon;
             const isCurrentRank = idx === currentRank;
-            const isAchieved = idx <= currentRank;
-            const isNext = idx === currentRank + 1;
+            const isAchieved    = idx <= currentRank;
+            const isNext        = idx === currentRank + 1;
 
             return (
               <div
@@ -301,7 +438,7 @@ export default function RankPage({ userInfo }: RankPageProps) {
           <Users className="h-5 w-5 mx-auto text-amber-400 mb-2" />
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Direct Sponsors</p>
           <p className="text-lg font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-direct-count">
-            {directCount}
+            {Number(directCount)}
           </p>
           <p className="text-[10px] text-muted-foreground">of 5 needed for M1</p>
         </div>
