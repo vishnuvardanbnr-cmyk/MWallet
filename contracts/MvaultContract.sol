@@ -679,18 +679,17 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      * @dev Immediately distributes the rank portion of a new activation up the
      *      sponsor chain.  Walks up to 50 hops looking for uplines with rank > 0.
      *
-     *      Each rank slot pays exactly 1% of grossMvt (= 10% of rankAmt).
+     *      Slot percentages (of grossMvt): M1=1%, M2=2%, M3=2%, M4=2%, M5=3%  (total 10%)
      *      A person with rank R fills all unfilled slots 1…R simultaneously.
-     *      Unfilled slots and the fixed 5% remainder → adminPool.
+     *      Unfilled slots → adminPool.  If all 5 slots are filled, admin gets 0.
      *
-     *      Option B: if an upline has hit their incomeLimit (rank or otherwise),
-     *      that slot is NOT skipped — income goes to admin (consistent with level income).
+     *      Option B: if an upline has hit their incomeLimit the slot is NOT
+     *      skipped — income goes to admin (consistent with level income).
      */
     function _distributeRankIncome(address from, uint256 grossMvt, uint256 rankAmt) internal {
-        uint256 perSlot = grossMvt / 100;   // exactly 1% of grossMvt per slot
-        uint8   filled  = 0;                // bitmask: bit k set ⟹ slot k is filled
-        uint256 paid    = 0;
-        address cur     = users[from].sponsor;
+        uint8   filled = 0;    // bitmask: bit k set ⟹ slot k is filled
+        uint256 paid   = 0;
+        address cur    = users[from].sponsor;
 
         for (uint256 depth = 0; depth < 50 && cur != address(0); depth++) {
             uint8 r = users[cur].rank;
@@ -700,11 +699,12 @@ contract MvaultContract is Ownable, ReentrancyGuard {
                     uint8 bit = uint8(1 << slot);
                     if (filled & bit == 0) {
                         filled |= bit;
-                        users[cur].mvtBalance    += perSlot;
-                        users[cur].totalReceived += perSlot;
-                        paid += perSlot;
-                        emit RankIncomePaid(cur, from, slot, perSlot);
-                        _recordTx(cur, TX_RANK_INCOME, perSlot, slot, from);
+                        uint256 slotAmt = _rankSlotAmt(slot, grossMvt);
+                        users[cur].mvtBalance    += slotAmt;
+                        users[cur].totalReceived += slotAmt;
+                        paid += slotAmt;
+                        emit RankIncomePaid(cur, from, slot, slotAmt);
+                        _recordTx(cur, TX_RANK_INCOME, slotAmt, slot, from);
                     }
                 }
             }
@@ -712,7 +712,14 @@ contract MvaultContract is Ownable, ReentrancyGuard {
             cur = users[cur].sponsor;
         }
 
-        adminPool += rankAmt - paid;   // unfilled slots + fixed 5% remainder → admin
+        if (rankAmt > paid) adminPool += rankAmt - paid;   // unfilled slots → admin
+    }
+
+    /// @dev Per-slot rank income amounts as % of grossMvt: 1%, 2%, 2%, 2%, 3%.
+    function _rankSlotAmt(uint8 slot, uint256 grossMvt) internal pure returns (uint256) {
+        if (slot == 1) return grossMvt / 100;           //  1%
+        if (slot == 5) return (grossMvt * 3) / 100;    //  3%
+        return (grossMvt * 2) / 100;                    //  2% (slots 2, 3, 4)
     }
 
     /** @dev Minimum directs needed to qualify at each level. */

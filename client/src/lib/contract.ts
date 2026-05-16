@@ -46,16 +46,14 @@ export const NETWORK = isMainnet ? BSC_MAINNET : BSC_TESTNET;
 
 // ── New MvaultContract + MvaultToken ──────────────────────────────────────────
 export const MVAULT_CONTRACT_ADDRESS =
-  import.meta.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x87AF11ab6756341ae045F50C2EE432E51eaC056d";
+  import.meta.env.VITE_MVAULT_CONTRACT_ADDRESS || "";
 export const MVT_TOKEN_ADDRESS =
-  import.meta.env.VITE_MVT_TOKEN_ADDRESS || "0x3684850Ed7D289f70e4a3C03FBA9040a21FC32A3";
-// USDT token address (same for both old and new contracts)
+  import.meta.env.VITE_MVT_TOKEN_ADDRESS || "";
 export const TOKEN_ADDRESS =
-  import.meta.env.VITE_PAYMENT_TOKEN_ADDRESS || "0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3";
+  import.meta.env.VITE_PAYMENT_TOKEN_ADDRESS || "";
 
-// ── Legacy (old) contract — kept for board/swap pages ────────────────────────
 export const CONTRACT_ADDRESS =
-  import.meta.env.VITE_CONTRACT_ADDRESS || "0x6Ff2b61d1882e7a122b09a109F78F5b2E5ef174e";
+  import.meta.env.VITE_CONTRACT_ADDRESS || "";
 
 export const DEPOSIT_ADMIN_WALLET = "0x04e8c5b49de683c5b44ef1269bd5ee4f338868c4";
 
@@ -206,13 +204,13 @@ export const MLM_ABI = [
 ];
 
 export const BOARD_HANDLER_ADDRESS =
-  import.meta.env.VITE_BOARD_HANDLER_ADDRESS || "0x7844eC391C146471E24213535AA2fdBF81DB7D99";
+  import.meta.env.VITE_BOARD_HANDLER_ADDRESS || "";
 
 // MvaultView — read-only helper that re-exposes functions removed from
 // MvaultContract to stay under the EIP-170 24 576-byte limit.
 // Set VITE_MVAULT_VIEW_ADDRESS in .env after deploying MvaultView.sol.
 export const MVAULT_VIEW_ADDRESS =
-  import.meta.env.VITE_MVAULT_VIEW_ADDRESS || "0x9B0fF60969aA1Bd2a9B17a9a556279613750bC20";
+  import.meta.env.VITE_MVAULT_VIEW_ADDRESS || "";
 
 export const MVAULT_VIEW_ABI = [
   // Pool balances
@@ -251,9 +249,9 @@ export const MVAULT_VIEW_ABI = [
   "function mvault() view returns (address)",
 ];
 export const DEPOSIT_VAULT_ADDRESS =
-  import.meta.env.VITE_DEPOSIT_VAULT_ADDRESS || "0xD307FB39d7d42B59AC46e28D71ef72019E9D5e38";
+  import.meta.env.VITE_DEPOSIT_VAULT_ADDRESS || "";
 export const PANCAKE_ROUTER_ADDRESS =
-  import.meta.env.VITE_PANCAKE_ROUTER_ADDRESS || "0xD99D1c33F9fC3444f8101754aBC46c52416550D1";
+  import.meta.env.VITE_PANCAKE_ROUTER_ADDRESS || "";
 export const BTCB_TOKEN_ADDRESS = import.meta.env.VITE_BTCB_TOKEN_ADDRESS || "";
 
 export const BOARD_HANDLER_ABI = [
