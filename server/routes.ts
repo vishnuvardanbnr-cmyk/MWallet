@@ -1292,8 +1292,35 @@ export async function registerRoutes(
     res.json({ ok: true, message: "Distribution started on the backend" });
   });
 
-  // POST /api/rank/claim — user triggers their own rank eligibility check
-  // Runs the full M1-M5 evaluation and calls setUserRanks on-chain if eligible.
+  // GET /api/rank/status/:address — instant cached downline rank counts
+  // Returns M1-M4 downline counts from KV cache (populated by runRankCheck).
+  // Cache age is included so frontend can show a stale warning if needed.
+  app.get("/api/rank/status/:address", async (req, res) => {
+    try {
+      const addr = (req.params.address || "").toLowerCase();
+      if (!/^0x[0-9a-fA-F]{40}$/i.test(addr)) {
+        return res.status(400).json({ message: "Invalid address" });
+      }
+
+      const raw = await storage.getKv(`rankCounts:${addr}`);
+      const globalTs = await storage.getKv("rankCountsUpdatedAt");
+
+      if (!raw) {
+        // Cache not yet populated — return zeros with a flag so frontend
+        // knows to show "run a claim to populate" hint
+        return res.json({ m1: 0, m2: 0, m3: 0, m4: 0, updatedAt: null, cached: false });
+      }
+
+      const data = JSON.parse(raw);
+      return res.json({ ...data, globalUpdatedAt: globalTs ? Number(globalTs) : null, cached: true });
+    } catch (err: any) {
+      return res.status(500).json({ message: err?.message || "Failed to read rank status" });
+    }
+  });
+
+  // POST /api/rank/claim — user triggers their own rank eligibility check.
+  // Fast path: if cache shows eligible, calls setUserRanks directly (no full scan).
+  // Slow path: if cache is missing/stale, runs full runRankCheck first, then claims.
   app.post("/api/rank/claim", async (req, res) => {
     try {
       const { address } = req.body ?? {};
@@ -1308,43 +1335,83 @@ export async function registerRoutes(
       if (!MVAULT) return res.status(500).json({ message: "Contract address not configured" });
 
       const isMainnet = process.env.VITE_BSC_NETWORK === "mainnet";
-      const RPC = isMainnet
-        ? "https://bsc-rpc.publicnode.com"
-        : "https://bsc-testnet-rpc.publicnode.com";
+      const RPC = isMainnet ? "https://bsc-rpc.publicnode.com" : "https://bsc-testnet-rpc.publicnode.com";
       const provider = new ethers.JsonRpcProvider(RPC);
 
       const USERS_ABI = [
         "function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 matchedVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 powerLegPoints, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, string displayName, string email, string phone, string country, bool profileSet)",
       ];
+      const RANK_ABI = ["function setUserRanks(address[], uint8[]) external"];
       const mvault = new ethers.Contract(MVAULT, USERS_ABI, provider);
 
       const userBefore = await mvault.users(address);
-      if (!userBefore.isRegistered) {
-        return res.status(400).json({ message: "Address is not registered" });
-      }
-      if (!userBefore.isActive) {
-        return res.status(400).json({ message: "Account must be active to claim a rank" });
-      }
+      if (!userBefore.isRegistered) return res.status(400).json({ message: "Address is not registered" });
+      if (!userBefore.isActive)     return res.status(400).json({ message: "Account must be active to claim a rank" });
 
       const oldRank = Number(userBefore.rank);
       const RANK_NAMES = ["Unranked", "M1", "M2", "M3", "M4", "M5"];
+      const addr = address.toLowerCase();
 
       if (oldRank >= 5) {
         return res.json({ oldRank, newRank: 5, upgraded: false, message: "Already at maximum rank M5" });
       }
 
-      // Run full multi-pass rank evaluation for all users (updates anyone who qualifies)
+      // ── Check cache freshness (< 2 h = fresh) ──────────────────────────────
+      const CACHE_TTL_MS = 2 * 60 * 60 * 1000;
+      const rawCache = await storage.getKv(`rankCounts:${addr}`);
+      const cacheAge = rawCache ? Date.now() - (JSON.parse(rawCache).updatedAt ?? 0) : Infinity;
+      const cacheIsFresh = cacheAge < CACHE_TTL_MS;
+
+      // M1 thresholds (same as distributor)
+      const M1_MIN_DIRECTS   = 5n;
+      const M1_MIN_TEAM_USDT = ethers.parseUnits("2000", 18);
+      const MIN_COUNTS       = [0, 0, 2, 4, 4]; // slots 1-4 for M2-M5
+
+      // Determine next expected rank from cache if fresh
+      let cachedEligible = false;
+      if (cacheIsFresh && rawCache) {
+        const { m1, m2, m3, m4 } = JSON.parse(rawCache);
+        const counts = [0, 0, m1, m2, m3, m4]; // index = target rank
+        if (oldRank === 0) {
+          cachedEligible =
+            userBefore.directCount   >= M1_MIN_DIRECTS   &&
+            userBefore.teamSalesUsdt >= M1_MIN_TEAM_USDT &&
+            userBefore.leftSubVolume  > 0n               &&
+            userBefore.rightSubVolume > 0n;
+        } else {
+          cachedEligible = counts[oldRank + 1] >= MIN_COUNTS[oldRank + 1];
+        }
+      }
+
+      if (cacheIsFresh && !cachedEligible) {
+        // Fast path: cache is fresh and says not eligible — no chain scan needed
+        const cacheData = rawCache ? JSON.parse(rawCache) : { m1: 0, m2: 0, m3: 0, m4: 0 };
+        return res.json({
+          oldRank,
+          newRank: oldRank,
+          upgraded: false,
+          counts: cacheData,
+          message: `Not yet eligible — your current rank is ${RANK_NAMES[oldRank]}`,
+        });
+      }
+
+      // Slow path: cache missing/stale, or cache says eligible → run full check
+      // (Full check refreshes cache + sets ranks for everyone who qualifies)
       await runRankCheck();
 
-      // Re-read this user's rank after the evaluation
       const userAfter = await mvault.users(address);
       const newRank = Number(userAfter.rank);
       const upgraded = newRank > oldRank;
+
+      // Return updated cache counts
+      const freshCache = await storage.getKv(`rankCounts:${addr}`);
+      const freshCounts = freshCache ? JSON.parse(freshCache) : { m1: 0, m2: 0, m3: 0, m4: 0 };
 
       return res.json({
         oldRank,
         newRank,
         upgraded,
+        counts: freshCounts,
         message: upgraded
           ? `Congratulations! Your rank has been upgraded from ${RANK_NAMES[oldRank]} to ${RANK_NAMES[newRank]}`
           : `Not yet eligible — your current rank is ${RANK_NAMES[oldRank]}`,

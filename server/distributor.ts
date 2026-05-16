@@ -803,7 +803,48 @@ export async function runRankCheck(): Promise<void> {
       }
     }
 
-    // 6. Apply rank changes on-chain
+    // 6a. Compute downline rank counts (bottom-up DFS, O(n)) and cache in KV
+    // counts[addr] = [m1InDownline, m2InDownline, m3InDownline, m4InDownline]
+    const downlineCounts = new Map<string, [number, number, number, number]>();
+    for (const addr of rankMap.keys()) downlineCounts.set(addr, [0, 0, 0, 0]);
+
+    function dfsCount(addr: string, seen = new Set<string>()): [number, number, number, number] {
+      if (seen.has(addr)) return [0, 0, 0, 0];
+      seen.add(addr);
+      const my: [number, number, number, number] = [0, 0, 0, 0];
+      for (const child of (children.get(addr) ?? [])) {
+        const childRank = computedRank.get(child) ?? 0;
+        const sub = dfsCount(child, seen);
+        for (let k = 0; k < 4; k++) {
+          my[k] += (childRank >= k + 1 ? 1 : 0) + sub[k];
+        }
+      }
+      downlineCounts.set(addr, my);
+      return my;
+    }
+
+    // Run from every root (users whose sponsor is not in rankMap)
+    const knownAddrs = new Set(rankMap.keys());
+    for (const [addr, u] of rankMap) {
+      if (!knownAddrs.has(u.sponsor) || u.sponsor === ethers.ZeroAddress.toLowerCase()) {
+        dfsCount(addr);
+      }
+    }
+
+    // Persist counts to KV so claim endpoint can serve them instantly
+    const updatedAt = Date.now();
+    const kvBatch = Array.from(downlineCounts.entries()).map(([addr, c]) => ({
+      key: `rankCounts:${addr}`,
+      val: JSON.stringify({ m1: c[0], m2: c[1], m3: c[2], m4: c[3], updatedAt }),
+    }));
+    for (const { key, val } of kvBatch) {
+      await storage.setKv(key, val).catch(() => {}); // non-blocking on error
+    }
+    // Also store a global "last updated" timestamp
+    await storage.setKv("rankCountsUpdatedAt", String(updatedAt)).catch(() => {});
+    log(`Downline rank counts cached for ${kvBatch.length} users`, "rank-check");
+
+    // 6b. Apply rank changes on-chain
     const toUpdate: Array<{ addr: string; newRank: number }> = [];
     for (const [addr, u] of rankMap) {
       const computed = computedRank.get(addr) ?? 0;

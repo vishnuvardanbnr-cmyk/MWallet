@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useLocation } from "wouter";
-import { useMutation } from "@tanstack/react-query";
-import { Award, Star, Zap, TrendingUp, Users, ChevronRight, CheckCircle2, Lock, Info, XCircle, Loader2, ShieldCheck } from "lucide-react";
+import { useQuery, useMutation } from "@tanstack/react-query";
+import { Award, Star, Zap, TrendingUp, Users, ChevronRight, CheckCircle2, Lock, Info, XCircle, Loader2, ShieldCheck, RefreshCw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { apiRequest } from "@/lib/queryClient";
 import type { UserInfo } from "@/hooks/use-web3";
@@ -112,19 +112,30 @@ function usdFmt(n: number) {
 const M1_MIN_DIRECTS   = 5n;
 const M1_MIN_TEAM_USDT = ethers.parseUnits("2000", 18);
 
+// Downline counts needed per rank: index = target rank (M2=2, M3=4, M4=4, M5=4)
+const DOWNLINE_NEEDED: Record<number, { count: number; ofRank: string; ofRankLevel: number }> = {
+  2: { count: 2, ofRank: "M1", ofRankLevel: 1 },
+  3: { count: 4, ofRank: "M2", ofRankLevel: 2 },
+  4: { count: 4, ofRank: "M3", ofRankLevel: 3 },
+  5: { count: 4, ofRank: "M4", ofRankLevel: 4 },
+};
+
+interface RankStatus {
+  m1: number; m2: number; m3: number; m4: number;
+  updatedAt: number | null;
+  cached: boolean;
+}
+
 export default function RankPage({ userInfo, account }: RankPageProps) {
   const [, setLocation] = useLocation();
   const [claimResult, setClaimResult] = useState<{
-    upgraded: boolean;
-    oldRank: number;
-    newRank: number;
-    message: string;
+    upgraded: boolean; oldRank: number; newRank: number; message: string;
   } | null>(null);
 
-  const currentRank = Math.max(0, Math.min(userInfo.rank ?? 0, RANKS.length - 1));
-  const rankInfo    = RANKS[currentRank];
-  const nextRank    = RANKS[currentRank + 1] ?? null;
-  const RankIcon    = rankInfo.icon;
+  const currentRank  = Math.max(0, Math.min(userInfo.rank ?? 0, RANKS.length - 1));
+  const rankInfo     = RANKS[currentRank];
+  const nextRank     = RANKS[currentRank + 1] ?? null;
+  const RankIcon     = rankInfo.icon;
 
   const directCount  = userInfo.directCount  ?? 0n;
   const teamSalesWei = userInfo.teamSalesUsdt ?? 0n;
@@ -142,11 +153,37 @@ export default function RankPage({ userInfo, account }: RankPageProps) {
 
   const canClaim = userInfo.isActive && currentRank < 5;
 
+  // ── Cached rank status (downline counts) ─────────────────────────────────
+  const { data: rankStatus, refetch: refetchStatus } = useQuery<RankStatus>({
+    queryKey: ["/api/rank/status", account],
+    queryFn: () =>
+      fetch(`/api/rank/status/${account}`)
+        .then(r => r.json()),
+    enabled: !!account && currentRank >= 1,   // only needed for M2+ tracking
+    staleTime: 5 * 60 * 1000,                  // treat as fresh for 5 min
+  });
+
+  // Downline counts keyed by rank level they belong to (m1=count of M1s, etc.)
+  const downlineCounts: Record<number, number> = {
+    1: rankStatus?.m1 ?? 0,
+    2: rankStatus?.m2 ?? 0,
+    3: rankStatus?.m3 ?? 0,
+    4: rankStatus?.m4 ?? 0,
+  };
+
+  // Is user eligible for the next rank according to cached data?
+  const nextRankNeeds = nextRank ? DOWNLINE_NEEDED[nextRank.level] : null;
+  const cachedNextEligible = nextRankNeeds
+    ? downlineCounts[nextRankNeeds.ofRankLevel] >= nextRankNeeds.count
+    : false;
+
+  // ── Claim mutation ────────────────────────────────────────────────────────
   const claimMutation = useMutation({
     mutationFn: () =>
       apiRequest("POST", "/api/rank/claim", { address: account }).then(r => r.json()),
     onSuccess: (data) => {
       setClaimResult(data);
+      refetchStatus();   // refresh downline counts after claim
     },
     onError: (err: any) => {
       setClaimResult({
@@ -158,6 +195,7 @@ export default function RankPage({ userInfo, account }: RankPageProps) {
     },
   });
 
+  // ── Helpers ───────────────────────────────────────────────────────────────
   function CriterionRow({ ok, label, value }: { ok: boolean; label: string; value: string }) {
     return (
       <div className="flex items-center justify-between gap-3">
@@ -172,6 +210,10 @@ export default function RankPage({ userInfo, account }: RankPageProps) {
       </div>
     );
   }
+
+  const cacheAge = rankStatus?.updatedAt
+    ? Math.round((Date.now() - rankStatus.updatedAt) / 60000)
+    : null;
 
   return (
     <div className="p-4 sm:p-6 space-y-6 relative z-10">
@@ -228,31 +270,15 @@ export default function RankPage({ userInfo, account }: RankPageProps) {
           )}
         </div>
 
-        {/* M1 criteria checklist — always show when rank < 1 */}
+        {/* ── Unranked: M1 criteria checklist ── */}
         {currentRank === 0 && (
           <div className="mt-6 space-y-3 pt-4 border-t border-white/[0.06]">
             <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">Progress toward M1</p>
-
-            {/* Checklist */}
             <div className="space-y-2.5 mb-3">
-              <CriterionRow
-                ok={m1DirectOk}
-                label="Direct sponsors (min 5)"
-                value={`${Number(directCount)} / 5`}
-              />
-              <CriterionRow
-                ok={m1SalesOk}
-                label="Team sales (min $2,000)"
-                value={`${usdFmt(teamSalesNum)} / $2,000`}
-              />
-              <CriterionRow
-                ok={m1LegsOk}
-                label="Both legs active"
-                value={m1LegsOk ? "Yes" : "No"}
-              />
+              <CriterionRow ok={m1DirectOk} label="Direct sponsors (min 5)"  value={`${Number(directCount)} / 5`} />
+              <CriterionRow ok={m1SalesOk}  label="Team sales (min $2,000)"  value={`${usdFmt(teamSalesNum)} / $2,000`} />
+              <CriterionRow ok={m1LegsOk}   label="Both legs active"          value={m1LegsOk ? "Yes" : "No"} />
             </div>
-
-            {/* Progress bars */}
             <div className="space-y-2">
               <div>
                 <div className="flex justify-between text-[10px] mb-1">
@@ -276,18 +302,55 @@ export default function RankPage({ userInfo, account }: RankPageProps) {
           </div>
         )}
 
-        {/* Next rank requirement (M2-M5) */}
-        {nextRank && currentRank > 0 && nextRank.qualification?.type === "downline" && (
+        {/* ── M1–M4: next rank downline progress (from cache) ── */}
+        {currentRank >= 1 && nextRank && nextRankNeeds && (
           <div className="mt-5 pt-4 border-t border-white/[0.06]">
-            <p className="text-[11px] text-muted-foreground mb-3">
-              To reach <span className={`font-semibold ${nextRank.color}`}>{nextRank.name}</span>: qualify{" "}
-              <span className="font-semibold text-white">{nextRank.qualification.downlineCount} {nextRank.qualification.downlineRank}</span> members in your downline
-            </p>
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[11px] text-muted-foreground font-medium uppercase tracking-wider">
+                Progress toward <span className={nextRank.color}>{nextRank.name}</span>
+              </p>
+              {cacheAge !== null && (
+                <span className="text-[9px] text-muted-foreground/50">updated {cacheAge}m ago</span>
+              )}
+            </div>
+
+            <div className="space-y-2.5">
+              {/* Downline rank count bar */}
+              <div>
+                <div className="flex justify-between text-[11px] mb-1.5">
+                  <span className="text-muted-foreground">{nextRankNeeds.ofRank} members in downline</span>
+                  <span className={cachedNextEligible ? "text-emerald-400 font-semibold" : "text-amber-400"} data-testid="text-downline-progress">
+                    {downlineCounts[nextRankNeeds.ofRankLevel]} / {nextRankNeeds.count}
+                  </span>
+                </div>
+                <div className="h-2 rounded-full bg-white/[0.06] overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${cachedNextEligible ? "bg-emerald-400" : nextRank.bar}`}
+                    style={{ width: `${Math.max(2, Math.min(100, (downlineCounts[nextRankNeeds.ofRankLevel] / nextRankNeeds.count) * 100))}%` }}
+                    data-testid="bar-downline-progress"
+                  />
+                </div>
+              </div>
+
+              {cachedNextEligible && (
+                <div className="flex items-center gap-1.5 text-[11px] text-emerald-400">
+                  <CheckCircle2 className="h-3.5 w-3.5" />
+                  <span>Eligible for {nextRank.name} — claim your rank below</span>
+                </div>
+              )}
+
+              {!rankStatus?.cached && (
+                <p className="text-[10px] text-muted-foreground/50 flex items-center gap-1">
+                  <RefreshCw className="h-3 w-3" />
+                  Counts update after your first eligibility check
+                </p>
+              )}
+            </div>
           </div>
         )}
       </div>
 
-      {/* Eligibility Claim Card */}
+      {/* ── Eligibility Claim Card ── */}
       {canClaim && (
         <div className="glass-card rounded-2xl p-5 border border-violet-500/20 slide-in" style={{ animationDelay: "0.03s" }} data-testid="card-rank-claim">
           <div className="flex items-center gap-3 mb-4">
@@ -303,7 +366,9 @@ export default function RankPage({ userInfo, account }: RankPageProps) {
                   ? m1LocalEligible
                     ? "All M1 criteria met — request your rank on-chain"
                     : "Complete M1 requirements, then request verification"
-                  : "Request a downline rank count check on-chain"
+                  : cachedNextEligible
+                    ? `You have enough ${nextRankNeeds?.ofRank} members — ready to claim!`
+                    : `${downlineCounts[nextRankNeeds?.ofRankLevel ?? 1]} of ${nextRankNeeds?.count} ${nextRankNeeds?.ofRank} members in downline`
                 }
               </p>
             </div>
@@ -311,43 +376,44 @@ export default function RankPage({ userInfo, account }: RankPageProps) {
 
           {/* Result banner */}
           {claimResult && !claimMutation.isPending && (
-            <div className={`mb-4 p-3 rounded-xl border text-[12px] font-medium ${
-              claimResult.upgraded
-                ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
-                : "bg-white/[0.04] border-white/[0.08] text-muted-foreground"
-            }`} data-testid="text-claim-result">
-              {claimResult.upgraded && (
-                <CheckCircle2 className="inline h-4 w-4 mr-1.5 mb-0.5 text-emerald-400" />
-              )}
+            <div
+              className={`mb-4 p-3 rounded-xl border text-[12px] font-medium ${
+                claimResult.upgraded
+                  ? "bg-emerald-500/10 border-emerald-500/20 text-emerald-300"
+                  : "bg-white/[0.04] border-white/[0.08] text-muted-foreground"
+              }`}
+              data-testid="text-claim-result"
+            >
+              {claimResult.upgraded && <CheckCircle2 className="inline h-4 w-4 mr-1.5 mb-0.5 text-emerald-400" />}
               {claimResult.message}
             </div>
           )}
 
           <button
-            onClick={() => {
-              setClaimResult(null);
-              claimMutation.mutate();
-            }}
+            onClick={() => { setClaimResult(null); claimMutation.mutate(); }}
             disabled={claimMutation.isPending}
             data-testid="button-claim-rank"
             className={`w-full flex items-center justify-center gap-2 py-3 rounded-xl border text-sm font-semibold transition-all
               ${claimMutation.isPending
                 ? "bg-white/[0.04] border-white/[0.08] text-muted-foreground cursor-not-allowed"
-                : currentRank === 0 && m1LocalEligible
+                : (currentRank === 0 && m1LocalEligible) || (currentRank >= 1 && cachedNextEligible)
                   ? "bg-emerald-500/10 border-emerald-500/30 text-emerald-400 hover:bg-emerald-500/15"
                   : "bg-violet-500/10 border-violet-500/20 text-violet-400 hover:bg-violet-500/15"
               }`}
           >
             {claimMutation.isPending
               ? <><Loader2 className="h-4 w-4 animate-spin" /> Verifying on-chain…</>
-              : currentRank === 0 && m1LocalEligible
-                ? <><ShieldCheck className="h-4 w-4" /> Claim M1 Rank Now</>
-                : <><ShieldCheck className="h-4 w-4" /> Check Eligibility & Claim Rank</>
+              : (currentRank === 0 && m1LocalEligible) || (currentRank >= 1 && cachedNextEligible)
+                ? <><ShieldCheck className="h-4 w-4" /> Claim {nextRank?.name ?? "M1"} Rank Now</>
+                : <><ShieldCheck className="h-4 w-4" /> Check Eligibility</>
             }
           </button>
 
           <p className="mt-2 text-center text-[10px] text-muted-foreground/50">
-            The server will verify your full downline and set your rank on-chain immediately if eligible.
+            {currentRank >= 1
+              ? "Downline counts are cached — clicking below refreshes and checks on-chain"
+              : "The server verifies your full eligibility and sets your rank on-chain instantly"
+            }
           </p>
         </div>
       )}
@@ -366,10 +432,12 @@ export default function RankPage({ userInfo, account }: RankPageProps) {
 
         <div className="space-y-2">
           {RANKS.map((r, idx) => {
-            const Icon = r.icon;
+            const Icon       = r.icon;
             const isCurrentRank = idx === currentRank;
-            const isAchieved    = idx <= currentRank;
-            const isNext        = idx === currentRank + 1;
+            const isAchieved = idx <= currentRank;
+            const isNext     = idx === currentRank + 1;
+            const needs      = DOWNLINE_NEEDED[r.level];
+            const have       = needs ? downlineCounts[needs.ofRankLevel] : 0;
 
             return (
               <div
@@ -405,6 +473,12 @@ export default function RankPage({ userInfo, account }: RankPageProps) {
                     )}
                   </div>
                   <p className="text-[10px] text-muted-foreground truncate">{r.desc}</p>
+                  {/* Show cached downline count on next/locked ranks */}
+                  {!isAchieved && needs && rankStatus?.cached && (
+                    <p className="text-[10px] text-muted-foreground/60 mt-0.5">
+                      {needs.ofRank}s in downline: <span className={have >= needs.count ? "text-emerald-400" : "text-white/60"}>{have} / {needs.count}</span>
+                    </p>
+                  )}
                 </div>
 
                 <div className="text-right shrink-0 flex flex-col items-end gap-1">
@@ -425,7 +499,6 @@ export default function RankPage({ userInfo, account }: RankPageProps) {
           })}
         </div>
 
-        {/* Legend */}
         <div className="mt-4 pt-4 border-t border-white/[0.06] space-y-1.5">
           <p className="text-[10px] text-muted-foreground">% shown = your slot's share of each activation fee (M1=1%, M2=2%, M3=2%, M4=2%, M5=3%)</p>
           <p className="text-[10px] text-muted-foreground/60">Higher ranks also collect any unfilled lower slots — compression sends unclaimed slots up the chain</p>
