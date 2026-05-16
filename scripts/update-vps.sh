@@ -10,12 +10,12 @@ VPS_USER="root"
 VPS_PATH="/opt/mvault"
 SSH_KEY="/tmp/mvault_deploy_key"
 
-MVT_TOKEN="0x248984989669c6e0D817221A934ca899583c3836"
-MVAULT_CONTRACT="0xcF110A7D5D2D5e2Df14db910f137A9f6681247d2"
-BOARD_HANDLER="0xAC6A29Fa016D7bcd0295b64524b007C81aB8E887"
-MVAULT_VIEW="0x76C90Aab0FCF2a79c0A8Ea9aCae14Eb6305215b2"
-MVAULT_STAKING="0x23168479Bda53409B0ed0CBe434665Fe9B157e91"
-DISTRIBUTOR="0x46B7A3a9f21bC0baf942869d0Ba332fA0C652089"
+MVT_TOKEN="0xB3cC17aa362190d1785DBB3B1FF0BA641911CFa1"
+MVAULT_CONTRACT="0xE4EF243b488dc6257A8d44cD43003EF5c0CfDb04"
+BOARD_HANDLER="0xaf1Dbd0d3fe47F3ED08fc8C3c495fEb3802Ff159"
+MVAULT_VIEW="0xe97CBBCB400c66d86023D71b6DfA3E7f943761AA"
+MVAULT_STAKING="0x93Df0F185d4cDa43cA86d59D8EA9d02eECfdf36d"
+DISTRIBUTOR="0x3DC39F8105fb982b921431072BD5C7F5D1B17bF5"
 USDT="0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3"
 BSC_NETWORK="testnet"
 
@@ -109,18 +109,36 @@ echo "VITE_MVAULT_STAKING_ADDRESS=${MVAULT_STAKING}" >> ${VPS_PATH}/.env
 echo "VITE_DISTRIBUTOR_ADDRESS=${DISTRIBUTOR}" >> ${VPS_PATH}/.env
 echo "VITE_PAYMENT_TOKEN_ADDRESS=${USDT}" >> ${VPS_PATH}/.env
 echo "VITE_BSC_NETWORK=${BSC_NETWORK}" >> ${VPS_PATH}/.env
+
+# Ensure DATABASE_URL is always present (never overwrite if already set with creds)
+if ! grep -q '^DATABASE_URL=' ${VPS_PATH}/.env; then
+  echo "DATABASE_URL=postgresql://mvault:mvault_secure_2026!@localhost:5432/mvault_db" >> ${VPS_PATH}/.env
+fi
 EOF
 echo "  ✓ VPS .env updated"
 
-# ── 5. Install deps and restart PM2 ───────────────────────────────────────
+# ── 5. Write run.sh wrapper and restart PM2 ───────────────────────────────
 echo ""
-echo "[5/5] Installing deps and restarting PM2..."
-$SSH bash <<EOF
-cd ${VPS_PATH}
-npm install --production --silent 2>/dev/null || true
-pm2 restart mvault --update-env || pm2 start dist/index.cjs --name mvault
+echo "[5/5] Writing startup wrapper and restarting PM2..."
+$SSH bash <<'SSHEOF'
+# Write the run.sh wrapper that sources .env then exec node
+cat > /opt/mvault/run.sh << 'WRAPPER'
+#!/bin/bash
+cd /opt/mvault
+set -a
+source /opt/mvault/.env
+set +a
+exec node /opt/mvault/dist/index.cjs
+WRAPPER
+chmod +x /opt/mvault/run.sh
+
+# Restart via PM2 — use wrapper so env vars are always loaded
+if pm2 describe mvault >/dev/null 2>&1; then
+  pm2 delete mvault
+fi
+pm2 start /opt/mvault/run.sh --name mvault --interpreter bash
 pm2 save
-EOF
+SSHEOF
 echo "  ✓ PM2 restarted"
 
 echo ""
