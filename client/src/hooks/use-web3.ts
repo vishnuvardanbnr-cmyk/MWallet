@@ -131,7 +131,9 @@ export function useWeb3() {
     if (!address) return;
     setLoading(true);
     try {
-      const provider = getProvider();
+      // Always use direct RPC provider (publicnode) for reads — avoids MetaMask
+      // cache which can return stale state immediately after a tx is confirmed.
+      const provider = getDirectProvider();
       const contract = getMvaultContract(provider);
 
       // Total users
@@ -200,7 +202,7 @@ export function useWeb3() {
         try {
           const mvtAddr = await contract.mvaultToken();
           const { ethers: e } = await import("ethers");
-          const mvt = new e.Contract(mvtAddr, ["function balanceOf(address) view returns (uint256)"], getProvider());
+          const mvt = new e.Contract(mvtAddr, ["function balanceOf(address) view returns (uint256)"], provider);
           const bal = await mvt.balanceOf(MVAULT_CONTRACT_ADDRESS);
           setContractMvtBalance(bal);
         } catch { }
@@ -219,7 +221,7 @@ export function useWeb3() {
       setLoading(false);
       setInitialLoaded(true);
     }
-  }, [account, getProvider]);
+  }, [account]);
 
   // ── Connection ──────────────────────────────────────────────────────────────
 
@@ -563,7 +565,7 @@ export function useWeb3() {
     binaryDepth: 0n,
   };
 
-  // ── MetaMask event listener ─────────────────────────────────────────────────
+  // ── MetaMask event listener + auto-refresh ──────────────────────────────────
 
   useEffect(() => {
     const ethereum = (window as any).ethereum;
@@ -587,6 +589,13 @@ export function useWeb3() {
     ethereum.on("accountsChanged", handleAccountsChanged);
     return () => ethereum.removeListener("accountsChanged", handleAccountsChanged);
   }, [fetchUserData]);
+
+  // Auto-poll every 30 s so balances stay live after claims/sells/withdrawals
+  useEffect(() => {
+    if (!account) return;
+    const id = setInterval(() => fetchUserData(), 30_000);
+    return () => clearInterval(id);
+  }, [account, fetchUserData]);
 
   // ── Staking ─────────────────────────────────────────────────────────────────
 

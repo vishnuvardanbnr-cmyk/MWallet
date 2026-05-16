@@ -77,7 +77,7 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
   const rightCount   = fmtVol(userInfo.rightSubUsers);
   const newPairs     = fmtVol(binaryPairs.newPairs);
   const hasNewPairs  = binaryPairs.newPairs > 0n;
-  const matchedPairs = Number(userInfo.matchedPairs);
+  const matchedPairs = fmtVol(userInfo.matchedPairs);
 
   const incomeLimitCapNum = parseFloat(formatTokenAmount(userInfo.incomeLimitCap, 18));
   const incomeCap     = incomeLimitCapNum > 0 ? incomeLimitCapNum : 390;
@@ -360,7 +360,7 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
           </div>
           <div className="text-center p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
             <GitBranch className="h-4 w-4 text-emerald-400 mx-auto mb-1.5" />
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Matched</p>
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Matched Vol</p>
             <p className="text-xl font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-matched-pairs">{matchedPairs}</p>
           </div>
           <div className="text-center p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
@@ -384,7 +384,7 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
           </div>
           <div className="text-center">
             <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Power Leg (30%)</p>
-            <p className="text-xs font-medium">{Number(userInfo.powerLegPoints)} pts accumulated</p>
+            <p className="text-xs font-medium">{fmtVol(userInfo.powerLegPoints)} USDT volume</p>
           </div>
         </div>
       </div>

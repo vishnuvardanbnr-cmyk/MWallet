@@ -137,8 +137,8 @@ export default function Dashboard({
   const leftCount = fmtVol(userInfo.leftSubUsers);
   const rightCount = fmtVol(userInfo.rightSubUsers);
   const directCount = Number(userInfo.directCount);
-  const currentPairs = Number(binaryPairs.currentPairs);
-  const newPairs = Number(binaryPairs.newPairs);
+  const currentPairs = fmtVol(binaryPairs.currentPairs);
+  const newPairs = fmtVol(binaryPairs.newPairs);
 
   return (
     <div className="p-4 sm:p-6 space-y-5 relative z-10">
@@ -488,7 +488,7 @@ export default function Dashboard({
         <div className="glass-card rounded-xl p-3 text-center" data-testid="card-power-leg">
           <TrendingUp className="h-4 w-4 mx-auto text-yellow-300 mb-1.5" />
           <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Power Leg Pts</p>
-          <p className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-power-leg-points">{Number(userInfo.powerLegPoints)}</p>
+          <p className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-power-leg-points">{fmtVol(userInfo.powerLegPoints)}</p>
         </div>
       </div>
 

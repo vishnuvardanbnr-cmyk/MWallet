@@ -25,8 +25,8 @@ export default function BinaryDetails({ userInfo, mvtPrice, binaryPairs, formatA
 
   const leftVol = userInfo.leftSubUsers;
   const rightVol = userInfo.rightSubUsers;
-  const matchedPairs = Number(userInfo.matchedPairs);
-  const powerLegPts = Number(userInfo.powerLegPoints);
+  const matchedPairs = fmtVol(userInfo.matchedPairs);
+  const powerLegPts = fmtVol(userInfo.powerLegPoints);
   const currentPairs = fmtVol(binaryPairs.currentPairs);
   const newPairs = fmtVol(binaryPairs.newPairs);
   const hasNewPairs = binaryPairs.newPairs > 0n;
@@ -61,9 +61,9 @@ export default function BinaryDetails({ userInfo, mvtPrice, binaryPairs, formatA
         </div>
         <div className="glass-card rounded-2xl p-4 text-center" data-testid="card-matched-pairs">
           <GitBranch className="h-5 w-5 mx-auto text-emerald-400 mb-2" />
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Matched Pairs</p>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Matched Vol</p>
           <p className="text-2xl font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-matched-pairs">{matchedPairs}</p>
-          <p className="text-[10px] text-muted-foreground">total matched</p>
+          <p className="text-[10px] text-muted-foreground">USDT matched</p>
         </div>
         <div className="glass-card rounded-2xl p-4 text-center col-span-2 sm:col-span-1" data-testid="card-right-team">
           <ArrowDownRight className="h-5 w-5 mx-auto text-purple-400 mb-2" />
@@ -121,7 +121,7 @@ export default function BinaryDetails({ userInfo, mvtPrice, binaryPairs, formatA
         </div>
         <div className="mt-3 p-3 rounded-xl bg-yellow-600/[0.06] border border-yellow-600/10">
           <p className="text-xs text-muted-foreground leading-relaxed">
-            <span className="text-yellow-300 font-medium">Power Leg Points: {powerLegPts}</span> — Every 10 points from the strong arm generates 1 extra binary pair, on top of matched pairs.
+            <span className="text-yellow-300 font-medium">Power Leg Volume: {powerLegPts}</span> — The excess USDT volume from the strong arm is shared via the power leg pool (30% of binaryPool).
           </p>
         </div>
       </div>
