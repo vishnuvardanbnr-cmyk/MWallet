@@ -1428,7 +1428,7 @@ export async function registerRoutes(
     }
   });
 
-  // ── Distribution proofs (all unclaimed cycles for a wallet) ───────────────
+  // ── Distribution proofs — only UNCLAIMED cycles (verified on-chain) ───────
   app.get("/api/distribution/proofs/:address", async (req, res) => {
     try {
       const walletAddress = req.params.address.toLowerCase();
@@ -1436,21 +1436,47 @@ export async function registerRoutes(
       if (!proofs.length) {
         return res.json({ cycles: [], totalMvt: "0" });
       }
+
+      // Check on-chain which cycles have already been claimed
+      const DIST_ADDR = process.env.VITE_DISTRIBUTOR_ADDRESS || "";
+      let claimedSet = new Set<number>();
+      if (DIST_ADDR) {
+        try {
+          const { ethers } = await import("ethers");
+          const RPC = process.env.VITE_BSC_NETWORK === "mainnet"
+            ? "https://bsc-rpc.publicnode.com"
+            : "https://bsc-testnet-rpc.publicnode.com";
+          const provider = new ethers.JsonRpcProvider(RPC);
+          const dist = new ethers.Contract(DIST_ADDR, [
+            "function hasClaimed(uint256 cycle, address user) view returns (bool)",
+          ], provider);
+          // Check all cycles in parallel
+          const checks = await Promise.all(
+            proofs.map(p => dist.hasClaimed(p.cycle, walletAddress) as Promise<boolean>)
+          );
+          proofs.forEach((p, i) => { if (checks[i]) claimedSet.add(p.cycle); });
+        } catch {
+          // If on-chain check fails, return all proofs (safe fallback)
+        }
+      }
+
       let totalMvt = 0n;
-      const cycles = proofs.map(p => {
-        const amount = BigInt(p.binaryShare) + BigInt(p.powerLegShare);
-        totalMvt += amount;
-        return {
-          cycle:          p.cycle,
-          binaryShare:    p.binaryShare,
-          powerLegShare:  p.powerLegShare,
-          newMatchedVol:  p.newMatchedVol,
-          newPowerLegPts: p.newPowerLegPts,
-          proof:          p.proof,
-          totalMvt:       amount.toString(),
-        };
-      });
-      res.json({ cycles, totalMvt: totalMvt.toString() });
+      const cycles = proofs
+        .filter(p => !claimedSet.has(p.cycle))
+        .map(p => {
+          const amount = BigInt(p.binaryShare) + BigInt(p.powerLegShare);
+          totalMvt += amount;
+          return {
+            cycle:          p.cycle,
+            binaryShare:    p.binaryShare,
+            powerLegShare:  p.powerLegShare,
+            newMatchedVol:  p.newMatchedVol,
+            newPowerLegPts: p.newPowerLegPts,
+            proof:          p.proof,
+            totalMvt:       amount.toString(),
+          };
+        });
+      res.json({ cycles, totalMvt: totalMvt.toString(), totalProofs: proofs.length });
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }

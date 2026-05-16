@@ -71,6 +71,7 @@ interface CycleEntry {
 interface ProofsResp {
   cycles: CycleEntry[];
   totalMvt: string;
+  totalProofs: number;
 }
 
 export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmount, walletAddress }: IncomeProps) {
@@ -114,6 +115,8 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
   const pendingCycles = (proofsData?.cycles ?? []).filter(c => !claimedCycles.has(c.cycle));
   const totalPendingMvt = pendingCycles.reduce((sum, c) => sum + BigInt(c.totalMvt), 0n);
   const hasPending = pendingCycles.length > 0 && totalPendingMvt > 0n;
+  // allClaimed: either we just claimed this session, OR server returned 0 unclaimed but proofs exist in DB
+  const serverAllClaimed = proofsData !== undefined && proofsData.cycles.length === 0 && (proofsData.totalProofs ?? 0) > 0;
 
   // Maximum cycles per batchClaim tx.
   // 100 cycles × 120k gas = 12M gas — well within BSC's 300M block limit.
@@ -168,7 +171,7 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
   // Warn user if their pending cycles will require multiple transactions
   const claimTxCount = Math.ceil(pendingCycles.length / BATCH_CLAIM_MAX);
 
-  const allClaimed = pendingCycles.length === 0 && claimedCycles.size > 0;
+  const allClaimed = (pendingCycles.length === 0 && claimedCycles.size > 0) || serverAllClaimed;
 
   return (
     <div className="p-4 sm:p-6 space-y-6 relative z-10">
@@ -254,49 +257,70 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
             </div>
             <div>
               <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>
-                <span className="gradient-text">Binary Distribution Claim</span>
+                <span className="gradient-text">Binary + Power Leg Income</span>
               </h2>
-              <p className="text-[10px] text-muted-foreground">Trustless Merkle-proof — claim any time, no expiry</p>
+              <p className="text-[10px] text-muted-foreground">Both binary &amp; power leg paid together — one claim per cycle</p>
             </div>
           </div>
 
           {proofLoading ? (
             <div className="flex items-center gap-2 py-3 text-muted-foreground text-xs">
               <Loader2 className="h-4 w-4 animate-spin" />
-              Checking for pending distributions…
+              Checking on-chain claim status…
             </div>
           ) : allClaimed ? (
             <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
               <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-              <p className="text-xs text-emerald-400 font-medium">All cycles claimed — MVT credited to your account</p>
+              <p className="text-xs text-emerald-400 font-medium">All cycles claimed — MVT credited to your balance</p>
             </div>
           ) : hasPending ? (
             <div className="space-y-3">
               {/* Summary row */}
-              <div className="flex items-center justify-between p-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/15">
-                <div>
-                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Total Claimable</p>
-                  <p className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-total-claimable">
-                    {parseFloat(formatTokenAmount(totalPendingMvt, 18)).toFixed(4)} MVT
-                  </p>
+              <div className="p-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/15 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Total Claimable</p>
+                    <p className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-total-claimable">
+                      {parseFloat(formatTokenAmount(totalPendingMvt, 18)).toFixed(4)} MVT
+                    </p>
                     <p className="text-[9px] text-muted-foreground mt-0.5">
-                    {pendingCycles.length} cycle{pendingCycles.length !== 1 ? "s" : ""}
-                    {claimTxCount > 1 ? ` — ${claimTxCount} transactions needed` : " — claim any time"}
-                  </p>
+                      {pendingCycles.length} cycle{pendingCycles.length !== 1 ? "s" : ""}
+                      {claimTxCount > 1 ? ` — ${claimTxCount} transactions needed` : " — 1 transaction"}
+                    </p>
+                  </div>
+                  <Button
+                    onClick={handleClaimAll}
+                    disabled={claiming}
+                    data-testid="button-claim-all"
+                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4"
+                  >
+                    {claiming
+                      ? <><Loader2 className="h-3 w-3 animate-spin mr-1.5" />Claiming…</>
+                      : pendingCycles.length > 1 ? `Claim All (${pendingCycles.length})` : "Claim Income"}
+                  </Button>
                 </div>
-                <Button
-                  onClick={handleClaimAll}
-                  disabled={claiming}
-                  data-testid="button-claim-all"
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4"
-                >
-                  {claiming
-                    ? <><Loader2 className="h-3 w-3 animate-spin mr-1.5" />Claiming…</>
-                    : pendingCycles.length > 1 ? `Claim All (${pendingCycles.length})` : "Claim MVT"}
-                </Button>
+
+                {/* Always show binary vs power leg split */}
+                {pendingCycles.length === 1 && (() => {
+                  const c = pendingCycles[0];
+                  const bin = parseFloat(formatTokenAmount(BigInt(c.binaryShare), 18));
+                  const pwr = parseFloat(formatTokenAmount(BigInt(c.powerLegShare), 18));
+                  return (
+                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-emerald-500/10">
+                      <div className="text-center">
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Binary Share (70%)</p>
+                        <p className="text-xs font-semibold text-emerald-400">{bin.toFixed(4)} MVT</p>
+                      </div>
+                      <div className="text-center">
+                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Power Leg Share (30%)</p>
+                        <p className="text-xs font-semibold text-blue-400">{pwr.toFixed(4)} MVT</p>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
-              {/* Per-cycle breakdown toggle */}
+              {/* Per-cycle breakdown toggle (multi-cycle only) */}
               {pendingCycles.length > 1 && (
                 <button
                   onClick={() => setShowCycles(v => !v)}
@@ -304,43 +328,40 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
                   data-testid="button-toggle-cycles"
                 >
                   {showCycles ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                  {showCycles ? "Hide" : "Show"} cycle breakdown
+                  {showCycles ? "Hide" : "Show"} per-cycle breakdown
                 </button>
               )}
 
-              {(showCycles || pendingCycles.length === 1) && (
+              {(showCycles || pendingCycles.length === 1) && pendingCycles.length > 1 && (
                 <div className="space-y-2">
-                  {pendingCycles.map(c => {
-                    const isClaimed = claimedCycles.has(c.cycle);
-                    return (
-                      <div
-                        key={c.cycle}
-                        className={`flex items-center justify-between px-3 py-2.5 rounded-xl border ${
-                          isClaimed
-                            ? "bg-emerald-500/5 border-emerald-500/15"
-                            : "bg-white/[0.02] border-white/[0.06]"
-                        }`}
-                        data-testid={`row-cycle-${c.cycle}`}
-                      >
+                  {pendingCycles.map(c => (
+                    <div
+                      key={c.cycle}
+                      className="px-3 py-2.5 rounded-xl border bg-white/[0.02] border-white/[0.06]"
+                      data-testid={`row-cycle-${c.cycle}`}
+                    >
+                      <div className="flex items-center justify-between mb-1.5">
+                        <p className="text-xs font-semibold">Cycle #{c.cycle}</p>
+                        <Badge variant="outline" className="text-[9px] border-amber-500/30 text-amber-400">
+                          {parseFloat(formatTokenAmount(BigInt(c.totalMvt), 18)).toFixed(4)} MVT total
+                        </Badge>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <p className="text-xs font-semibold">Cycle #{c.cycle}</p>
-                          <p className="text-[10px] text-muted-foreground">
-                            Binary: {parseFloat(formatTokenAmount(BigInt(c.binaryShare), 18)).toFixed(4)} MVT
-                            &nbsp;·&nbsp;
-                            Power: {parseFloat(formatTokenAmount(BigInt(c.powerLegShare), 18)).toFixed(4)} MVT
+                          <p className="text-[9px] text-muted-foreground">Binary (70%)</p>
+                          <p className="text-[11px] font-medium text-emerald-400">
+                            {parseFloat(formatTokenAmount(BigInt(c.binaryShare), 18)).toFixed(4)} MVT
                           </p>
                         </div>
-                        {isClaimed
-                          ? <CheckCircle2 className="h-4 w-4 text-emerald-400" />
-                          : (
-                            <Badge variant="outline" className="text-[9px] border-amber-500/30 text-amber-400">
-                              {parseFloat(formatTokenAmount(BigInt(c.totalMvt), 18)).toFixed(4)} MVT
-                            </Badge>
-                          )
-                        }
+                        <div>
+                          <p className="text-[9px] text-muted-foreground">Power Leg (30%)</p>
+                          <p className="text-[11px] font-medium text-blue-400">
+                            {parseFloat(formatTokenAmount(BigInt(c.powerLegShare), 18)).toFixed(4)} MVT
+                          </p>
+                        </div>
                       </div>
-                    );
-                  })}
+                    </div>
+                  ))}
                 </div>
               )}
 
