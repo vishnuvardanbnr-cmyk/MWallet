@@ -1,4 +1,4 @@
-import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome, usdtDeposits, type UsdtDeposit, leadershipRewards, type LeadershipReward, musdtStakingPlans, type MusdtStakingPlan, type InsertMusdtStakingPlan, musdtOverrideIncome, type MusdtOverrideIncome, mTokenPurchaseBatches, type MTokenPurchaseBatch, type InsertTokenBatch, distributionCycles, type DistributionCycle, distributionProofs, type DistributionProof, kvStore } from "@shared/schema";
+import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome, usdtDeposits, type UsdtDeposit, leadershipRewards, type LeadershipReward, musdtStakingPlans, type MusdtStakingPlan, type InsertMusdtStakingPlan, musdtOverrideIncome, type MusdtOverrideIncome, mTokenPurchaseBatches, type MTokenPurchaseBatch, type InsertTokenBatch, distributionCycles, type DistributionCycle, distributionProofs, type DistributionProof, kvStore, onchainUsers, type OnchainUser } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -98,6 +98,13 @@ export interface IStorage {
   // Key-Value store (used by distributors to persist state like lastBlock)
   getKv(key: string): Promise<string | null>;
   setKv(key: string, value: string): Promise<void>;
+  // On-chain user mirror (populated by runRankCheck, used for fast rank evaluation)
+  upsertOnchainUsersBulk(users: Array<{
+    address: string; sponsor: string; rank: number; directCount: number;
+    teamSalesUsdt: string; leftSubVolume: string; rightSubVolume: string; isActive: boolean;
+  }>): Promise<void>;
+  getAllOnchainUsers(): Promise<import("../shared/schema").OnchainUser[]>;
+  getOnchainUser(address: string): Promise<import("../shared/schema").OnchainUser | undefined>;
 }
 
 export class DatabaseStorage implements IStorage {
@@ -753,6 +760,47 @@ export class DatabaseStorage implements IStorage {
     await db.insert(kvStore)
       .values({ key, value })
       .onConflictDoUpdate({ target: kvStore.key, set: { value, updatedAt: new Date() } });
+  }
+
+  async upsertOnchainUsersBulk(users: Array<{
+    address: string; sponsor: string; rank: number; directCount: number;
+    teamSalesUsdt: string; leftSubVolume: string; rightSubVolume: string; isActive: boolean;
+  }>): Promise<void> {
+    if (users.length === 0) return;
+    const CHUNK = 500;
+    for (let i = 0; i < users.length; i += CHUNK) {
+      const slice = users.slice(i, i + CHUNK).map(u => ({
+        ...u,
+        address: u.address.toLowerCase(),
+        sponsor: u.sponsor?.toLowerCase() ?? null,
+        updatedAt: new Date(),
+      }));
+      await db.insert(onchainUsers)
+        .values(slice)
+        .onConflictDoUpdate({
+          target: onchainUsers.address,
+          set: {
+            sponsor:        sql`EXCLUDED.sponsor`,
+            rank:           sql`EXCLUDED.rank`,
+            directCount:    sql`EXCLUDED.direct_count`,
+            teamSalesUsdt:  sql`EXCLUDED.team_sales_usdt`,
+            leftSubVolume:  sql`EXCLUDED.left_sub_volume`,
+            rightSubVolume: sql`EXCLUDED.right_sub_volume`,
+            isActive:       sql`EXCLUDED.is_active`,
+            updatedAt:      sql`EXCLUDED.updated_at`,
+          },
+        });
+    }
+  }
+
+  async getAllOnchainUsers(): Promise<OnchainUser[]> {
+    return db.select().from(onchainUsers);
+  }
+
+  async getOnchainUser(address: string): Promise<OnchainUser | undefined> {
+    const [row] = await db.select().from(onchainUsers)
+      .where(eq(onchainUsers.address, address.toLowerCase()));
+    return row;
   }
 }
 

@@ -312,6 +312,22 @@ export const kvStore = pgTable("kv_store", {
   updatedAt: timestamp("updated_at").defaultNow(),
 });
 
+// Mirror of on-chain user data — populated by runRankCheck() and
+// refreshed on each POST /api/activation/notify call.
+// Lets rank evaluation run from DB (ms) instead of chain (seconds).
+export const onchainUsers = pgTable("onchain_users", {
+  address:        varchar("address",          { length: 42  }).primaryKey(),
+  sponsor:        varchar("sponsor",          { length: 42  }),
+  rank:           integer("rank").default(0),
+  directCount:    integer("direct_count").default(0),
+  teamSalesUsdt:  text("team_sales_usdt").default("0"),
+  leftSubVolume:  text("left_sub_volume").default("0"),
+  rightSubVolume: text("right_sub_volume").default("0"),
+  isActive:       boolean("is_active").default(false),
+  updatedAt:      timestamp("updated_at").defaultNow(),
+});
+export type OnchainUser = typeof onchainUsers.$inferSelect;
+
 export interface HardwareProduct {
   id: string;
   name: string;

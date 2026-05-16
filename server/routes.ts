@@ -1292,6 +1292,71 @@ export async function registerRoutes(
     res.json({ ok: true, message: "Distribution started on the backend" });
   });
 
+  // POST /api/activation/notify — called by frontend immediately after an activation
+  // tx confirms. Reads the activated user + their upline chain from BSC (single-user
+  // reads, fast), updates the onchain_users DB snapshot, then triggers runRankCheck()
+  // asynchronously. This replaces the old 30-second BSC block poller entirely.
+  app.post("/api/activation/notify", async (req, res) => {
+    try {
+      const { address } = req.body ?? {};
+      if (!address || !/^0x[0-9a-fA-F]{40}$/i.test(address)) {
+        return res.status(400).json({ message: "Invalid address" });
+      }
+
+      const { ethers } = await import("ethers");
+      const MVAULT = process.env.VITE_MVAULT_CONTRACT_ADDRESS || "";
+      if (!MVAULT) return res.status(500).json({ message: "Contract not configured" });
+
+      const isMainnet = process.env.VITE_BSC_NETWORK === "mainnet";
+      const RPC = isMainnet
+        ? "https://bsc-rpc.publicnode.com"
+        : "https://bsc-testnet-rpc.publicnode.com";
+      const provider = new ethers.JsonRpcProvider(RPC);
+
+      const USER_ABI = ["function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 matchedVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 powerLegPoints, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, string displayName, string email, string phone, string country, bool profileSet)"];
+      const mvault = new ethers.Contract(MVAULT, USER_ABI, provider);
+
+      // Walk up the sponsor chain (max 15 hops) and refresh all affected users in DB
+      const toRefresh: string[] = [];
+      let cursor = address.toLowerCase();
+      for (let hop = 0; hop < 15; hop++) {
+        toRefresh.push(cursor);
+        const info = await mvault.users(cursor).catch(() => null);
+        if (!info || !info.isRegistered) break;
+        const sp = (info.sponsor as string).toLowerCase();
+        if (!sp || sp === ethers.ZeroAddress.toLowerCase()) break;
+        cursor = sp;
+      }
+
+      // Read all collected addresses in parallel
+      const settled = await Promise.allSettled(
+        toRefresh.map(addr => mvault.users(addr).then((u: any) => ({ addr, u })))
+      );
+      const rows = settled
+        .filter((r): r is PromiseFulfilledResult<any> => r.status === "fulfilled")
+        .map(({ value: { addr, u } }) => ({
+          address:        addr,
+          sponsor:        (u.sponsor as string).toLowerCase(),
+          rank:           Number(u.rank),
+          directCount:    Number(u.directCount),
+          teamSalesUsdt:  (u.teamSalesUsdt as bigint).toString(),
+          leftSubVolume:  (u.leftSubVolume  as bigint).toString(),
+          rightSubVolume: (u.rightSubVolume as bigint).toString(),
+          isActive:       Boolean(u.isActive),
+        }));
+
+      await storage.upsertOnchainUsersBulk(rows);
+
+      // Trigger full rank check asynchronously (no-op if already running)
+      const { runRankCheck } = await import("./distributor");
+      runRankCheck().catch(() => {});
+
+      return res.json({ ok: true, refreshed: rows.length, rankCheckTriggered: true });
+    } catch (err: any) {
+      return res.status(500).json({ message: err?.message || "Notify failed" });
+    }
+  });
+
   // GET /api/rank/status/:address — instant cached downline rank counts
   // Returns M1-M4 downline counts from KV cache (populated by runRankCheck).
   // Cache age is included so frontend can show a stale warning if needed.

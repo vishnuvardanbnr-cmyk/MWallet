@@ -291,6 +291,20 @@ export function useWeb3() {
 
   // ── Activation ($130 USDT, no package selection) ───────────────────────────
 
+  // Notify server after any activation so it can refresh the DB snapshot
+  // and trigger rank evaluation immediately (replaces the 30s BSC poller).
+  const notifyActivation = useCallback(async (activatedAddress: string) => {
+    try {
+      await fetch("/api/activation/notify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ address: activatedAddress }),
+      });
+    } catch {
+      // non-critical — rank check will still run on the 24h cycle
+    }
+  }, []);
+
   const activatePackage = useCallback(async (_pkg?: number) => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
@@ -298,7 +312,8 @@ export function useWeb3() {
     const tx = await contract.activate(pkg);
     await tx.wait();
     await refreshAfterTx();
-  }, [getSigner, refreshAfterTx]);
+    if (account) notifyActivation(account);
+  }, [getSigner, refreshAfterTx, account, notifyActivation]);
 
   // ── Sell virtual MVT → USDT (stays in contract) ────────────────────────────
 
@@ -538,7 +553,8 @@ export function useWeb3() {
     const tx = await contract.activateFromBalance(pkg);
     await tx.wait();
     await refreshAfterTx();
-  }, [getSigner, refreshAfterTx]);
+    if (account) notifyActivation(account);
+  }, [getSigner, refreshAfterTx, account, notifyActivation]);
 
   const claimBinaryIncome = useCallback(async () => {}, []);
   const reactivatePackage = useCallback(async (_pkg: number) => {}, []);
@@ -650,7 +666,9 @@ export function useWeb3() {
     const tx = await contract.registerAndActivateFor(newUser, binaryParent, placeLeft, pkg, { gasLimit: 800000 });
     await tx.wait();
     await refreshAfterTx();
-  }, [getSigner, refreshAfterTx]);
+    // Notify for the newly activated user (not the caller)
+    notifyActivation(newUser);
+  }, [getSigner, refreshAfterTx, notifyActivation]);
 
   const getActiveStakesOnChain = useCallback(async (user: string) => {
     const provider = getProvider();

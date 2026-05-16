@@ -803,6 +803,23 @@ export async function runRankCheck(): Promise<void> {
       }
     }
 
+    // 5b. Persist the full user snapshot to onchain_users DB table
+    // This lets rank checks and eligibility queries run from DB (ms) not chain (seconds).
+    const dbRows = Array.from(rankMap.entries()).map(([addr, u]) => ({
+      address:        addr,
+      sponsor:        u.sponsor,
+      rank:           u.rank,
+      directCount:    Number(u.directCount),
+      teamSalesUsdt:  u.teamSalesUsdt.toString(),
+      leftSubVolume:  u.leftSubVolume.toString(),
+      rightSubVolume: u.rightSubVolume.toString(),
+      isActive:       u.isActive,
+    }));
+    await storage.upsertOnchainUsersBulk(dbRows).catch(e =>
+      log(`onchain_users upsert warning: ${e?.message}`, "rank-check")
+    );
+    log(`onchain_users snapshot saved (${dbRows.length} rows)`, "rank-check");
+
     // 6a. Compute downline rank counts (bottom-up DFS, O(n)) and cache in KV
     // counts[addr] = [m1InDownline, m2InDownline, m3InDownline, m4InDownline]
     const downlineCounts = new Map<string, [number, number, number, number]>();
@@ -977,10 +994,8 @@ export function startDistributor(): void {
 
   log("Rank auto-distributor scheduled (offset 2 min after binary)", "rank-dist");
 
-  // Event-driven rank watcher: polls BSC every 30 s for new Activated events.
-  // On any new activation, auto-triggers runRankCheck() → setUserRanks() via
-  // manager wallet, with a 10 s debounce to batch rapid activations.
-  // Starts 60 s after server boot to let the server settle.
-  setTimeout(() => startRankEventListener(), 60_000);
-  log("Rank event watcher scheduled (starts in 1 min, polls every 30 s)", "rank-check");
+  // Rank checks are now triggered directly via POST /api/activation/notify
+  // (called by the frontend after any activation tx confirms).
+  // No BSC polling needed — zero RPC overhead between activations.
+  log("Rank check: event-driven via /api/activation/notify (no polling)", "rank-check");
 }
