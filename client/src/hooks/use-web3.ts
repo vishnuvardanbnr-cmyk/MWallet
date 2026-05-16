@@ -223,6 +223,16 @@ export function useWeb3() {
     }
   }, [account]);
 
+  // ── Post-tx refresh ─────────────────────────────────────────────────────────
+  // Fires immediately AND again after 2 s so the RPC has time to index the new
+  // block.  The instant call gives near-instant UI feedback; the delayed call
+  // guarantees the displayed values are always the fully-confirmed on-chain state.
+  const refreshAfterTx = useCallback(async (addr?: string) => {
+    fetchUserData(addr);                                   // fire immediately
+    await new Promise(r => setTimeout(r, 2_000));
+    fetchUserData(addr);                                   // confirm fresh state
+  }, [fetchUserData]);
+
   // ── Connection ──────────────────────────────────────────────────────────────
 
   const connect = useCallback(async () => {
@@ -263,8 +273,8 @@ export function useWeb3() {
     const sendContract = getMvaultContract(signer);
     const tx = await sendContract.register(sponsor, ZERO_ADDRESS, placeLeft, { gasLimit: 600_000n });
     await tx.wait();
-    await fetchUserData();
-  }, [getSigner, fetchUserData]);
+    await refreshAfterTx();
+  }, [getSigner, refreshAfterTx]);
 
   // ── USDT approval for MvaultContract ───────────────────────────────────────
 
@@ -287,8 +297,8 @@ export function useWeb3() {
     const pkg = _pkg ?? 2; // default PRO ($130)
     const tx = await contract.activate(pkg);
     await tx.wait();
-    await fetchUserData();
-  }, [getSigner, fetchUserData]);
+    await refreshAfterTx();
+  }, [getSigner, refreshAfterTx]);
 
   // ── Sell virtual MVT → USDT (stays in contract) ────────────────────────────
 
@@ -298,8 +308,8 @@ export function useWeb3() {
     const parsed = ethers.parseUnits(amount, tokenDecimals);
     const tx = await contract.sellMvt(parsed);
     await tx.wait();
-    await fetchUserData();
-  }, [getSigner, tokenDecimals, fetchUserData]);
+    await refreshAfterTx();
+  }, [getSigner, tokenDecimals, refreshAfterTx]);
 
   // ── Withdraw USDT balance → wallet ─────────────────────────────────────────
 
@@ -309,8 +319,8 @@ export function useWeb3() {
     const parsed = ethers.parseUnits(amount, tokenDecimals);
     const tx = await contract.withdrawUsdt(parsed);
     await tx.wait();
-    await fetchUserData();
-  }, [getSigner, tokenDecimals, fetchUserData]);
+    await refreshAfterTx();
+  }, [getSigner, tokenDecimals, refreshAfterTx]);
 
   // ── Withdraw BTC pool balance → wallet ─────────────────────────────────────
 
@@ -320,8 +330,8 @@ export function useWeb3() {
     const parsed = ethers.parseUnits(amount, tokenDecimals);
     const tx = await contract.withdrawBtcPool(parsed);
     await tx.wait();
-    await fetchUserData();
-  }, [getSigner, tokenDecimals, fetchUserData]);
+    await refreshAfterTx();
+  }, [getSigner, tokenDecimals, refreshAfterTx]);
 
   // ── Rebirth (create sub-account) ───────────────────────────────────────────
 
@@ -330,16 +340,16 @@ export function useWeb3() {
     const contract = getMvaultContract(signer);
     const tx = await contract.rebirth(subAccount, placeLeft);
     await tx.wait();
-    await fetchUserData();
-  }, [getSigner, fetchUserData]);
+    await refreshAfterTx();
+  }, [getSigner, refreshAfterTx]);
 
   const claimRebirthBalance = useCallback(async () => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
     const tx = await contract.claimRebirthBalance();
     await tx.wait();
-    await fetchUserData();
-  }, [getSigner, fetchUserData]);
+    await refreshAfterTx();
+  }, [getSigner, refreshAfterTx]);
 
   // ── Profile (on-chain via MvaultContract) ──────────────────────────────────
 
@@ -518,8 +528,8 @@ export function useWeb3() {
     const contract = getMvaultContract(signer);
     const tx = await contract.enterBoardPool();
     await tx.wait();
-    await fetchUserData();
-  }, [getSigner, fetchUserData]);
+    await refreshAfterTx();
+  }, [getSigner, refreshAfterTx]);
 
   const activateFromBalance = useCallback(async (_pkg?: number) => {
     const signer = await getSigner();
@@ -527,8 +537,8 @@ export function useWeb3() {
     const pkg = _pkg ?? 2; // default PRO ($130)
     const tx = await contract.activateFromBalance(pkg);
     await tx.wait();
-    await fetchUserData();
-  }, [getSigner, fetchUserData]);
+    await refreshAfterTx();
+  }, [getSigner, refreshAfterTx]);
 
   const claimBinaryIncome = useCallback(async () => {}, []);
   const reactivatePackage = useCallback(async (_pkg: number) => {}, []);
@@ -611,16 +621,16 @@ export function useWeb3() {
       const tx = await contract.stake(amountBn, isLocked, { gasLimit: 600_000 });
       await tx.wait();
     }
-    await fetchUserData();
-  }, [getSigner, fetchUserData]);
+    await refreshAfterTx();
+  }, [getSigner, refreshAfterTx]);
 
   const unstakePosition = useCallback(async (stakeIndex: number) => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
     const tx = await contract.unstake(stakeIndex);
     await tx.wait();
-    await fetchUserData();
-  }, [getSigner, fetchUserData]);
+    await refreshAfterTx();
+  }, [getSigner, refreshAfterTx]);
 
   const convertStakeToLocked = useCallback(async (stakeIndex: number) => {
     const signer = await getSigner();
@@ -639,8 +649,8 @@ export function useWeb3() {
     const contract = getMvaultContract(signer);
     const tx = await contract.registerAndActivateFor(newUser, binaryParent, placeLeft, pkg, { gasLimit: 800000 });
     await tx.wait();
-    await fetchUserData();
-  }, [getSigner, fetchUserData]);
+    await refreshAfterTx();
+  }, [getSigner, refreshAfterTx]);
 
   const getActiveStakesOnChain = useCallback(async (user: string) => {
     const provider = getProvider();
