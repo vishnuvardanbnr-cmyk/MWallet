@@ -628,6 +628,11 @@ export function useWeb3() {
   const stakeUsdt = useCallback(async (usdtAmount: string, isLocked: boolean, useContractBalance = false) => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
+    // Pre-flight: ensure staking module is linked on the contract
+    const stakingAddr: string = await contract.stakingModule();
+    if (!stakingAddr || stakingAddr === ethers.ZeroAddress) {
+      throw new Error("Staking module not yet configured on-chain. Admin must call setStakingModule(). Please try again later or contact support.");
+    }
     const amountBn = ethers.parseUnits(usdtAmount, 18);
     if (useContractBalance) {
       // Uses USDT already in the contract — no wallet approval needed
