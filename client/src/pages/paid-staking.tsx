@@ -7,7 +7,7 @@ import {
 import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { getMvaultContract, getTokenContract, MVAULT_CONTRACT_ADDRESS, formatTokenAmount } from "@/lib/contract";
+import { getMvaultContract, getTokenContract, MVAULT_CONTRACT_ADDRESS, formatTokenAmount, decodeContractError } from "@/lib/contract";
 import { ethers } from "ethers";
 
 interface StakePosition {
@@ -199,7 +199,7 @@ export default function PaidStakingPage({
       await loadPositions();
       await loadWalletData();
     } catch (e: any) {
-      toast({ title: "Stake Failed", description: e?.message ?? "Transaction failed.", variant: "destructive" });
+      toast({ title: "Stake Failed", description: decodeContractError(e), variant: "destructive" });
     } finally { setStaking(false); }
   };
 
@@ -216,7 +216,7 @@ export default function PaidStakingPage({
       });
       await loadPositions(); await loadWalletData();
     } catch (e: any) {
-      toast({ title: "Unstake Failed", description: e?.message ?? "Transaction failed.", variant: "destructive" });
+      toast({ title: "Unstake Failed", description: decodeContractError(e), variant: "destructive" });
     } finally { setUnstakingIndex(null); }
   };
 
@@ -228,7 +228,7 @@ export default function PaidStakingPage({
       toast({ title: "Converted to Locked!", description: "10-month lock started. No 2× cap applies anymore." });
       await loadPositions();
     } catch (e: any) {
-      toast({ title: "Conversion Failed", description: e?.message ?? "Transaction failed.", variant: "destructive" });
+      toast({ title: "Conversion Failed", description: decodeContractError(e), variant: "destructive" });
     } finally { setConvertingIndex(null); }
   };
 

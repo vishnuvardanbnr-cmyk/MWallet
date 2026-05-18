@@ -628,11 +628,23 @@ export function useWeb3() {
   const stakeUsdt = useCallback(async (usdtAmount: string, isLocked: boolean, useContractBalance = false) => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
-    // Pre-flight: ensure staking module is linked on the contract
-    const stakingAddr: string = await contract.stakingModule();
+    const signerAddress = await signer.getAddress();
+
+    // Pre-flight checks (read-only, before MetaMask opens)
+    const [stakingAddr, userInfo] = await Promise.all([
+      contract.stakingModule(),
+      contract.users(signerAddress),
+    ]);
     if (!stakingAddr || stakingAddr === ethers.ZeroAddress) {
-      throw new Error("Staking module not yet configured on-chain. Admin must call setStakingModule(). Please try again later or contact support.");
+      throw new Error("Staking module not yet configured on-chain. Please contact support.");
     }
+    if (!userInfo.isRegistered) {
+      throw new Error("This wallet is not registered. Please register first before staking.");
+    }
+    if (!userInfo.isActive) {
+      throw new Error("Your account is not yet activated. Please activate ($130 USDT) before staking.");
+    }
+
     const amountBn = ethers.parseUnits(usdtAmount, 18);
     if (useContractBalance) {
       // Uses USDT already in the contract — no wallet approval needed
