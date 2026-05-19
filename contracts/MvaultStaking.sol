@@ -130,14 +130,11 @@ contract MvaultStaking is Ownable, ReentrancyGuard {
             mvaultMain.staking_batchCreditMvtIncome(user, creditTos, creditLevels, creditAmounts);
         }
 
-        // 5% → adminPool + unqualified level shares
-        uint256 adminAmt = grossMvt * 5 / 100;
+        // 10% → adminPool + unqualified level shares (5% base + 5% from removed liquidity slice)
+        uint256 adminAmt = grossMvt * 10 / 100;
 
-        // 15% → liquidity backing (stays in this contract)
-        uint256 liquidityAmt = grossMvt * 15 / 100;
-
-        // 60% → user stake
-        uint256 stakedMvt = grossMvt - levelDistributed - levelToAdmin - adminAmt - liquidityAmt;
+        // 70% → user stake (90% mint + sell rate provides natural price support; no separate liquidity slice needed)
+        uint256 stakedMvt = grossMvt - levelDistributed - levelToAdmin - adminAmt;
         if (stakedMvt == 0) revert NoMvtMinted();
 
         uint256 stakeIndex = _stakes[user].length;
