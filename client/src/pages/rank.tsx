@@ -37,9 +37,9 @@ export const RANKS = [
     bar: "bg-amber-400",
     incomePercent: 1,
     slotLabel: "Slot 1 · 1% per activation",
-    qualification: { type: "direct", directSponsors: 5, teamSalesUsd: 2000, minLegs: 2, downlineRank: null, downlineCount: 0 },
+    qualification: { type: "direct", directSponsors: 5, teamSalesUsd: 2000, minLegs: 0, downlineRank: null, downlineCount: 0 },
     icon: Award,
-    desc: "5 direct sponsors · $2,000 team sales (2 legs)",
+    desc: "5 direct sponsors · $2,000 team sales",
   },
   {
     level: 2,
@@ -145,8 +145,7 @@ export default function RankPage({ userInfo, account }: RankPageProps) {
 
   const m1DirectOk = directCount >= M1_MIN_DIRECTS;
   const m1SalesOk  = teamSalesWei >= M1_MIN_TEAM_USDT;
-  const m1LegsOk   = leftVol > 0n && rightVol > 0n;
-  const m1LocalEligible = m1DirectOk && m1SalesOk && m1LegsOk;
+  const m1LocalEligible = m1DirectOk && m1SalesOk;
 
   const m1DirectProgress = Math.min(100, (Number(directCount) / 5) * 100);
   const m1SalesProgress  = Math.min(100, (teamSalesNum / 2000) * 100);
@@ -223,7 +222,7 @@ export default function RankPage({ userInfo, account }: RankPageProps) {
         <h1 className="text-2xl font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-rank-title">
           Rank & Progression
         </h1>
-        <p className="text-muted-foreground text-sm">Earn rank income on every activation in your sponsor downline</p>
+        <p className="text-muted-foreground text-sm">Earn rank income on every activation in your level (sponsor) downline</p>
       </div>
 
       {/* How it works banner */}
@@ -277,7 +276,6 @@ export default function RankPage({ userInfo, account }: RankPageProps) {
             <div className="space-y-2.5 mb-3">
               <CriterionRow ok={m1DirectOk} label="Direct sponsors (min 5)"  value={`${Number(directCount)} / 5`} />
               <CriterionRow ok={m1SalesOk}  label="Team sales (min $2,000)"  value={`${usdFmt(teamSalesNum)} / $2,000`} />
-              <CriterionRow ok={m1LegsOk}   label="Both legs active"          value={m1LegsOk ? "Yes" : "No"} />
             </div>
             <div className="space-y-2">
               <div>

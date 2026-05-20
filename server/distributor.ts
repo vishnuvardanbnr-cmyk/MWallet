@@ -496,14 +496,12 @@ export async function runRankDistribution(): Promise<void> {
     // ── 5. Evaluate ranks in 5 passes ────────────────────────────────────────
     const computedRank = new Map<string, number>(); // addr → evaluated rank
 
-    // Pass 1: M1 (on-chain criteria only)
+    // Pass 1: M1 — level/sponsor tree only, binary placement is separate
     for (const [addr, u] of rankMap) {
       if (!u.isActive) { computedRank.set(addr, 0); continue; }
       const isM1 =
         u.directCount   >= M1_MIN_DIRECTS   &&
-        u.teamSalesUsdt >= M1_MIN_TEAM_USDT &&
-        u.leftSubVolume  > 0n               &&
-        u.rightSubVolume > 0n;
+        u.teamSalesUsdt >= M1_MIN_TEAM_USDT;
       computedRank.set(addr, isM1 ? 1 : 0);
     }
 
@@ -772,14 +770,12 @@ export async function runRankCheck(): Promise<void> {
     // 5. Evaluate ranks — 5 passes (identical logic to runRankDistribution)
     const computedRank = new Map<string, number>();
 
-    // Pass 1: M1
+    // Pass 1: M1 — level/sponsor tree only, binary placement is separate
     for (const [addr, u] of rankMap) {
       if (!u.isActive) { computedRank.set(addr, 0); continue; }
       const isM1 =
         u.directCount   >= M1_MIN_DIRECTS   &&
-        u.teamSalesUsdt >= M1_MIN_TEAM_USDT &&
-        u.leftSubVolume  > 0n               &&
-        u.rightSubVolume > 0n;
+        u.teamSalesUsdt >= M1_MIN_TEAM_USDT;
       computedRank.set(addr, isM1 ? 1 : 0);
     }
 
