@@ -25,11 +25,8 @@ export default function BinaryDetails({ userInfo, mvtPrice, binaryPairs, formatA
 
   const leftVol = userInfo.leftSubUsers;
   const rightVol = userInfo.rightSubUsers;
-  const matchedPairs = fmtVol(userInfo.matchedPairs);
-  const powerLegPts = fmtVol(userInfo.powerLegPoints);
-  const currentPairs = fmtVol(binaryPairs.currentPairs);
-  const newPairs = fmtVol(binaryPairs.newPairs);
-  const hasNewPairs = binaryPairs.newPairs > 0n;
+  const leftSubVol = fmtVol(binaryPairs.currentPairs);   // leftSubVolume in MVT wei
+  const rightSubVol = fmtVol(binaryPairs.newPairs);       // rightSubVolume in MVT wei
   const rebirthCount = Number(userInfo.rebirthCount);
 
   const stronger = leftVol >= rightVol ? "left" : "right";
@@ -59,11 +56,11 @@ export default function BinaryDetails({ userInfo, mvtPrice, binaryPairs, formatA
           <p className="text-2xl font-bold text-blue-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-left-count">{fmtVol(leftVol)}</p>
           <p className="text-[10px] text-muted-foreground">USDT vol</p>
         </div>
-        <div className="glass-card rounded-2xl p-4 text-center" data-testid="card-matched-pairs">
+        <div className="glass-card rounded-2xl p-4 text-center" data-testid="card-direct-count">
           <GitBranch className="h-5 w-5 mx-auto text-emerald-400 mb-2" />
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Matched Vol</p>
-          <p className="text-2xl font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-matched-pairs">{matchedPairs}</p>
-          <p className="text-[10px] text-muted-foreground">USDT matched</p>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Direct Refs</p>
+          <p className="text-2xl font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-direct-count">{Number(userInfo.directCount)}</p>
+          <p className="text-[10px] text-muted-foreground">direct referrals</p>
         </div>
         <div className="glass-card rounded-2xl p-4 text-center col-span-2 sm:col-span-1" data-testid="card-right-team">
           <ArrowDownRight className="h-5 w-5 mx-auto text-purple-400 mb-2" />
@@ -73,55 +70,53 @@ export default function BinaryDetails({ userInfo, mvtPrice, binaryPairs, formatA
         </div>
       </div>
 
-      {/* Current Cycle */}
-      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.05s" }} data-testid="card-current-cycle">
+      {/* Placement volumes */}
+      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.05s" }} data-testid="card-placement-volumes">
         <h2 className="text-sm font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>
-          <span className="gradient-text">Current Distribution Cycle</span>
+          <span className="gradient-text">Cumulative Placement Volumes</span>
         </h2>
         <div className="grid grid-cols-2 gap-4">
-          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] text-center" data-testid="card-current-pairs">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Active Pairs</p>
-            <p className="text-xl font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-current-pairs">{currentPairs}</p>
-            <p className="text-[10px] text-muted-foreground">pairs in pool</p>
+          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] text-center" data-testid="card-left-vol">
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Left Sub-Volume</p>
+            <p className="text-xl font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-left-vol">{leftSubVol}</p>
+            <p className="text-[10px] text-muted-foreground">MVT in left tree</p>
           </div>
-          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] text-center" data-testid="card-new-pairs">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">New Pairs</p>
-            <p className="text-xl font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-new-pairs">{newPairs}</p>
-            <p className="text-[10px] text-muted-foreground">since last distribution</p>
+          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] text-center" data-testid="card-right-vol">
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Right Sub-Volume</p>
+            <p className="text-xl font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-right-vol">{rightSubVol}</p>
+            <p className="text-[10px] text-muted-foreground">MVT in right tree</p>
           </div>
         </div>
-        {hasNewPairs && (
-          <div className="mt-3 flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-            <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <p className="text-xs text-emerald-400 font-medium">{newPairs} USDT volume pending — waiting for admin distribution cycle</p>
-          </div>
-        )}
+        <div className="mt-3 flex items-start gap-2 p-2.5 rounded-xl bg-amber-500/[0.05] border border-amber-500/10">
+          <Info className="h-3.5 w-3.5 text-amber-400/70 shrink-0 mt-0.5" />
+          <p className="text-[10px] text-muted-foreground">Placement income (20% of grossMvt) is distributed across 30 binary levels instantly when each new user activates in your network.</p>
+        </div>
       </div>
 
-      {/* Power Leg */}
-      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.06s" }} data-testid="card-power-leg">
+      {/* Sub-volumes */}
+      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.06s" }} data-testid="card-sub-volumes">
         <div className="flex items-center gap-2.5 mb-3">
-          <div className="h-9 w-9 rounded-xl bg-yellow-600/15 flex items-center justify-center">
-            <Zap className="h-4 w-4 text-yellow-300" />
+          <div className="h-9 w-9 rounded-xl bg-amber-500/15 flex items-center justify-center">
+            <Zap className="h-4 w-4 text-amber-400" />
           </div>
           <div>
-            <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Power Leg</h2>
-            <p className="text-[10px] text-muted-foreground">Stronger arm contributes to power leg</p>
+            <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Tree Volumes (MVT)</h2>
+            <p className="text-[10px] text-muted-foreground">Cumulative MVT volume flowing through each leg</p>
           </div>
         </div>
         <div className="grid grid-cols-2 gap-3">
           <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-            <p className="text-[10px] text-muted-foreground mb-1 capitalize">{stronger} (power leg)</p>
-            <p className="text-lg font-bold text-yellow-300">{strongDisplay} vol</p>
+            <p className="text-[10px] text-muted-foreground mb-1">Left Sub-Volume</p>
+            <p className="text-lg font-bold text-blue-400">{leftSubVol}</p>
           </div>
           <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-            <p className="text-[10px] text-muted-foreground mb-1 capitalize">{weaker} (weak leg)</p>
-            <p className="text-lg font-bold text-muted-foreground">{weakDisplay} vol</p>
+            <p className="text-[10px] text-muted-foreground mb-1">Right Sub-Volume</p>
+            <p className="text-lg font-bold text-purple-400">{rightSubVol}</p>
           </div>
         </div>
-        <div className="mt-3 p-3 rounded-xl bg-yellow-600/[0.06] border border-yellow-600/10">
+        <div className="mt-3 p-3 rounded-xl bg-amber-500/[0.06] border border-amber-500/10">
           <p className="text-xs text-muted-foreground leading-relaxed">
-            <span className="text-yellow-300 font-medium">Power Leg Volume: {powerLegPts}</span> — The excess USDT volume from the strong arm is shared via the power leg pool (30% of binaryPool).
+            Sub-volumes accumulate as users activate under each leg. These values are used to determine which arm is stronger for placement tracking.
           </p>
         </div>
       </div>
@@ -149,17 +144,17 @@ export default function BinaryDetails({ userInfo, mvtPrice, binaryPairs, formatA
         </div>
       </div>
 
-      {/* How Binary Works */}
+      {/* How Placement Income Works */}
       <div className="premium-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.08s" }}>
         <h2 className="text-sm font-bold mb-4" style={{ fontFamily: "var(--font-display)" }}>
-          <span className="gradient-text">How Binary Income Works</span>
+          <span className="gradient-text">How Placement Income Works</span>
         </h2>
         <div className="space-y-3">
           {[
-            { icon: Users, title: "30% of Activation", desc: "30% of each $130 activation goes into the binary pool as MVT tokens.", color: "text-amber-400 bg-amber-500/10" },
-            { icon: GitBranch, title: "Pair Matching", desc: "Each left+right new member pair in your subtree generates 1 matched pair.", color: "text-blue-400 bg-blue-500/10" },
-            { icon: Zap, title: "Power Leg Bonus", desc: "Strong arm generates power leg points → extra pairs. 30% of pool shared via power leg.", color: "text-yellow-300 bg-yellow-600/10" },
-            { icon: TrendingUp, title: "Admin Distribution", desc: "Admin triggers distribution periodically. You earn MVT proportional to your pairs.", color: "text-emerald-400 bg-emerald-500/10" },
+            { icon: Users, title: "20% of Activation", desc: "20% of each activation's gross MVT is split across 30 binary upline levels — paid instantly at activation time.", color: "text-amber-400 bg-amber-500/10" },
+            { icon: GitBranch, title: "30 Levels Deep", desc: "Each level receives a share of the 20% pool. Levels 1–3 get 2%, levels 4–6 get 1%, and rates taper down to level 30.", color: "text-blue-400 bg-blue-500/10" },
+            { icon: Zap, title: "Direct Referral Qualification", desc: "You need ceil(level/3) direct referrals to earn from that level. Level 1–3 needs 1 direct, 4–6 needs 2, etc.", color: "text-yellow-300 bg-yellow-600/10" },
+            { icon: TrendingUp, title: "Instant & On-Chain", desc: "No off-chain distributor or claim needed. Income is credited directly to your MVT balance inside the same transaction.", color: "text-emerald-400 bg-emerald-500/10" },
           ].map(({ icon: Icon, title, desc, color }) => (
             <div key={title} className="flex items-start gap-3">
               <div className={`w-8 h-8 rounded-lg ${color} flex items-center justify-center shrink-0`}>

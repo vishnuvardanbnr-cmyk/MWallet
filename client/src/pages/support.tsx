@@ -81,9 +81,7 @@ function formatTime(date: string | Date) {
 interface SupportProps {
   account: string;
   isAdmin?: boolean;
-  getAdminPoolBalances?: () => Promise<{ binaryPool: bigint; powerLegReserve: bigint; adminPool: bigint; totalUsers: number }>;
-  distributeBinaryIncome?: (_totalUserCount: number) => Promise<void>;
-  distributePowerLeg?: (_totalUserCount: number) => Promise<void>;
+  getAdminPoolBalances?: () => Promise<{ communityPool: bigint; reservePool: bigint; adminPool: bigint; totalUsers: number }>;
 }
 
 function NewTicketForm({ onSubmit, onCancel, isCreating }: { onSubmit: (subject: string, category: string, message: string, priority: string) => void; onCancel: () => void; isCreating?: boolean }) {
@@ -401,17 +399,11 @@ function TicketList({ tickets, onSelect, onNewTicket, isAdmin = false }: { ticke
   );
 }
 
-function AdminDistribution({ getAdminPoolBalances, distributeBinaryIncome, distributePowerLeg }: {
-  getAdminPoolBalances: () => Promise<{ binaryPool: bigint; powerLegReserve: bigint; adminPool: bigint; totalUsers: number }>;
-  distributeBinaryIncome: (n: number) => Promise<void>;
-  distributePowerLeg: (n: number) => Promise<void>;
+function AdminPoolBalances({ getAdminPoolBalances }: {
+  getAdminPoolBalances: () => Promise<{ communityPool: bigint; reservePool: bigint; adminPool: bigint; totalUsers: number }>;
 }) {
-  const [pools, setPools] = useState<{ binaryPool: bigint; powerLegReserve: bigint; adminPool: bigint; totalUsers: number } | null>(null);
+  const [pools, setPools] = useState<{ communityPool: bigint; reservePool: bigint; adminPool: bigint; totalUsers: number } | null>(null);
   const [loadingPools, setLoadingPools] = useState(false);
-  const [step1Loading, setStep1Loading] = useState(false);
-  const [step2Loading, setStep2Loading] = useState(false);
-  const [step1Done, setStep1Done] = useState(false);
-  const [step2Done, setStep2Done] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const fmt = (v: bigint) => (Number(v) / 1e18).toFixed(2);
@@ -421,9 +413,6 @@ function AdminDistribution({ getAdminPoolBalances, distributeBinaryIncome, distr
     try {
       const data = await getAdminPoolBalances();
       setPools(data);
-      // If powerLegReserve > 0, step 1 was already done this cycle
-      if (data.powerLegReserve > 0n) setStep1Done(true);
-      else setStep1Done(false);
     } catch (e: any) {
       setError(e?.message || "Failed to load pool balances");
     } finally {
@@ -433,50 +422,16 @@ function AdminDistribution({ getAdminPoolBalances, distributeBinaryIncome, distr
 
   useEffect(() => { load(); }, [load]);
 
-  const handleStep1 = async () => {
-    if (!pools) return;
-    setStep1Loading(true);
-    setError(null);
-    try {
-      await distributeBinaryIncome(pools.totalUsers);
-      setStep1Done(true);
-      await load();
-    } catch (e: any) {
-      setError(e?.shortMessage || e?.reason || e?.message || "Transaction failed");
-    } finally {
-      setStep1Loading(false);
-    }
-  };
-
-  const handleStep2 = async () => {
-    if (!pools) return;
-    setStep2Loading(true);
-    setError(null);
-    try {
-      await distributePowerLeg(pools.totalUsers);
-      setStep1Done(false);
-      setStep2Done(true);
-      await load();
-    } catch (e: any) {
-      setError(e?.shortMessage || e?.reason || e?.message || "Transaction failed");
-    } finally {
-      setStep2Loading(false);
-    }
-  };
-
-  const binaryReady = pools && pools.binaryPool > 0n && !step1Done;
-  const powerReady  = pools && pools.powerLegReserve > 0n && step1Done;
-
   return (
-    <div className="glass-card rounded-2xl p-5 slide-in gradient-border space-y-4" data-testid="card-admin-distribution">
+    <div className="glass-card rounded-2xl p-5 slide-in gradient-border space-y-4" data-testid="card-admin-pools">
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
             <Zap className="h-4 w-4 text-purple-400" />
           </div>
           <div>
-            <h2 className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }}>Binary & Power Leg Distribution</h2>
-            <p className="text-xs text-muted-foreground">Run Step 1 then Step 2 each cycle</p>
+            <h2 className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }}>Contract Pool Balances</h2>
+            <p className="text-xs text-muted-foreground">Placement income is paid instantly — no manual distribution needed</p>
           </div>
         </div>
         <button onClick={load} disabled={loadingPools} className="h-8 w-8 rounded-lg bg-white/[0.05] flex items-center justify-center hover:bg-white/[0.08] transition-colors" data-testid="button-refresh-pools">
@@ -484,86 +439,38 @@ function AdminDistribution({ getAdminPoolBalances, distributeBinaryIncome, distr
         </button>
       </div>
 
-      {/* Pool balances */}
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-2 gap-2">
         <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15 text-center">
-          <p className="text-[10px] text-amber-300/70 uppercase tracking-wider mb-1">Binary Pool</p>
-          <p className="text-sm font-bold text-amber-300" data-testid="text-binary-pool">${pools ? fmt(pools.binaryPool) : "—"}</p>
-        </div>
-        <div className="p-3 rounded-xl bg-violet-500/5 border border-violet-500/15 text-center">
-          <p className="text-[10px] text-violet-300/70 uppercase tracking-wider mb-1">Power Leg Reserve</p>
-          <p className="text-sm font-bold text-violet-300" data-testid="text-power-reserve">${pools ? fmt(pools.powerLegReserve) : "—"}</p>
+          <p className="text-[10px] text-amber-300/70 uppercase tracking-wider mb-1">Community Pool</p>
+          <p className="text-sm font-bold text-amber-300" data-testid="text-community-pool">{pools ? fmt(pools.communityPool) : "—"} MVT</p>
         </div>
         <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/15 text-center">
-          <p className="text-[10px] text-emerald-300/70 uppercase tracking-wider mb-1">Total Users</p>
-          <p className="text-sm font-bold text-emerald-300" data-testid="text-total-users">{pools ? pools.totalUsers : "—"}</p>
+          <p className="text-[10px] text-emerald-300/70 uppercase tracking-wider mb-1">Admin Pool</p>
+          <p className="text-sm font-bold text-emerald-300" data-testid="text-admin-pool">{pools ? fmt(pools.adminPool) : "—"} MVT</p>
+        </div>
+        <div className="p-3 rounded-xl bg-violet-500/5 border border-violet-500/15 text-center">
+          <p className="text-[10px] text-violet-300/70 uppercase tracking-wider mb-1">Reserve Pool</p>
+          <p className="text-sm font-bold text-violet-300" data-testid="text-reserve-pool">{pools ? fmt(pools.reservePool) : "—"} MVT</p>
+        </div>
+        <div className="p-3 rounded-xl bg-blue-500/5 border border-blue-500/15 text-center">
+          <p className="text-[10px] text-blue-300/70 uppercase tracking-wider mb-1">Total Users</p>
+          <p className="text-sm font-bold text-blue-300" data-testid="text-total-users">{pools ? pools.totalUsers : "—"}</p>
         </div>
       </div>
 
       {error && (
-        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400" data-testid="text-distribution-error">{error}</div>
+        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400" data-testid="text-pool-error">{error}</div>
       )}
 
-      {/* Info: server-side auto-distributor */}
-      <div className="p-3 rounded-xl bg-blue-500/10 border border-blue-500/20 text-xs text-blue-300 space-y-1.5" data-testid="text-distributor-info">
-        <p className="font-semibold">Auto-distributor is active on the server</p>
-        <p className="text-blue-300/70">Distribution now uses off-chain computation (applyBinaryDistribution / applyPowerLegDistribution). The server runs this automatically every 24 hours. For manual runs use the VPS admin scripts.</p>
+      <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-300 space-y-1" data-testid="text-placement-info">
+        <p className="font-semibold">Placement income is fully on-chain</p>
+        <p className="text-emerald-300/70">20% of each activation's grossMvt is distributed instantly across 30 binary upline levels. The community pool (10%) can be withdrawn by the admin via <code className="font-mono text-emerald-400">withdrawCommunityPool</code>.</p>
       </div>
-
-      {/* Step 1 */}
-      <div className="flex items-center gap-3 opacity-60">
-        <div className={`flex-shrink-0 h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold ${step1Done ? "bg-emerald-500/20 text-emerald-400" : "bg-amber-500/20 text-amber-400"}`}>
-          {step1Done ? "✓" : "1"}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium">Binary Income (Step 1)</p>
-          <p className="text-[11px] text-muted-foreground">70% to matched pairs · handled by server auto-distributor</p>
-        </div>
-        <button
-          onClick={handleStep1}
-          disabled={!binaryReady || step1Loading}
-          className="flex-shrink-0 px-4 py-2 rounded-xl text-xs font-semibold bg-amber-500/15 border border-amber-500/25 text-amber-300 hover:bg-amber-500/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
-          data-testid="button-distribute-binary"
-        >
-          {step1Loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <TrendingUp className="h-3 w-3" />}
-          {step1Loading ? "Running…" : "Manual"}
-        </button>
-      </div>
-
-      {/* Step 2 */}
-      <div className="flex items-center gap-3 opacity-60">
-        <div className={`flex-shrink-0 h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold ${step2Done ? "bg-emerald-500/20 text-emerald-400" : "bg-violet-500/20 text-violet-400"}`}>
-          {step2Done ? "✓" : "2"}
-        </div>
-        <div className="flex-1 min-w-0">
-          <p className="text-sm font-medium">Power Leg (Step 2)</p>
-          <p className="text-[11px] text-muted-foreground">30% proportional to Power Leg Points · handled by server auto-distributor</p>
-        </div>
-        <button
-          onClick={handleStep2}
-          disabled={!powerReady || step2Loading}
-          className="flex-shrink-0 px-4 py-2 rounded-xl text-xs font-semibold bg-violet-500/15 border border-violet-500/25 text-violet-300 hover:bg-violet-500/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed flex items-center gap-1.5"
-          data-testid="button-distribute-powerleg"
-        >
-          {step2Loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <Zap className="h-3 w-3" />}
-          {step2Loading ? "Running…" : "Manual"}
-        </button>
-      </div>
-
-      {error && (
-        <div className="p-3 rounded-xl bg-red-500/10 border border-red-500/20 text-xs text-red-400" data-testid="text-distribution-error-2">{error}</div>
-      )}
-
-      {step2Done && (
-        <div className="p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20 text-xs text-emerald-400 text-center" data-testid="text-cycle-complete">
-          Cycle complete — both distributions done. Pool is ready for the next cycle.
-        </div>
-      )}
     </div>
   );
 }
 
-export default function Support({ account, isAdmin = false, getAdminPoolBalances, distributeBinaryIncome, distributePowerLeg }: SupportProps) {
+export default function Support({ account, isAdmin = false, getAdminPoolBalances }: SupportProps) {
   const [view, setView] = useState<"list" | "new" | "chat">("list");
   const [isCreating, setIsCreating] = useState(false);
   const ws = useSupportWs(account, isAdmin);
@@ -611,12 +518,8 @@ export default function Support({ account, isAdmin = false, getAdminPoolBalances
 
       {view === "list" && (
         <>
-          {isAdmin && getAdminPoolBalances && distributeBinaryIncome && distributePowerLeg && (
-            <AdminDistribution
-              getAdminPoolBalances={getAdminPoolBalances}
-              distributeBinaryIncome={distributeBinaryIncome}
-              distributePowerLeg={distributePowerLeg}
-            />
+          {isAdmin && getAdminPoolBalances && (
+            <AdminPoolBalances getAdminPoolBalances={getAdminPoolBalances} />
           )}
 
           <TicketList

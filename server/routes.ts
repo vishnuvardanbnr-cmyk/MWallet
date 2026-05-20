@@ -1367,7 +1367,7 @@ export async function registerRoutes(
         : "https://bsc-testnet-rpc.publicnode.com";
       const provider = new ethers.JsonRpcProvider(RPC);
 
-      const USER_ABI = ["function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 matchedVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 powerLegPoints, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, string displayName, string email, string phone, string country, bool profileSet)"];
+      const USER_ABI = ["function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, string displayName, string email, string phone, string country, bool profileSet)"];
       const mvault = new ethers.Contract(MVAULT, USER_ABI, provider);
 
       // Walk up the sponsor chain (max 15 hops) and refresh all affected users in DB
@@ -1458,7 +1458,7 @@ export async function registerRoutes(
       const provider = new ethers.JsonRpcProvider(RPC);
 
       const USERS_ABI = [
-        "function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 matchedVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 powerLegPoints, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, string displayName, string email, string phone, string country, bool profileSet)",
+        "function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, string displayName, string email, string phone, string country, bool profileSet)",
       ];
       const RANK_ABI = ["function setUserRanks(address[], uint8[]) external"];
       const mvault = new ethers.Contract(MVAULT, USERS_ABI, provider);
@@ -1547,7 +1547,7 @@ export async function registerRoutes(
       const MVAULT_CONTRACT_ADDRESS =
         process.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x164E4c01958c623CeF48C7DF8C66deFbB5eB4f57";
       const ABI = [
-        "function getPoolBalances() view returns (uint256 binary, uint256 reserve, uint256 admin)",
+        "function getPoolBalances() view returns (uint256 community, uint256 reserve, uint256 admin)",
         "function getAllUsersCount() view returns (uint256)",
       ];
       const rpc = process.env.VITE_BSC_NETWORK === "mainnet"
@@ -1555,12 +1555,12 @@ export async function registerRoutes(
         : "https://bsc-testnet-rpc.publicnode.com";
       const provider = new ethers.JsonRpcProvider(rpc);
       const contract = new ethers.Contract(MVAULT_CONTRACT_ADDRESS, ABI, provider);
-      const [binary, reserve, admin] = await contract.getPoolBalances() as [bigint, bigint, bigint];
+      const [community, reserve, admin] = await contract.getPoolBalances() as [bigint, bigint, bigint];
       const totalUsers = Number(await contract.getAllUsersCount());
       res.json({
-        binaryPool: binary.toString(),
-        powerLegReserve: reserve.toString(),
-        adminPool: admin.toString(),
+        communityPool: community.toString(),
+        reservePool:   reserve.toString(),
+        adminPool:     admin.toString(),
         totalUsers,
       });
     } catch (err: any) {
@@ -1568,113 +1568,9 @@ export async function registerRoutes(
     }
   });
 
-  // ── Binary estimate — simulate next distribution for one wallet ──────────
-  app.get("/api/binary/estimate/:address", async (req, res) => {
-    try {
-      const target = req.params.address.toLowerCase();
-      const { ethers } = await import("ethers");
-      const RPC = process.env.VITE_BSC_NETWORK === "mainnet"
-        ? "https://bsc-rpc.publicnode.com"
-        : "https://bsc-testnet-rpc.publicnode.com";
-      const provider = new ethers.JsonRpcProvider(RPC);
-
-      const MVAULT = process.env.VITE_MVAULT_CONTRACT_ADDRESS || "";
-      const VIEW   = process.env.VITE_MVAULT_VIEW_ADDRESS   || "";
-
-      const mvault = new ethers.Contract(MVAULT, [
-        "function binaryPool() view returns (uint256)",
-        "function totalUsers() view returns (uint256)",
-        "function allUsers(uint256) view returns (address)",
-      ], provider);
-
-      const mvView = new ethers.Contract(VIEW, [
-        "function getUserSlice(uint256 offset, uint256 limit) view returns (address[])",
-        "function getDistributorBatch(address[] addrs) view returns (bool[] isActive, uint256[] leftSubVolume, uint256[] rightSubVolume, uint256[] matchedVolume, uint256[] powerLegPoints)",
-      ], provider);
-
-      const [binaryPool, totalUsersN] = await Promise.all([
-        mvault.binaryPool()   as Promise<bigint>,
-        mvault.totalUsers()   as Promise<bigint>,
-      ]);
-      const totalUsers = Number(totalUsersN);
-
-      if (totalUsers === 0 || binaryPool === 0n) {
-        return res.json({ binaryPool: "0", newPairs: "0", powerLegVolume: "0", expectedBinaryMvt: "0", expectedPowerLegMvt: "0", totalNewPairs: "0", eligibleUsers: 0, yourSharePct: "0" });
-      }
-
-      // Read all addresses in slices of 500
-      const ADDR_BATCH = 500;
-      const addrs: string[] = [];
-      for (let i = 0; i < totalUsers; i += ADDR_BATCH) {
-        const slice = await mvView.getUserSlice(i, ADDR_BATCH) as string[];
-        addrs.push(...slice);
-      }
-
-      // Read 5-field batch data
-      const STRUCT_BATCH = 200;
-      type UserRow = { addr: string; isActive: boolean; left: bigint; right: bigint; matched: bigint; powerPts: bigint };
-      const rows: UserRow[] = [];
-      for (let i = 0; i < addrs.length; i += STRUCT_BATCH) {
-        const batch = addrs.slice(i, i + STRUCT_BATCH);
-        const [isActive, left, right, matched, powerPts] = await mvView.getDistributorBatch(batch) as [boolean[], bigint[], bigint[], bigint[], bigint[]];
-        for (let j = 0; j < batch.length; j++) {
-          rows.push({ addr: batch[j].toLowerCase(), isActive: isActive[j], left: left[j], right: right[j], matched: matched[j], powerPts: powerPts[j] });
-        }
-      }
-
-      // Same algorithm as distributor.ts step 3
-      const binary70   = (binaryPool * 70n) / 100n;
-      const powerLeg30 = binaryPool - binary70;
-
-      type Eligible = { addr: string; newPairs: bigint; powerLegPts: bigint; newMatchedVol: bigint };
-      const eligible: Eligible[] = [];
-      let totalNewPairs = 0n;
-      let totalPts = 0n;
-
-      for (const u of rows) {
-        if (!u.isActive) continue;
-        const minSide  = u.left < u.right ? u.left  : u.right;
-        const maxSide  = u.left < u.right ? u.right : u.left;
-        const newPairs = minSide > u.matched ? minSide - u.matched : 0n;
-        if (newPairs === 0n) continue;
-        const newMatchedVol = minSide;
-        const pts           = maxSide - newMatchedVol;
-        eligible.push({ addr: u.addr, newPairs, powerLegPts: pts, newMatchedVol });
-        totalNewPairs += newPairs;
-        if (pts > 0n) totalPts += pts;
-      }
-
-      // Find the target user's entry
-      const me = eligible.find(e => e.addr === target);
-      const myNewPairs     = me?.newPairs     ?? 0n;
-      const myPowerLegPts  = me?.powerLegPts  ?? 0n;
-
-      // Also get the user's raw power leg volume (max - min) even if not eligible
-      const meRow = rows.find(r => r.addr === target);
-      const rawMinSide   = meRow ? (meRow.left < meRow.right ? meRow.left  : meRow.right) : 0n;
-      const rawMaxSide   = meRow ? (meRow.left < meRow.right ? meRow.right : meRow.left)  : 0n;
-      const powerLegVol  = rawMaxSide - rawMinSide;
-
-      const expectedBinaryMvt   = totalNewPairs > 0n ? (myNewPairs  * binary70)   / totalNewPairs : 0n;
-      const expectedPowerLegMvt = totalPts      > 0n ? (myPowerLegPts * powerLeg30) / totalPts     : 0n;
-
-      const yourSharePct = totalNewPairs > 0n
-        ? Number((myNewPairs * 10000n) / totalNewPairs) / 100
-        : 0;
-
-      res.json({
-        binaryPool:          binaryPool.toString(),
-        newPairs:            myNewPairs.toString(),
-        powerLegVolume:      powerLegVol.toString(),
-        expectedBinaryMvt:   expectedBinaryMvt.toString(),
-        expectedPowerLegMvt: expectedPowerLegMvt.toString(),
-        totalNewPairs:       totalNewPairs.toString(),
-        eligibleUsers:       eligible.length,
-        yourSharePct:        yourSharePct.toFixed(2),
-      });
-    } catch (err: any) {
-      res.status(500).json({ message: err.message });
-    }
+  // ── Binary estimate — deprecated (placement income is now instant on-chain) ─
+  app.get("/api/binary/estimate/:address", async (_req, res) => {
+    res.json({ deprecated: true, message: "Placement income is now paid instantly on-chain at activation time. No off-chain estimate needed." });
   });
 
   // ── Distribution proofs — only UNCLAIMED cycles (verified on-chain) ───────

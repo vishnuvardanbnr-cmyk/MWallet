@@ -380,8 +380,6 @@ function App() {
                         account={web3.account!}
                         isAdmin={web3.account?.toLowerCase() === "0x04e8c5b49de683c5b44ef1269bd5ee4f338868c4"}
                         getAdminPoolBalances={web3.getAdminPoolBalances}
-                        distributeBinaryIncome={web3.distributeBinaryIncome}
-                        distributePowerLeg={web3.distributePowerLeg}
                       />
                     </Route>
                   </Switch>

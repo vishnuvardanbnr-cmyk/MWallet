@@ -60,9 +60,11 @@ export const DEPOSIT_ADMIN_WALLET = "0x04e8c5b49de683c5b44ef1269bd5ee4f338868c4"
 // ── MvaultContract ABI ────────────────────────────────────────────────────────
 export const MVAULT_ABI = [
   // Custom errors
+  "error NotAuthorized()",
   "error AlreadyRegistered()",
   "error NotRegistered()",
   "error AlreadyActive()",
+  "error NotActive()",
   "error InvalidSponsor()",
   "error PositionTaken()",
   "error InsufficientVirtualBalance()",
@@ -73,11 +75,11 @@ export const MVAULT_ABI = [
   "error ZeroAddress()",
   "error ZeroAmount()",
   "error TransferFailed()",
-  "error NotDistributor()",
   "error BoardHandlerNotSet()",
   "error InsufficientBtcPoolForBoard()",
-  "error EmptyPool()",
-  "error NotActive()",
+  "error ExceedsPool()",
+  "error IncomeNotExhausted()",
+  "error CannotDowngradePackage()",
   // MvaultStaking errors (bubbled through MvaultContract)
   "error BelowMinStake()",
   "error NoMvtMinted()",
@@ -103,22 +105,19 @@ export const MVAULT_ABI = [
   // Profile
   "function setProfile(string _displayName, string _email, string _phone, string _country) external",
   "function getProfile(address _user) view returns (string displayName, string email, string phone, string country, bool profileSet)",
-  // Public state — users mapping (full struct, includes profile strings)
-  "function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 matchedVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 powerLegPoints, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, string displayName, string email, string phone, string country, bool profileSet)",
+  // Public state — users mapping (31 fields, no matchedVolume/powerLegPoints)
+  "function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, string displayName, string email, string phone, string country, bool profileSet)",
   // Public pool variables
-  "function binaryPool() view returns (uint256)",
+  "function communityPool() view returns (uint256)",
   "function reservePool() view returns (uint256)",
   "function adminPool() view returns (uint256)",
   "function rankPool() view returns (uint256)",
   "function totalUsers() view returns (uint256)",
   "function boardHandler() view returns (address)",
   "function stakingModule() view returns (address)",
-  "function distributor() view returns (address)",
-  "function setDistributor(address _distributor) external",
   // Views
   "function getBtcPoolInfo(address u) view returns (uint256 btcPoolBalance, uint256 totalBtcEarned)",
   "function canRebirth(address user) view returns (bool eligible, uint256 poolBalance)",
-  "function getCurrentBinaryVolume(address u) view returns (uint256 leftVolume, uint256 rightVolume, uint256 currentMatched, uint256 newVolume)",
   "function getMvtPrice() view returns (uint256 buyPrice, uint256 sellPrice)",
   "function getDirectReferralsPaginated(address _user, uint256 _offset, uint256 _limit) view returns (address[] referrals, uint256 total)",
   "function getTransactions(address user, uint256 offset, uint256 limit) view returns (tuple(uint8 txType, uint32 ts, uint256 amount, uint8 level, address addr)[] records, uint256 total)",
@@ -126,29 +125,28 @@ export const MVAULT_ABI = [
   "function mvaultToken() view returns (address)",
   // Board pool
   "function enterBoardPool() external",
-  "function canEnterBoard(address user) view returns (bool eligible, uint256 btcBalance, uint256 boardPrice)",
   "function getUserBoardStats(address user) view returns (uint256 entries, uint256 totalRewards)",
-  // Admin distribution
-  "function applyBinaryDistribution(address[] users_arr, uint256[] shares, uint256[] powerLegPts, uint256[] newMatchedVols) external",
-  "function applyPowerLegDistribution(address[] users_arr, uint256[] shares, uint256 adminLeftover) external",
-  "function applyRankIncome(address[] users_arr, uint256[] shares, uint256 adminLeftover) external",
+  // Admin setters
+  "function setCommunityWallet(address _wallet) external",
+  "function setPlacementRates(uint256[30] _rates) external",
+  "function setRefsPerGroup(uint256 _refs) external",
+  "function withdrawCommunityPool(address to, uint256 amount) external",
   "function withdrawAdminPool(address to, uint256 amount) external",
   "function withdrawReservePool(address to, uint256 amount) external",
+  "function drainRankPool() external",
+  "function setUserRanks(address[] addrs, uint8[] ranks_) external",
   // Events
   "event Registered(address indexed user, address indexed sponsor, address indexed binaryParent, bool placeLeft)",
-  "event Activated(address indexed user, uint256 mvtMinted, uint256 grossMvt, uint256 levelAmt, uint256 binaryAmt, uint256 adminAmt)",
+  "event Activated(address indexed user, uint256 mvtMinted, uint256 grossMvt, uint256 levelAmt, uint256 placementAmt, uint256 adminAmt)",
   "event LevelIncomePaid(address indexed to, address indexed from, uint8 level, uint256 amount)",
   "event LevelIncomeSkipped(address indexed upline, uint8 level, uint256 amount)",
+  "event PlacementIncomePaid(address indexed to, address indexed from, uint8 level, uint256 amount)",
   "event MvtSold(address indexed user, uint256 mvtAmount, uint256 usdtNet, uint256 usdtToBtcPool, uint256 usdtToIncome, uint256 usdtToRebirth)",
   "event BtcPoolCredited(address indexed user, uint256 amount)",
   "event BtcPoolWithdrawn(address indexed user, uint256 amount)",
   "event UsdtWithdrawn(address indexed user, uint256 amount)",
   "event Reborn(address indexed mainAccount, address indexed subAccount, uint256 rebirthIndex)",
   "event Reactivated(address indexed user, uint256 pkgPrice, uint256 grossMvt, bool upgraded)",
-  "event BinaryIncomeDistributed(uint256 totalPool, uint256 binary70, uint256 powerLeg30, uint256 totalPairs)",
-  "event BinaryIncomePaid(address indexed user, uint256 newPairs, uint256 amount)",
-  "event PowerLegIncomePaid(address indexed user, uint256 powerLegPoints, uint256 amount)",
-  "event PowerLegDistributed(uint256 reserve, uint256 recipientCount)",
   "event RankIncomePaid(address indexed to, address indexed from, uint8 rank, uint256 amount)",
   "event RankIncomeDistributed(uint256 totalPool, uint256 recipientCount)",
   "event BoardEntered(address indexed user, uint256 boardLevel, uint256 usdtDeducted)",
@@ -224,8 +222,9 @@ export const MVAULT_VIEW_ADDRESS =
 export const MVAULT_VIEW_ABI = [
   // Pool balances
   "function getAllUsersCount() view returns (uint256)",
-  "function getPoolBalances() view returns (uint256 binary, uint256 reserve, uint256 admin)",
-  "function getAllPoolBalances() view returns (uint256 binary, uint256 reserve, uint256 admin, uint256 rank)",
+  "function getPoolBalances() view returns (uint256 community, uint256 reserve, uint256 admin)",
+  "function getAllPoolBalances() view returns (uint256 community, uint256 reserve, uint256 admin, uint256 rank)",
+  "function canEnterBoard(address _user) view returns (bool eligible, uint256 btcBalance, uint256 boardPrice)",
   // Token balances held by MvaultContract
   "function getMvtContractBalance() view returns (uint256)",
   "function getUsdtContractBalance() view returns (uint256)",
@@ -388,7 +387,8 @@ const CONTRACT_ERROR_MESSAGES: Record<string, string> = {
   ZeroAddress:                "Invalid address provided.",
   ZeroAmount:                 "Amount must be greater than zero.",
   TransferFailed:             "Token transfer failed. Check your USDT balance and approval.",
-  NotDistributor:             "Only the distributor contract can call this function.",
+  NotAuthorized:              "Not authorized to call this function.",
+  ExceedsPool:                "Amount exceeds pool balance.",
   BoardHandlerNotSet:         "Board module not configured yet.",
   InsufficientBtcPoolForBoard:"Insufficient BTC pool balance to enter the board.",
   NotActive:                  "Your account is not yet activated. Please activate ($130 USDT) before staking.",
@@ -425,10 +425,11 @@ export const STATUS_NAMES = ["Inactive", "Active", "Grace Period"];
 export const BOARD_PRICES_USD = [0, 50, 180, 648, 2333, 8398, 30233, 108839, 391821, 1410555, 5077998];
 
 export const TX_TYPE_NAMES = [
-  "Activation", "Level Income", "Binary Income", "Sell MVT",
-  "Withdraw USDT", "Withdraw BTC Pool", "Rebirth",
+  "Activation", "Level Income", "Level Missed", "Placement Income",
+  "Withdraw USDT", "Sell MVT", "BTC Pool", "Rebirth",
+  "Board Entry", "Board Reward", "Rank Income", "Staking Level",
 ];
-export const TX_TYPE_INCOME = [false, true, true, false, false, false, false];
+export const TX_TYPE_INCOME = [false, true, false, true, false, false, false, false, false, true, true, true];
 
 // Income limit = $390 USDT (3× package price)
 export const INCOME_LIMIT_USDT = 390;

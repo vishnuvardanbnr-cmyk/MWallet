@@ -485,10 +485,10 @@ export default function Dashboard({
           <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Rebirths</p>
           <p className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-rebirth-count">{Number(userInfo.rebirthCount)}</p>
         </div>
-        <div className="glass-card rounded-xl p-3 text-center" data-testid="card-power-leg">
+        <div className="glass-card rounded-xl p-3 text-center" data-testid="card-rank">
           <TrendingUp className="h-4 w-4 mx-auto text-yellow-300 mb-1.5" />
-          <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Power Leg Pts</p>
-          <p className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-power-leg-points">{fmtVol(userInfo.powerLegPoints)}</p>
+          <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Rank</p>
+          <p className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-rank">{userInfo.rank > 0 ? `M${userInfo.rank}` : "—"}</p>
         </div>
       </div>
 

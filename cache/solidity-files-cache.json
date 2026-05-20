@@ -587,8 +587,8 @@
       ]
     },
     "/home/runner/workspace/contracts/MvaultContract.sol": {
-      "lastModificationDate": 1778918927410,
-      "contentHash": "690890d0d48a0d64e93840fab04ad2d7",
+      "lastModificationDate": 1779250087521,
+      "contentHash": "d306f3f490e008eae11a4bfc420efc42",
       "sourceName": "contracts/MvaultContract.sol",
       "solcConfig": {
         "version": "0.8.27",
@@ -674,8 +674,8 @@
       ]
     },
     "/home/runner/workspace/contracts/MvaultView.sol": {
-      "lastModificationDate": 1778778420862,
-      "contentHash": "7576baeaabbc8e5d61bb37e95ff64b4d",
+      "lastModificationDate": 1779250159416,
+      "contentHash": "2c3bff1e133725331dfe8d5e18255807",
       "sourceName": "contracts/MvaultView.sol",
       "solcConfig": {
         "version": "0.8.27",

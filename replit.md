@@ -17,14 +17,15 @@ M-Vault is a Web3 MLM/DeFi platform for BNB Smart Chain. Users connect MetaMask 
 ## Smart Contracts (BSC Testnet — ACTIVE)
 | Contract | Address |
 |---|---|
-| **MVault Main** | `0x0842dEF1b1799dbF0588832ecfe7df5D47bF133f` |
+| **MVault Main** | `0xD492A9f2cd5D9Af5BC9f9627d6667874F777A8E1` |
 | **MVT Token** | `0x0Fa6a0758E7246310BFbcdA33716ADD2F5013F46` |
 | **Board Matrix** | `0xBe50465bEb3b59aC7E2aA2E062da77CB1653b8aa` |
 | **MvaultStaking** | `0x8d79C3004e7A1aF8AE4e3C0f9BE21934d7e54dA8` |
-| **MvaultView** | `0x1BB62E25B78C6C51330b3714952592ab6D3C7e38` |
-| **MvaultDistributor** | `0xad17A205425CF213b823C0e16169f517fC0cebD7` |
+| **MvaultView** | `0x9AB6BEdD5dE3B483cC1D35b315161F4777e9C823` |
 | **USDT (testnet)** | `0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3` |
 | **Owner/Deployer Wallet** | `0x12Fcf3d1084455d3677a110925D73b01F3846750` (DEPLOYER_PRIVATE_KEY) — owns all contracts |
+
+> MvaultDistributor is retired — binary/power-leg distribution replaced by on-chain placement income.
 
 ## Rank Income Architecture (on-chain, no off-chain payout needed)
 Rank income is distributed **immediately at activation time** inside `_distributeRankIncome()`.
@@ -81,17 +82,14 @@ MetaMask is forced to add/update BSC testnet via `wallet_addEthereumChain` with 
 4. Actual tx goes through MetaMask with `gasLimit: 500_000` to skip `eth_estimateGas`
 5. All errors decoded with `decodeContractError()` from `client/src/lib/contract.ts`
 
-## Distribution Flow (Binary + Power Leg)
-The server-side auto-distributor (`server/distributor.ts`) runs every 24 h and:
-1. Reads all user structs from chain off-chain
-2. Computes matched pairs, shares, and power leg points
-3. Calls `applyBinaryDistribution(users, shares, powerLegPts, newMatchedVols)` — Step 1
-4. Calls `applyPowerLegDistribution(users, shares, adminLeftover)` — Step 2
-
-For manual one-off distribution runs:
-```bash
-node scripts/distribute-now.cjs   # or distribute-binary.cjs
-```
+## Placement Income Architecture (on-chain, instant)
+Placement income replaced binary/power-leg distribution. It fires inside `_distributePlacementIncome()` at activation time:
+- 20% of `grossMvt` split across 30 binary upline levels
+- Level rates: L1–3 = 2%, L4–6 = 1%, tapering to L28–30 = 0.15%
+- Qualification: `ceil(level/3) × refsPerGroup` direct referrals (default `refsPerGroup=1`)
+- Unfilled slots go to `communityPool` (10% of grossMvt also accumulates there)
+- Admin: `setPlacementRates(uint256[30])`, `setRefsPerGroup(uint8)`, `withdrawCommunityPool(address,uint256)`
+- `server/distributor.ts` is now a no-op (returns immediately) — no off-chain distribution needed
 
 ## Project Structure
 ```
@@ -107,27 +105,26 @@ server/
   index.ts         — Express server entry
   routes.ts        — API routes
   storage.ts       — Database CRUD via Drizzle
-  distributor.ts   — Off-chain binary/power-leg auto-distributor
+  distributor.ts   — Stubbed (placement income is on-chain; no off-chain distribution needed)
 shared/
   schema.ts        — Drizzle schema
 contracts/
-  MvaultContract.sol  — Main contract (24 332 bytes)
+  MvaultContract.sol  — Main contract (~24 292 bytes, placement income)
   MvaultStaking.sol   — Staking module
-  MvaultView.sol      — Read-only helper (re-exposes removed view functions)
+  MvaultView.sol      — Read-only helper
 scripts/
   update-vps.sh           — Build + sync + restart on VPS
   deploy-mvault.cjs       — Deploy MvaultContract + MvaultToken
   deploy-mvault-view.cjs  — Deploy MvaultView helper
-  distribute-now.cjs      — Manual distribution trigger
 ```
 
 ## TX_META Currency Rules
-- **MVT-denominated** (amber, no $): types 1 (Level Income), 2 (Level Missed), 3 (Binary Income), 4 (Power Leg)
+- **MVT-denominated** (amber, no $): types 1 (Level Income), 2 (Level Missed), 3 (Placement Income)
 - **USDT-denominated** (green, with $): types 0, 5–11
 
 ## users() Auto-Getter Field Order
-The `users(address)` public mapping getter returns all 33 struct fields (including strings):
-`isRegistered[0], isActive[1], sponsor[2], directCount[3], binaryParent[4], placedLeft[5], leftChild[6], rightChild[7], leftSubVolume[8], rightSubVolume[9], matchedVolume[10], mvtBalance[11], totalReceived[12], totalSold[13], incomeLimit[14], usdtBalance[15], rebirthPool[16], totalUsdtEarned[17], btcPoolBalance[18], totalBtcEarned[19], powerLegPoints[20], packagePrice[21], incomeLimitCap[22], mainAccount[23], rebirthCount[24], rank[25], teamSalesUsdt[26], joinedAt[27], displayName[28], email[29], phone[30], country[31], profileSet[32]`
+The `users(address)` public mapping getter returns all **31 struct fields** (matchedVolume and powerLegPoints removed):
+`isRegistered[0], isActive[1], sponsor[2], directCount[3], binaryParent[4], placedLeft[5], leftChild[6], rightChild[7], leftSubVolume[8], rightSubVolume[9], mvtBalance[10], totalReceived[11], totalSold[12], incomeLimit[13], usdtBalance[14], rebirthPool[15], totalUsdtEarned[16], btcPoolBalance[17], totalBtcEarned[18], packagePrice[19], incomeLimitCap[20], mainAccount[21], rebirthCount[22], rank[23], teamSalesUsdt[24], joinedAt[25], displayName[26], email[27], phone[28], country[29], profileSet[30]`
 
 Use **named properties** (`info.mvtBalance`, `info.usdtBalance`, etc.) — not numeric indices — to avoid breakage if struct fields are reordered.
 

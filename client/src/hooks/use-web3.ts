@@ -28,8 +28,6 @@ export interface UserInfo {
   usdtBalance: bigint;
   rebirthPool: bigint;
   btcPoolBalance: bigint;
-  powerLegPoints: bigint;
-  matchedPairs: bigint;
   mainAccount: string;
   rebirthCount: bigint;
   joinedAt: bigint;
@@ -172,8 +170,6 @@ export function useWeb3() {
         usdtBalance:     info.usdtBalance,
         rebirthPool:     info.rebirthPool,
         btcPoolBalance:  info.btcPoolBalance,
-        powerLegPoints:  info.powerLegPoints,
-        matchedPairs:    info.matchedVolume,
         mainAccount:     info.mainAccount,
         rebirthCount:    info.rebirthCount,
         joinedAt:        info.joinedAt,
@@ -192,10 +188,13 @@ export function useWeb3() {
           setMvtPrice({ buyPrice: bp, sellPrice: sp });
         } catch { }
 
-        // Binary volume
+        // Binary sub-volumes (placement tree — no matching, just leg volumes)
         try {
-          const [,,currentMatched, newVolume] = await contract.getCurrentBinaryVolume(address);
-          setBinaryPairs({ currentPairs: currentMatched, newPairs: newVolume });
+          const u = info; // already fetched above
+          setBinaryPairs({
+            currentPairs: u.leftSubVolume ?? 0n,
+            newPairs:     u.rightSubVolume ?? 0n,
+          });
         } catch { }
 
         // MVT ERC20 tokens held by the contract (from mvaultToken address)
@@ -708,32 +707,22 @@ export function useWeb3() {
     }
   }, []);
 
-  // ── Admin: pool balances + distribution ────────────────────────────────────
+  // ── Admin: pool balances ──────────────────────────────────────────────────
   const getAdminPoolBalances = useCallback(async () => {
     const provider = getProvider();
     const contract = getMvaultContract(provider);
-    const [binary, reserve, admin, userCount] = await Promise.all([
-      contract.binaryPool(),
+    const [community, reserve, admin, userCount] = await Promise.all([
+      contract.communityPool(),
       contract.reservePool(),
       contract.adminPool(),
       contract.totalUsers(),
     ]);
     return {
-      binaryPool: binary as bigint,
-      powerLegReserve: reserve as bigint,
-      adminPool: admin as bigint,
-      totalUsers: Number(userCount),
+      communityPool:   community as bigint,
+      reservePool:     reserve   as bigint,
+      adminPool:       admin     as bigint,
+      totalUsers:      Number(userCount),
     };
-  }, []);
-
-  // applyBinaryDistribution requires off-chain computation of shares.
-  // For now this is a no-op placeholder — use admin scripts for distribution.
-  const distributeBinaryIncome = useCallback(async (_totalUserCount: number) => {
-    throw new Error("Binary distribution now requires off-chain computation. Use the admin script: npx hardhat run scripts/distribute-binary.cjs");
-  }, []);
-
-  const distributePowerLeg = useCallback(async (_totalUserCount: number) => {
-    throw new Error("Power leg distribution now requires off-chain computation. Use the admin script: npx hardhat run scripts/distribute-powerleg.cjs");
   }, []);
 
   return {
@@ -748,7 +737,7 @@ export function useWeb3() {
     getDirectReferrals, getTokenBalance,
     getTransactionsFromContract, getBinaryFlushedEvents, fetchUserData,
     stakeUsdt, unstakePosition, convertStakeToLocked, getActiveStakesOnChain, registerAndActivateFor,
-    getAdminPoolBalances, distributeBinaryIncome, distributePowerLeg,
+    getAdminPoolBalances,
     formatAmount: (val: bigint) => formatTokenAmount(val, tokenDecimals),
   };
 }

@@ -37,12 +37,12 @@
     },
     {
       "inputs": [],
-      "name": "binaryPool",
+      "name": "boardHandler",
       "outputs": [
         {
-          "internalType": "uint256",
+          "internalType": "address",
           "name": "",
-          "type": "uint256"
+          "type": "address"
         }
       ],
       "stateMutability": "view",
@@ -50,12 +50,12 @@
     },
     {
       "inputs": [],
-      "name": "boardHandler",
+      "name": "communityPool",
       "outputs": [
         {
-          "internalType": "address",
+          "internalType": "uint256",
           "name": "",
-          "type": "address"
+          "type": "uint256"
         }
       ],
       "stateMutability": "view",
@@ -201,11 +201,6 @@
         },
         {
           "internalType": "uint256",
-          "name": "matchedVolume",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
           "name": "mvtBalance",
           "type": "uint256"
         },
@@ -247,11 +242,6 @@
         {
           "internalType": "uint256",
           "name": "totalBtcEarned",
-          "type": "uint256"
-        },
-        {
-          "internalType": "uint256",
-          "name": "powerLegPoints",
           "type": "uint256"
         },
         {

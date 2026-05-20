@@ -1,12 +1,9 @@
 import { useState } from "react";
-import { Users, GitBranch, Coins, TrendingUp, Layers, Info, ArrowDownLeft, ArrowDownRight, ShieldCheck, Loader2, CheckCircle2, ChevronDown, ChevronUp, Zap, Activity } from "lucide-react";
+import { Users, GitBranch, Coins, TrendingUp, Layers, Info, ArrowDownLeft, ArrowDownRight, CheckCircle2, ChevronDown, ChevronUp, Zap } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { formatTokenAmount, getMvaultDistributorContract, DISTRIBUTOR_ADDRESS } from "@/lib/contract";
+import { formatTokenAmount } from "@/lib/contract";
 import type { UserInfo, MvtPrice, BinaryPairs } from "@/hooks/use-web3";
 import { useLocation } from "wouter";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ethers } from "ethers";
 
 interface IncomeProps {
   userInfo: UserInfo;
@@ -23,18 +20,6 @@ function fmtVol(wei: bigint): string {
   return `$${val.toFixed(2)}`;
 }
 
-const LEVEL_RATES: { level: number; pct: string; value: string; dirReq: number }[] = [
-  { level: 1,  pct: "20%",  value: "$26.00", dirReq: 0 },
-  { level: 2,  pct: "5%",   value: "$6.50",  dirReq: 2 },
-  { level: 3,  pct: "2%",   value: "$2.60",  dirReq: 2 },
-  { level: 4,  pct: "1%",   value: "$1.30",  dirReq: 2 },
-  { level: 5,  pct: "0.5%", value: "$0.65",  dirReq: 5 },
-  { level: 6,  pct: "0.5%", value: "$0.65",  dirReq: 5 },
-  { level: 7,  pct: "0.3%", value: "$0.39",  dirReq: 5 },
-  { level: 8,  pct: "0.3%", value: "$0.39",  dirReq: 5 },
-  { level: 9,  pct: "0.2%", value: "$0.26",  dirReq: 5 },
-  { level: 10, pct: "0.2%", value: "$0.26",  dirReq: 5 },
-];
 
 function mvtFmt(val: bigint) {
   return parseFloat(formatTokenAmount(val, 18)).toLocaleString(undefined, { maximumFractionDigits: 2 });
@@ -47,131 +32,30 @@ function usdFmt(mvt: bigint, price: bigint) {
   return `$${(mvtNum * priceNum).toFixed(2)}`;
 }
 
-interface EstimateResp {
-  binaryPool:          string;
-  newPairs:            string;
-  powerLegVolume:      string;
-  expectedBinaryMvt:   string;
-  expectedPowerLegMvt: string;
-  totalNewPairs:       string;
-  eligibleUsers:       number;
-  yourSharePct:        string;
-}
-
-interface CycleEntry {
-  cycle: number;
-  binaryShare: string;
-  powerLegShare: string;
-  newMatchedVol: string;
-  newPowerLegPts: string;
-  proof: string[];
-  totalMvt: string;
-}
-
-interface ProofsResp {
-  cycles: CycleEntry[];
-  totalMvt: string;
-  totalProofs: number;
-}
+// 30 placement levels: rate (% of grossMvt), qualification = ceil(level/3) × refsPerGroup
+// Default refsPerGroup = 1, so level 1-3 need 1 direct, 4-6 need 2, 7-9 need 3, etc.
+const PLACEMENT_RATES: { level: number; pct: string; dirReq: number }[] = Array.from({ length: 30 }, (_, i) => {
+  const level = i + 1;
+  const dirReq = Math.ceil(level / 3);
+  const pct = level <= 3 ? "2.0%" : level <= 6 ? "1.0%" : level <= 9 ? "0.75%" : level <= 12 ? "0.5%" : level <= 15 ? "0.4%" : level <= 18 ? "0.35%" : level <= 21 ? "0.3%" : level <= 24 ? "0.25%" : level <= 27 ? "0.2%" : "0.15%";
+  return { level, pct, dirReq };
+});
 
 export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmount, walletAddress }: IncomeProps) {
   const [, setLocation] = useLocation();
-  const qc = useQueryClient();
+  const [showAllLevels, setShowAllLevels] = useState(false);
 
-  // Claim state
-  const [claiming, setClaiming]       = useState(false);
-  const [claimedCycles, setClaimedCycles] = useState<Set<number>>(new Set());
-  const [claimErr, setClaimErr]       = useState<string | null>(null);
-  const [showCycles, setShowCycles]   = useState(false);
-
-  const directCount  = Number(userInfo.directCount);
-  const leftCount    = fmtVol(userInfo.leftSubUsers);
-  const rightCount   = fmtVol(userInfo.rightSubUsers);
-  const newPairs     = fmtVol(binaryPairs.newPairs);
-  const hasNewPairs  = binaryPairs.newPairs > 0n;
-  const matchedPairs = fmtVol(userInfo.matchedPairs);
+  const directCount = Number(userInfo.directCount);
+  const leftVol     = binaryPairs.currentPairs;   // leftSubVolume
+  const rightVol    = binaryPairs.newPairs;        // rightSubVolume
 
   const incomeLimitCapNum = parseFloat(formatTokenAmount(userInfo.incomeLimitCap, 18));
   const incomeCap     = incomeLimitCapNum > 0 ? incomeLimitCapNum : 390;
   const incomeUsed    = incomeCap - parseFloat(formatTokenAmount(userInfo.incomeLimit, 18));
   const incomeProgress = Math.min(100, (incomeUsed / incomeCap) * 100);
 
-  // ── Fetch next-distribution estimate ─────────────────────────────────────
-  const { data: estimate, isLoading: estLoading } = useQuery<EstimateResp>({
-    queryKey: ["/api/binary/estimate", walletAddress],
-    enabled:  !!walletAddress,
-    refetchInterval: 5 * 60_000, // refresh every 5 min
-    staleTime: 2 * 60_000,
-  });
-
-  // ── Fetch all Merkle proofs for this wallet ───────────────────────────────
-  const { data: proofsData, isLoading: proofLoading } = useQuery<ProofsResp>({
-    queryKey: ["/api/distribution/proofs", walletAddress],
-    enabled:  !!walletAddress && !!DISTRIBUTOR_ADDRESS,
-    refetchInterval: 60_000,
-  });
-
-  // Filter out already claimed cycles (tracked locally after claim)
-  const pendingCycles = (proofsData?.cycles ?? []).filter(c => !claimedCycles.has(c.cycle));
-  const totalPendingMvt = pendingCycles.reduce((sum, c) => sum + BigInt(c.totalMvt), 0n);
-  const hasPending = pendingCycles.length > 0 && totalPendingMvt > 0n;
-  // allClaimed: either we just claimed this session, OR server returned 0 unclaimed but proofs exist in DB
-  const serverAllClaimed = proofsData !== undefined && proofsData.cycles.length === 0 && (proofsData.totalProofs ?? 0) > 0;
-
-  // Maximum cycles per batchClaim tx.
-  // 100 cycles × 120k gas = 12M gas — well within BSC's 300M block limit.
-  // Above this, split into pages so we never approach the block gas limit.
-  const BATCH_CLAIM_MAX = 100;
-
-  // ── Claim All — single batchClaim tx (or multiple if >100 pending) ────────
-  async function handleClaimAll() {
-    if (!pendingCycles.length || !walletAddress) return;
-    setClaimErr(null);
-    setClaiming(true);
-    try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const signer   = await provider.getSigner();
-      const dist     = getMvaultDistributorContract(signer);
-
-      // Sort ascending so newMatchedVol / newPowerLegPts are applied in order
-      const sorted = [...pendingCycles].sort((a, b) => a.cycle - b.cycle);
-
-      // Chunk into pages of BATCH_CLAIM_MAX to avoid hitting the block gas limit
-      for (let offset = 0; offset < sorted.length; offset += BATCH_CLAIM_MAX) {
-        const page = sorted.slice(offset, offset + BATCH_CLAIM_MAX);
-        const gasLimit = 150_000 + 120_000 * page.length;
-
-        const tx = await dist.batchClaim(
-          page.map(c => BigInt(c.cycle)),
-          page.map(c => BigInt(c.binaryShare)),
-          page.map(c => BigInt(c.powerLegShare)),
-          page.map(c => BigInt(c.newMatchedVol)),
-          page.map(c => BigInt(c.newPowerLegPts)),
-          page.map(c => c.proof),
-          { gasLimit },
-        );
-        await tx.wait();
-
-        setClaimedCycles(prev => {
-          const next = new Set(prev);
-          page.forEach(c => next.add(c.cycle));
-          return next;
-        });
-      }
-
-      qc.invalidateQueries({ queryKey: ["/api/distribution/proofs", walletAddress] });
-    } catch (err: any) {
-      const msg = err?.shortMessage || err?.reason || err?.message || "Claim failed";
-      setClaimErr(msg.slice(0, 120));
-    } finally {
-      setClaiming(false);
-    }
-  }
-
-  // Warn user if their pending cycles will require multiple transactions
-  const claimTxCount = Math.ceil(pendingCycles.length / BATCH_CLAIM_MAX);
-
-  const allClaimed = (pendingCycles.length === 0 && claimedCycles.size > 0) || serverAllClaimed;
+  // How many placement levels are currently qualified
+  const qualifiedLevels = PLACEMENT_RATES.filter(r => directCount >= r.dirReq).length;
 
   return (
     <div className="p-4 sm:p-6 space-y-6 relative z-10">
@@ -211,11 +95,11 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
             ${parseFloat(formatTokenAmount(userInfo.rebirthPool, 18)).toFixed(2)}
           </p>
         </div>
-        <div className="glass-card rounded-2xl p-4" data-testid="card-power-leg">
+        <div className="glass-card rounded-2xl p-4" data-testid="card-qualified-levels">
           <GitBranch className="h-4 w-4 text-blue-400 mb-2" />
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Power Leg Pts</p>
-          <p className="text-lg font-bold text-blue-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-power-leg">
-            {Number(userInfo.powerLegPoints)}
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Placement Levels</p>
+          <p className="text-lg font-bold text-blue-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-qualified-levels">
+            {qualifiedLevels}<span className="text-sm font-normal text-muted-foreground">/30</span>
           </p>
         </div>
       </div>
@@ -248,291 +132,55 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
         </div>
       </div>
 
-      {/* ── Merkle Claim Card ─────────────────────────────────────────────────── */}
-      {DISTRIBUTOR_ADDRESS && walletAddress && (
-        <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.075s" }} data-testid="card-distribution-claim">
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="h-9 w-9 rounded-xl bg-emerald-500/15 flex items-center justify-center">
-              <ShieldCheck className="h-4.5 w-4.5 text-emerald-400" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>
-                <span className="gradient-text">Binary + Power Leg Income</span>
-              </h2>
-              <p className="text-[10px] text-muted-foreground">Both binary &amp; power leg paid together — one claim per cycle</p>
-            </div>
+      {/* Placement Income Info */}
+      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.075s" }} data-testid="card-placement-income">
+        <div className="flex items-center gap-2.5 mb-4">
+          <div className="h-9 w-9 rounded-xl bg-emerald-500/15 flex items-center justify-center">
+            <CheckCircle2 className="h-4 w-4 text-emerald-400" />
           </div>
-
-          {proofLoading ? (
-            <div className="flex items-center gap-2 py-3 text-muted-foreground text-xs">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Checking on-chain claim status…
-            </div>
-          ) : allClaimed ? (
-            <div className="flex items-center gap-2 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-              <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
-              <p className="text-xs text-emerald-400 font-medium">All cycles claimed — MVT credited to your balance</p>
-            </div>
-          ) : hasPending ? (
-            <div className="space-y-3">
-              {/* Summary row */}
-              <div className="p-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/15 space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Total Claimable</p>
-                    <p className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-total-claimable">
-                      {parseFloat(formatTokenAmount(totalPendingMvt, 18)).toFixed(4)} MVT
-                    </p>
-                    <p className="text-[9px] text-muted-foreground mt-0.5">
-                      {pendingCycles.length} cycle{pendingCycles.length !== 1 ? "s" : ""}
-                      {claimTxCount > 1 ? ` — ${claimTxCount} transactions needed` : " — 1 transaction"}
-                    </p>
-                  </div>
-                  <Button
-                    onClick={handleClaimAll}
-                    disabled={claiming}
-                    data-testid="button-claim-all"
-                    className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs px-4"
-                  >
-                    {claiming
-                      ? <><Loader2 className="h-3 w-3 animate-spin mr-1.5" />Claiming…</>
-                      : pendingCycles.length > 1 ? `Claim All (${pendingCycles.length})` : "Claim Income"}
-                  </Button>
-                </div>
-
-                {/* Always show binary vs power leg split */}
-                {pendingCycles.length === 1 && (() => {
-                  const c = pendingCycles[0];
-                  const bin = parseFloat(formatTokenAmount(BigInt(c.binaryShare), 18));
-                  const pwr = parseFloat(formatTokenAmount(BigInt(c.powerLegShare), 18));
-                  return (
-                    <div className="grid grid-cols-2 gap-2 pt-1 border-t border-emerald-500/10">
-                      <div className="text-center">
-                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Binary Share (70%)</p>
-                        <p className="text-xs font-semibold text-emerald-400">{bin.toFixed(4)} MVT</p>
-                      </div>
-                      <div className="text-center">
-                        <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Power Leg Share (30%)</p>
-                        <p className="text-xs font-semibold text-blue-400">{pwr.toFixed(4)} MVT</p>
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-
-              {/* Per-cycle breakdown toggle (multi-cycle only) */}
-              {pendingCycles.length > 1 && (
-                <button
-                  onClick={() => setShowCycles(v => !v)}
-                  className="flex items-center gap-1 text-[10px] text-muted-foreground hover:text-foreground transition-colors"
-                  data-testid="button-toggle-cycles"
-                >
-                  {showCycles ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-                  {showCycles ? "Hide" : "Show"} per-cycle breakdown
-                </button>
-              )}
-
-              {(showCycles || pendingCycles.length === 1) && pendingCycles.length > 1 && (
-                <div className="space-y-2">
-                  {pendingCycles.map(c => (
-                    <div
-                      key={c.cycle}
-                      className="px-3 py-2.5 rounded-xl border bg-white/[0.02] border-white/[0.06]"
-                      data-testid={`row-cycle-${c.cycle}`}
-                    >
-                      <div className="flex items-center justify-between mb-1.5">
-                        <p className="text-xs font-semibold">Cycle #{c.cycle}</p>
-                        <Badge variant="outline" className="text-[9px] border-amber-500/30 text-amber-400">
-                          {parseFloat(formatTokenAmount(BigInt(c.totalMvt), 18)).toFixed(4)} MVT total
-                        </Badge>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2">
-                        <div>
-                          <p className="text-[9px] text-muted-foreground">Binary (70%)</p>
-                          <p className="text-[11px] font-medium text-emerald-400">
-                            {parseFloat(formatTokenAmount(BigInt(c.binaryShare), 18)).toFixed(4)} MVT
-                          </p>
-                        </div>
-                        <div>
-                          <p className="text-[9px] text-muted-foreground">Power Leg (30%)</p>
-                          <p className="text-[11px] font-medium text-blue-400">
-                            {parseFloat(formatTokenAmount(BigInt(c.powerLegShare), 18)).toFixed(4)} MVT
-                          </p>
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-
-              {claimErr && (
-                <div className="flex items-start gap-2 p-2.5 rounded-xl bg-red-500/[0.06] border border-red-500/15">
-                  <Info className="h-3.5 w-3.5 text-red-400/70 shrink-0 mt-0.5" />
-                  <p className="text-[10px] text-red-400">{claimErr}</p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="py-3 text-center">
-              <p className="text-xs text-muted-foreground">No pending distributions for your wallet</p>
-              <p className="text-[10px] text-muted-foreground/60 mt-1">Distribution runs every 24 hours — claim any time after it runs</p>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* ── Expected Income Estimate ────────────────────────────────────────── */}
-      {walletAddress && (
-        <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.078s" }} data-testid="card-expected-income">
-          <div className="flex items-center gap-2.5 mb-4">
-            <div className="h-9 w-9 rounded-xl bg-amber-500/15 flex items-center justify-center">
-              <Activity className="h-4.5 w-4.5 text-amber-400" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>
-                <span className="gradient-text">Expected Next Distribution</span>
-              </h2>
-              <p className="text-[10px] text-muted-foreground">Live estimate based on current pool &amp; your leg volumes</p>
-            </div>
+          <div>
+            <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>
+              <span className="gradient-text">Placement Income</span>
+            </h2>
+            <p className="text-[10px] text-muted-foreground">Paid instantly on-chain each time someone activates in your binary upline</p>
           </div>
-
-          {estLoading ? (
-            <div className="flex items-center gap-2 py-3 text-muted-foreground text-xs">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Calculating estimate from chain…
-            </div>
-          ) : estimate ? (
-            <div className="space-y-3">
-              {/* Pool size */}
-              <div className="flex items-center justify-between px-3 py-2 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-                <span className="text-[10px] text-muted-foreground uppercase tracking-wider">Current Binary Pool</span>
-                <span className="text-sm font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-est-pool">
-                  {parseFloat(ethers.formatUnits(estimate.binaryPool, 18)).toLocaleString(undefined, { maximumFractionDigits: 2 })} MVT
-                </span>
-              </div>
-
-              {/* Binary + Power leg expected */}
-              <div className="grid grid-cols-2 gap-3">
-                <div className="p-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/15 text-center">
-                  <Zap className="h-3.5 w-3.5 text-emerald-400 mx-auto mb-1" />
-                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Binary Income (70%)</p>
-                  <p className="text-base font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-est-binary">
-                    {parseFloat(ethers.formatUnits(estimate.expectedBinaryMvt, 18)).toFixed(4)} MVT
-                  </p>
-                  {mvtPrice.sellPrice > 0n && (
-                    <p className="text-[9px] text-muted-foreground mt-0.5">
-                      ≈ {usdFmt(BigInt(estimate.expectedBinaryMvt), mvtPrice.sellPrice)}
-                    </p>
-                  )}
-                </div>
-                <div className="p-3 rounded-xl bg-blue-500/[0.06] border border-blue-500/15 text-center">
-                  <GitBranch className="h-3.5 w-3.5 text-blue-400 mx-auto mb-1" />
-                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Power Leg (30%)</p>
-                  <p className="text-base font-bold text-blue-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-est-powerleg">
-                    {parseFloat(ethers.formatUnits(estimate.expectedPowerLegMvt, 18)).toFixed(4)} MVT
-                  </p>
-                  {mvtPrice.sellPrice > 0n && (
-                    <p className="text-[9px] text-muted-foreground mt-0.5">
-                      ≈ {usdFmt(BigInt(estimate.expectedPowerLegMvt), mvtPrice.sellPrice)}
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {/* Your pairs & share */}
-              <div className="grid grid-cols-3 gap-2 text-center">
-                <div className="px-2 py-2 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Your New Pairs</p>
-                  <p className="text-xs font-semibold" data-testid="text-est-newpairs">
-                    {fmtVol(BigInt(estimate.newPairs))}
-                  </p>
-                </div>
-                <div className="px-2 py-2 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Power Leg Vol</p>
-                  <p className="text-xs font-semibold" data-testid="text-est-powerlegvol">
-                    {fmtVol(BigInt(estimate.powerLegVolume))}
-                  </p>
-                </div>
-                <div className="px-2 py-2 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-                  <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Your Share</p>
-                  <p className="text-xs font-semibold text-amber-400" data-testid="text-est-share">
-                    {estimate.yourSharePct}%
-                  </p>
-                </div>
-              </div>
-
-              {/* Footer note */}
-              <div className="flex items-start gap-2 p-2.5 rounded-xl bg-amber-500/[0.05] border border-amber-500/10">
-                <Info className="h-3.5 w-3.5 text-amber-400/70 shrink-0 mt-0.5" />
-                <p className="text-[10px] text-muted-foreground">
-                  Estimate across <span className="text-foreground">{estimate.eligibleUsers}</span> eligible users &amp; total new pairs of <span className="text-foreground">{fmtVol(BigInt(estimate.totalNewPairs))}</span>. Actual income is calculated at distribution time and may differ.
-                </p>
-              </div>
-
-              {/* No pairs warning */}
-              {estimate.newPairs === "0" && (
-                <div className="flex items-start gap-2 p-2.5 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-                  <Info className="h-3.5 w-3.5 text-muted-foreground/50 shrink-0 mt-0.5" />
-                  <p className="text-[10px] text-muted-foreground">No new matched pairs yet — you need volume on both left and right legs to earn binary income.</p>
-                </div>
-              )}
-            </div>
-          ) : (
-            <p className="text-xs text-muted-foreground py-3 text-center">Could not load estimate</p>
-          )}
         </div>
-      )}
-
-      {/* Binary Income */}
-      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.08s" }} data-testid="card-binary-income">
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>
-            <span className="gradient-text">Binary Network</span>
-          </h2>
-          <button onClick={() => setLocation("/binary")} className="text-[10px] text-amber-400 hover:text-amber-300">
-            Details →
-          </button>
-        </div>
-
-        <div className="grid grid-cols-3 gap-3 mb-4">
+        <div className="grid grid-cols-3 gap-3 mb-3">
           <div className="text-center p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
             <ArrowDownLeft className="h-4 w-4 text-blue-400 mx-auto mb-1.5" />
             <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Left Team</p>
-            <p className="text-xl font-bold text-blue-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-left-team">{leftCount}</p>
+            <p className="text-xl font-bold text-blue-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-left-team">
+              {fmtVol(userInfo.leftSubUsers)}
+            </p>
           </div>
           <div className="text-center p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
             <GitBranch className="h-4 w-4 text-emerald-400 mx-auto mb-1.5" />
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Matched Vol</p>
-            <p className="text-xl font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-matched-pairs">{matchedPairs}</p>
+            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Qualified Levels</p>
+            <p className="text-xl font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-qualified-levels-2">
+              {qualifiedLevels}/30
+            </p>
           </div>
           <div className="text-center p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
             <ArrowDownRight className="h-4 w-4 text-purple-400 mx-auto mb-1.5" />
             <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-0.5">Right Team</p>
-            <p className="text-xl font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-right-team">{rightCount}</p>
+            <p className="text-xl font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-right-team">
+              {fmtVol(userInfo.rightSubUsers)}
+            </p>
           </div>
         </div>
-
-        {hasNewPairs && (
-          <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
-            <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <p className="text-xs text-emerald-400 font-medium">{newPairs} USDT volume pending — claim your income above after the next daily cycle</p>
-          </div>
-        )}
-
-        <div className="mt-4 grid grid-cols-2 gap-3 p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-          <div className="text-center">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Binary Pool (70%)</p>
-            <p className="text-xs font-medium">Split by new pairs each cycle</p>
-          </div>
-          <div className="text-center">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Power Leg (30%)</p>
-            <p className="text-xs font-medium">{fmtVol(userInfo.powerLegPoints)} USDT volume</p>
-          </div>
+        <div className="flex items-start gap-2 p-2.5 rounded-xl bg-emerald-500/[0.05] border border-emerald-500/10">
+          <Info className="h-3.5 w-3.5 text-emerald-400/70 shrink-0 mt-0.5" />
+          <p className="text-[10px] text-muted-foreground">
+            20% of each activation's gross MVT is split across 30 binary placement levels — paid instantly to each qualified upline. No distribution cycle needed.
+          </p>
         </div>
+        <button onClick={() => setLocation("/binary")} className="mt-3 text-[10px] text-amber-400 hover:text-amber-300">
+          View binary tree details →
+        </button>
       </div>
 
-      {/* Level Income Structure */}
-      <div className="glass-card rounded-2xl overflow-hidden slide-in" style={{ animationDelay: "0.09s" }} data-testid="card-level-structure">
+      {/* Placement Income Structure — 30 levels */}
+      <div className="glass-card rounded-2xl overflow-hidden slide-in" style={{ animationDelay: "0.09s" }} data-testid="card-placement-structure">
         <div className="p-5 border-b border-white/[0.06]">
           <div className="flex items-center gap-2.5">
             <div className="h-9 w-9 rounded-xl bg-amber-500/15 flex items-center justify-center">
@@ -540,46 +188,55 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
             </div>
             <div>
               <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>
-                <span className="gradient-text">Level Income Structure</span>
+                <span className="gradient-text">Placement Income — 30 Binary Levels</span>
               </h2>
-              <p className="text-[10px] text-muted-foreground">30% of each $130 activation distributed over 10 levels</p>
+              <p className="text-[10px] text-muted-foreground">20% of each activation distributed across your binary upline — paid instantly</p>
             </div>
           </div>
           <div className="mt-3 flex items-center gap-2 flex-wrap">
             <Badge variant="outline" className="text-[9px] border-amber-500/30 text-amber-400">
               You have {directCount} direct{directCount !== 1 ? "s" : ""}
             </Badge>
-            <Badge variant="outline" className={`text-[9px] ${directCount >= 2 ? "border-emerald-500/30 text-emerald-400" : "border-muted-foreground/30 text-muted-foreground"}`}>
-              L1–L4: {directCount >= 2 ? "✓ Qualified" : `Need ${2 - directCount} more`}
+            <Badge variant="outline" className={`text-[9px] ${qualifiedLevels >= 3 ? "border-emerald-500/30 text-emerald-400" : "border-muted-foreground/30 text-muted-foreground"}`}>
+              L1–L3: {qualifiedLevels >= 3 ? "✓ Qualified" : `Need ${1 - directCount > 0 ? `${1 - directCount} more direct` : "1 direct"}`}
             </Badge>
-            <Badge variant="outline" className={`text-[9px] ${directCount >= 5 ? "border-emerald-500/30 text-emerald-400" : "border-muted-foreground/30 text-muted-foreground"}`}>
-              L5–L10: {directCount >= 5 ? "✓ Qualified" : `Need ${5 - directCount} more`}
+            <Badge variant="outline" className={`text-[9px] ${qualifiedLevels >= 30 ? "border-emerald-500/30 text-emerald-400" : "border-muted-foreground/30 text-muted-foreground"}`}>
+              {qualifiedLevels}/30 levels open
             </Badge>
           </div>
         </div>
         <div className="divide-y divide-white/[0.04]">
-          {LEVEL_RATES.map(({ level, pct, value, dirReq }) => {
+          {(showAllLevels ? PLACEMENT_RATES : PLACEMENT_RATES.slice(0, 6)).map(({ level, pct, dirReq }) => {
             const qualified = directCount >= dirReq;
-            const noReq = dirReq === 0;
             return (
-              <div key={level} className="flex items-center justify-between px-5 py-2.5" data-testid={`row-level-${level}`}>
+              <div key={level} className="flex items-center justify-between px-5 py-2.5" data-testid={`row-placement-${level}`}>
                 <div className="flex items-center gap-3">
-                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${noReq ? "bg-emerald-500/10" : "bg-white/[0.04]"}`}>
-                    <span className={`text-[11px] font-bold ${noReq ? "text-emerald-400" : "text-muted-foreground"}`}>L{level}</span>
+                  <div className={`w-7 h-7 rounded-lg flex items-center justify-center ${qualified ? "bg-emerald-500/10" : "bg-white/[0.04]"}`}>
+                    <span className={`text-[11px] font-bold ${qualified ? "text-emerald-400" : "text-muted-foreground"}`}>L{level}</span>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold">{pct} of gross MVT <span className="text-muted-foreground font-normal">≈ {value}</span></p>
+                    <p className="text-xs font-semibold">{pct} of gross MVT</p>
                     <p className="text-[10px] text-muted-foreground">
-                      {noReq ? "No requirement — always paid to active sponsor" : `${dirReq} direct${dirReq !== 1 ? "s" : ""} required`}
+                      {dirReq} direct referral{dirReq !== 1 ? "s" : ""} required
                     </p>
                   </div>
                 </div>
-                <Badge variant="outline" className={`text-[9px] ${noReq || qualified ? "border-emerald-500/30 text-emerald-400" : "border-muted-foreground/20 text-muted-foreground/50"}`}>
-                  {noReq ? "Always Open" : qualified ? "Qualified" : "Locked"}
+                <Badge variant="outline" className={`text-[9px] ${qualified ? "border-emerald-500/30 text-emerald-400" : "border-muted-foreground/20 text-muted-foreground/50"}`}>
+                  {qualified ? "Qualified" : "Locked"}
                 </Badge>
               </div>
             );
           })}
+        </div>
+        <div className="p-3 border-t border-white/[0.06] text-center">
+          <button
+            onClick={() => setShowAllLevels(v => !v)}
+            className="flex items-center gap-1 text-[10px] text-amber-400 hover:text-amber-300 transition-colors mx-auto"
+            data-testid="button-toggle-all-levels"
+          >
+            {showAllLevels ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            {showAllLevels ? "Show fewer levels" : "Show all 30 levels"}
+          </button>
         </div>
       </div>
     </div>

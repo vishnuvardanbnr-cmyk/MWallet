@@ -61,7 +61,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
     // ── Pool allocation constants ──────────────────────────────────────────────
     uint256 internal constant LEVEL_ALLOC    = 30;
-    uint256 internal constant BINARY_ALLOC   = 30;
+    uint256 internal constant COMMUNITY_ALLOC = 10;
+    uint256 internal constant PLACEMENT_ALLOC = 20;
     uint256 internal constant ADMIN_ALLOC    = 20;
     uint256 internal constant RANK_ALLOC     = 10;
     // Liquidity 10% handled internally by MvaultToken (only 90% minted)
@@ -81,7 +82,6 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         address rightChild;
         uint256 leftSubVolume;    // cumulative USDT activated in left binary subtree
         uint256 rightSubVolume;   // cumulative USDT activated in right binary subtree
-        uint256 matchedVolume;    // watermark: matched USDT volume as of last distribution
         // Virtual MVT
         uint256 mvtBalance;       // available to sell
         uint256 totalReceived;    // lifetime MVT credited
@@ -94,8 +94,6 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         // BTC pool (10% deducted from every sell, per user — like backup contract)
         uint256 btcPoolBalance;   // accumulated USDT for BTC purchase
         uint256 totalBtcEarned;   // lifetime BTC pool credits
-        // Power leg (resets each cycle)
-        uint256 powerLegPoints;
         // Package
         uint256 packagePrice;     // activation price paid ($55 or $130)
         uint256 incomeLimitCap;   // max income per cycle (3 × packagePrice)
@@ -120,15 +118,19 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint256   public totalUsers;
 
     // ── Pool balances (virtual MVT) ───────────────────────────────────────────
-    uint256 public binaryPool;
     uint256 public reservePool;
     uint256 public adminPool;
     uint256 public rankPool;
+    uint256 public communityPool;
 
-    // Distributor module (MvaultDistributor — Merkle-proof claim system)
-    address public distributor;
+    // Community wallet — receives 10% of grossMvt on every activation
+    address public communityWallet;
 
-    // Manager — can call setDistributor and run distributions (does not have owner powers)
+    // Placement income config (binary tree, 30 levels)
+    uint256[30] public placementRates; // basis points out of 10000; sum = 2000 (20%)
+    uint256 public refsPerGroup;       // direct referrals required per 3-level group
+
+    // Manager — can call admin setters without full owner powers
     address public manager;
 
     // ── Board Matrix tracking ──────────────────────────────────────────────────
@@ -140,8 +142,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint8 internal constant TX_ACTIVATION     = 0;
     uint8 internal constant TX_LEVEL_INCOME   = 1;
     uint8 internal constant TX_LEVEL_MISSED   = 2;
-    uint8 internal constant TX_BINARY_INCOME  = 3;
-    uint8 internal constant TX_POWERLEG       = 4;
+    uint8 internal constant TX_PLACEMENT_INCOME = 3;
     uint8 internal constant TX_SELL_MVT       = 5;
     uint8 internal constant TX_BTC_CREDITED   = 6;
     uint8 internal constant TX_USDT_WITHDRAW  = 7;
@@ -180,10 +181,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     event Activated(address indexed user, uint256 mvtMinted, uint256 grossMvt, uint256 levelAmt, uint256 binaryAmt, uint256 adminAmt);
     event LevelIncomePaid(address indexed to, address indexed from, uint8 level, uint256 amount);
     event LevelIncomeSkipped(address indexed upline, uint8 level, uint256 amount);
-    event BinaryIncomeDistributed(uint256 totalPool, uint256 binary70, uint256 powerLeg30, uint256 totalPairs);
-    event BinaryIncomePaid(address indexed user, uint256 newPairs, uint256 amount);
-    event PowerLegDistributed(uint256 totalPowerLeg30, uint256 totalPowerLegs);
-    event PowerLegIncomePaid(address indexed user, uint256 powerLegPoints, uint256 amount);
+    event PlacementIncomePaid(address indexed to, address indexed from, uint8 level, uint256 amount);
     event MvtSold(address indexed user, uint256 mvtAmount, uint256 usdtNet, uint256 usdtToBtcPool, uint256 usdtToIncome, uint256 usdtToRebirth);
     event BtcPoolCredited(address indexed user, uint256 amount);
     event BtcPoolWithdrawn(address indexed user, uint256 amount);
@@ -207,6 +205,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     event StakeLevelIncomePaid(address indexed to, address indexed from, uint8 level, uint256 mvtAmount);
 
     // ── Errors ────────────────────────────────────────────────────────────────
+    error NotAuthorized();
     error AlreadyRegistered();
     error NotRegistered();
     error AlreadyActive();
@@ -225,11 +224,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     error NotEligibleForRebirth();
     error IncomeNotExhausted();
     error CannotDowngradePackage();
-    error NotDistributor();
     error BoardHandlerNotSet();
     error InsufficientBtcPoolForBoard();
     error NotBoardHandler();
-    error EmptyPool();
     error ExceedsPool();
     error SubAccountAlreadyRegistered();
     error NotStakingModule();
@@ -244,6 +241,12 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (_usdt == address(0) || _mvaultToken == address(0)) revert ZeroAddress();
         usdtToken   = IERC20(_usdt);
         mvaultToken = IMvaultToken(_mvaultToken);
+        // Placement rates (bp/10000): L1=5% L2=3% L3=2% L4-6=1% L7-10=0.5% L11-30=0.25%
+        placementRates[0] = 500; placementRates[1] = 300; placementRates[2] = 200;
+        for (uint8 i = 3; i < 6;  i++) placementRates[i] = 100;
+        for (uint8 i = 6; i < 10; i++) placementRates[i] = 50;
+        for (uint8 i = 10; i < 30; i++) placementRates[i] = 25;
+        refsPerGroup = 1;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -270,7 +273,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // ── Manager role ──────────────────────────────────────────────────────────
 
     modifier onlyOwnerOrManager() {
-        require(msg.sender == owner() || msg.sender == manager, "Not owner or manager");
+        if (msg.sender != owner() && msg.sender != manager) revert NotAuthorized();
         _;
     }
 
@@ -279,14 +282,25 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         manager = _manager;
     }
 
-    function setDistributor(address _distributor) external onlyOwnerOrManager {
-        if (_distributor == address(0)) revert ZeroAddress();
-        distributor = _distributor;
+    function setCommunityWallet(address _wallet) external onlyOwner {
+        if (_wallet == address(0)) revert ZeroAddress();
+        communityWallet = _wallet;
     }
 
-    modifier onlyDistributor() {
-        if (msg.sender != distributor) revert NotDistributor();
-        _;
+    function setPlacementRates(uint256[30] calldata _rates) external onlyOwner {
+        for (uint8 i = 0; i < 30; i++) placementRates[i] = _rates[i];
+    }
+
+    function setRefsPerGroup(uint256 _refs) external onlyOwner {
+        refsPerGroup = _refs;
+    }
+
+    function withdrawCommunityPool(address to, uint256 amount) external onlyOwner {
+        if (to == address(0)) revert ZeroAddress();
+        if (communityPool < amount) revert ExceedsPool();
+        communityPool           -= amount;
+        users[to].mvtBalance    += amount;
+        users[to].totalReceived += amount;
     }
 
     modifier onlyStakingModule() {
@@ -597,16 +611,16 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         mvaultToken.addLiquidityAndMint(address(this), pkgPrice);
         uint256 minted = mvaultToken.balanceOf(address(this)) - before; // actual 90%
 
-        // Split on GROSS basis: 30% level + 30% binary + 20% admin + 10% rank + 10% liquidity (in MVT token)
-        uint256 levelAmt  = (grossMvt * LEVEL_ALLOC)  / 100;  // 30%
-        uint256 binaryAmt = (grossMvt * BINARY_ALLOC) / 100;  // 30%
-        uint256 adminAmt  = (grossMvt * ADMIN_ALLOC)  / 100;  // 20%
-        uint256 rankAmt   = (grossMvt * RANK_ALLOC)   / 100;  // 10%
-        // Remaining dust (rounding) → adminPool
-        uint256 dust = grossMvt - levelAmt - binaryAmt - adminAmt - rankAmt;
+        // Split on GROSS basis: 30% level + 10% community + 20% placement + 20% admin + 10% rank
+        uint256 levelAmt     = (grossMvt * LEVEL_ALLOC)     / 100;
+        uint256 communityAmt = (grossMvt * COMMUNITY_ALLOC) / 100;
+        uint256 placementAmt = (grossMvt * PLACEMENT_ALLOC) / 100;
+        uint256 adminAmt     = (grossMvt * ADMIN_ALLOC)     / 100;
+        uint256 rankAmt      = (grossMvt * RANK_ALLOC)      / 100;
+        uint256 dust = grossMvt - levelAmt - communityAmt - placementAmt - adminAmt - rankAmt;
 
-        binaryPool += binaryAmt;
-        adminPool  += adminAmt + dust;
+        communityPool += communityAmt;
+        adminPool     += adminAmt + dust;
 
         users[user].isActive       = true;
         users[user].incomeLimit    = incomeCap;
@@ -617,8 +631,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         _updateTeamStats(user, pkgPrice);
         _distributeLevelIncome(user, grossMvt, levelAmt);
         _distributeRankIncome(user, grossMvt, rankAmt);
+        _distributePlacementIncome(user, grossMvt, placementAmt);
 
-        emit Activated(user, minted, grossMvt, levelAmt, binaryAmt, adminAmt);
+        emit Activated(user, minted, grossMvt, levelAmt, communityAmt + placementAmt, adminAmt);
         _recordTx(user, TX_ACTIVATION, pkgPrice, 0, address(0));
     }
 
@@ -992,14 +1007,15 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         usdtToken.approve(address(mvaultToken), pkgPrice);
         mvaultToken.addLiquidityAndMint(address(this), pkgPrice);
 
-        uint256 levelAmt  = (grossMvt * LEVEL_ALLOC)  / 100;
-        uint256 binaryAmt = (grossMvt * BINARY_ALLOC) / 100;
-        uint256 adminAmt  = (grossMvt * ADMIN_ALLOC)  / 100;
-        uint256 rankAmt   = (grossMvt * RANK_ALLOC)   / 100;
-        uint256 dust      = grossMvt - levelAmt - binaryAmt - adminAmt - rankAmt;
+        uint256 levelAmt     = (grossMvt * LEVEL_ALLOC)     / 100;
+        uint256 communityAmt = (grossMvt * COMMUNITY_ALLOC) / 100;
+        uint256 placementAmt = (grossMvt * PLACEMENT_ALLOC) / 100;
+        uint256 adminAmt     = (grossMvt * ADMIN_ALLOC)     / 100;
+        uint256 rankAmt      = (grossMvt * RANK_ALLOC)      / 100;
+        uint256 dust         = grossMvt - levelAmt - communityAmt - placementAmt - adminAmt - rankAmt;
 
-        binaryPool += binaryAmt;
-        adminPool  += adminAmt + dust;
+        communityPool += communityAmt;
+        adminPool     += adminAmt + dust;
 
         // Update package tier (handles both reactivation and upgrade)
         users[user].packagePrice   = pkgPrice;
@@ -1010,6 +1026,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         _updateTeamStats(user, pkgPrice);
         _distributeLevelIncome(user, grossMvt, levelAmt);
         _distributeRankIncome(user, grossMvt, rankAmt);
+        _distributePlacementIncome(user, grossMvt, placementAmt);
 
         emit Reactivated(user, pkgPrice, grossMvt, upgraded);
         _recordTx(user, TX_REACTIVATION, pkgPrice, 0, address(0));
@@ -1057,42 +1074,35 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     }
 
     // ─────────────────────────────────────────────────────────────────────────
-    // DISTRIBUTOR CALLBACKS  (called only by MvaultDistributor)
-    //
-    // The old applyBinaryDistribution / applyPowerLegDistribution push-model
-    // has been replaced by a Merkle-proof pull system (MvaultDistributor.sol).
-    // Users self-claim with cryptographic proofs — admin cannot alter payouts
-    // after the Merkle root is committed.
+    // PLACEMENT INCOME  (binary tree, 30 levels, paid instantly at activation)
     // ─────────────────────────────────────────────────────────────────────────
 
-    /// @notice Drain binaryPool for a new distribution cycle.
-    ///         Called by MvaultDistributor.commitDistribution().
-    function distributor_lockPool() external onlyDistributor returns (uint256 pool) {
-        if (binaryPool == 0) revert EmptyPool();
-        pool       = binaryPool;
-        binaryPool = 0;
-    }
-
-    /// @notice Credit a user's MVT balance after they prove their leaf.
-    ///         Called by MvaultDistributor.claimDistribution().
-    function distributor_creditUser(
-        address user,
-        uint256 mvtAmount,
-        uint256 newMatchedVol,
-        uint256 newPowerLegPts
-    ) external onlyDistributor {
-        users[user].mvtBalance     += mvtAmount;
-        users[user].totalReceived  += mvtAmount;
-        users[user].matchedVolume   = newMatchedVol;
-        users[user].powerLegPoints  = newPowerLegPts;
-        emit BinaryIncomePaid(user, newPowerLegPts, mvtAmount);
-        _recordTx(user, TX_BINARY_INCOME, mvtAmount, 0, address(0));
-    }
-
-    /// @notice Return unclaimed/excess pool to adminPool.
-    ///         Called by MvaultDistributor on expired cycle reclaim or rounding dust.
-    function distributor_returnToAdmin(uint256 amount) external onlyDistributor {
-        adminPool += amount;
+    /**
+     * @dev Walks up the binary parent chain up to 30 levels from `from`.
+     *      Each level earns placementRates[lvl-1] basis points of grossMvt.
+     *      Qualification: ceil(lvl/3) * refsPerGroup direct referrals needed.
+     *      Unqualified or missing upline shares → adminPool.
+     */
+    function _distributePlacementIncome(address from, uint256 grossMvt, uint256 totalAmt) internal {
+        address cur = users[from].binaryParent;
+        uint256 distributed = 0;
+        for (uint8 lvl = 1; lvl <= 30 && cur != address(0); lvl++) {
+            uint256 share = (grossMvt * placementRates[lvl - 1]) / 10000;
+            if (share > 0) {
+                uint256 required = ((uint256(lvl) + 2) / 3) * refsPerGroup;
+                if (users[cur].isActive && users[cur].directCount >= required) {
+                    users[cur].mvtBalance    += share;
+                    users[cur].totalReceived += share;
+                    distributed += share;
+                    emit PlacementIncomePaid(cur, from, lvl, share);
+                    _recordTx(cur, TX_PLACEMENT_INCOME, share, lvl, from);
+                } else {
+                    adminPool += share;
+                }
+            }
+            cur = users[cur].binaryParent;
+        }
+        if (totalAmt > distributed) adminPool += totalAmt - distributed;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1186,19 +1196,6 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         eligible    = users[user].packagePrice > 0 && poolBalance >= users[user].packagePrice;
     }
 
-    function getCurrentBinaryVolume(address u) external view returns (
-        uint256 leftVolume,
-        uint256 rightVolume,
-        uint256 currentMatched,
-        uint256 newVolume
-    ) {
-        leftVolume     = users[u].leftSubVolume;
-        rightVolume    = users[u].rightSubVolume;
-        currentMatched = _minOf(leftVolume, rightVolume);
-        newVolume      = currentMatched > users[u].matchedVolume
-            ? currentMatched - users[u].matchedVolume : 0;
-    }
-
     function getMvtPrice() external view returns (uint256 buyPrice, uint256 sellPrice) {
         buyPrice  = mvaultToken.getBuyPrice();
         sellPrice = mvaultToken.getSellPrice();
@@ -1209,13 +1206,6 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 totalRewards
     ) {
         return (boardEntryCount[_user], totalBoardRewardsEarned[_user]);
-    }
-
-    function canEnterBoard(address _user) external view returns (bool eligible, uint256 btcBalance, uint256 boardPrice) {
-        if (address(boardHandler) == address(0)) return (false, 0, 0);
-        btcBalance = users[_user].btcPoolBalance;
-        boardPrice = boardHandler.getBoardPrice(1);
-        eligible   = users[_user].isActive && btcBalance >= boardPrice;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1336,9 +1326,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      * @notice MANAGER/OWNER: Batch-set user rank levels (0=unranked 1=M1…5=M5).
      *         Called by the off-chain distributor after evaluating qualifications.
      */
-    function setUserRanks(address[] calldata addrs, uint8[] calldata ranks_) external {
-        require(msg.sender == manager || msg.sender == owner(), "!auth");
-        require(addrs.length == ranks_.length, "!len");
+    function setUserRanks(address[] calldata addrs, uint8[] calldata ranks_) external onlyOwnerOrManager {
+        require(addrs.length == ranks_.length);
         for (uint256 i; i < addrs.length; i++) {
             uint8 old = users[addrs[i]].rank;
             if (old != ranks_[i]) {
@@ -1355,9 +1344,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      *         This function exists only as a safety drain for any accumulated
      *         balance from before the on-chain distribution upgrade.
      */
-    function drainRankPool() external {
-        require(msg.sender == manager || msg.sender == owner(), "!auth");
-        if (rankPool == 0) revert EmptyPool();
+    function drainRankPool() external onlyOwnerOrManager {
+        if (rankPool == 0) revert ExceedsPool();
         uint256 pool = rankPool;
         rankPool = 0;
         adminPool += pool;

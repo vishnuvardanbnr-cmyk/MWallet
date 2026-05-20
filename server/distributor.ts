@@ -95,7 +95,13 @@ async function withRetry<T>(fn: () => Promise<T>, retries = 4, delayMs = 1500): 
 }
 
 // ── Main distribution run ─────────────────────────────────────────────────────
+// NOTE: Binary/Power-Leg distribution has been replaced by on-chain placement income
+// (_distributePlacementIncome in MvaultContract.sol). This function is now a no-op.
 export async function runDistribution(): Promise<void> {
+  log("Binary distribution is no longer needed — placement income is paid instantly on-chain at activation time.", "distributor");
+  return;
+
+  // Legacy code below kept for reference — not executed:
   if (isRunning) {
     log("Distribution already in progress — skipping this cycle", "distributor");
     return;
