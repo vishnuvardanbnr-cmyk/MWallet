@@ -378,41 +378,21 @@ export function useWeb3() {
     setProfileOnChain({ displayName, email, phone, country, profileSet: true });
   }, [account, getSigner]);
 
-  // ── Direct referrals (via Registered events filtered by sponsor == account) ───
+  // ── Direct referrals (via contract view getDirectReferralsPaginated — no event scanning) ───
   const getDirectReferrals = useCallback(async (offset: number, limit: number) => {
     if (!account) return { referrals: [], total: 0 };
-    const tryQuery = async (provider: ethers.Provider, fromBlock: number | "earliest", toBlock: number | "latest") => {
-      const contract = getMvaultContract(provider);
-      const filter = contract.filters.Registered(null, account);
-      return await contract.queryFilter(filter, fromBlock, toBlock);
-    };
     try {
-      // Try direct provider first (avoids MetaMask proxy limitations)
-      let events: any[];
-      const directProvider = getDirectProvider();
-      try {
-        events = await tryQuery(directProvider, 0, "latest");
-      } catch {
-        // Fall back to recent block range (last 200,000 blocks ≈ ~7 days on BSC)
-        try {
-          const currentBlock = await directProvider.getBlockNumber();
-          events = await tryQuery(directProvider, Math.max(0, currentBlock - 200_000), currentBlock);
-        } catch {
-          // Last resort: use MetaMask provider
-          const mmProvider = getProvider();
-          const currentBlock = await mmProvider.getBlockNumber();
-          events = await tryQuery(mmProvider, Math.max(0, currentBlock - 200_000), currentBlock);
-        }
-      }
-      const allAddresses = events.map((e: any) => (e.args?.[0] ?? e.args?.user) as string).filter(Boolean).reverse();
-      const total = allAddresses.length;
-      const referrals = allAddresses.slice(offset, offset + limit);
+      const provider = getDirectProvider();
+      const contract = getMvaultContract(provider);
+      const result = await contract.getDirectReferralsPaginated(account, offset, limit);
+      const referrals: string[] = Array.from(result.referrals ?? result[0] ?? []);
+      const total: number = Number(result.total ?? result[1] ?? 0);
       return { referrals, total };
     } catch (err) {
       console.error("getDirectReferrals error:", err);
       return { referrals: [], total: 0 };
     }
-  }, [account, getProvider]);
+  }, [account]);
 
   // ── Transactions (from on-chain events) ────────────────────────────────────
 
