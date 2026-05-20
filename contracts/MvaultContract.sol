@@ -139,11 +139,12 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
     // ── Transaction History (on-chain) ────────────────────────────────────────
     // txType constants
-    uint8 internal constant TX_ACTIVATION     = 0;
-    uint8 internal constant TX_LEVEL_INCOME   = 1;
-    uint8 internal constant TX_LEVEL_MISSED   = 2;
-    uint8 internal constant TX_PLACEMENT_INCOME = 3;
-    uint8 internal constant TX_SELL_MVT       = 5;
+    uint8 internal constant TX_ACTIVATION        = 0;
+    uint8 internal constant TX_LEVEL_INCOME      = 1;
+    uint8 internal constant TX_LEVEL_MISSED      = 2;
+    uint8 internal constant TX_PLACEMENT_INCOME  = 3;
+    uint8 internal constant TX_PLACEMENT_MISSED  = 4;
+    uint8 internal constant TX_SELL_MVT          = 5;
     uint8 internal constant TX_BTC_CREDITED   = 6;
     uint8 internal constant TX_USDT_WITHDRAW  = 7;
     uint8 internal constant TX_REACTIVATION   = 15;
@@ -1100,6 +1101,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
                     _recordTx(cur, TX_PLACEMENT_INCOME, share, lvl, from);
                 } else {
                     adminPool += share;
+                    if (users[cur].isRegistered) {
+                        _recordTx(cur, TX_PLACEMENT_MISSED, share, lvl, from);
+                    }
                 }
             }
             cur = users[cur].binaryParent;

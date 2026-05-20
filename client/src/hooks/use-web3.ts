@@ -432,8 +432,13 @@ export function useWeb3() {
                return `Level ${lvl}${short ? ` from ${short}` : ""}`;
              }},
         2:  { type: "Level Income Missed",  isIncome: false, currency: "MVT",  detail: (r) => `Level ${Number(r.level)} — need more directs` },
-        3:  { type: "Binary Income",        isIncome: true,  currency: "MVT",  detail: ()  => "Binary pairs matched" },
-        4:  { type: "Power Leg Income",     isIncome: true,  currency: "MVT",  detail: ()  => "Power leg distribution" },
+        3:  { type: "Placement Income",        isIncome: true,  currency: "MVT",  detail: (r) => {
+               const lvl = Number(r.level);
+               const addr = r.addr as string;
+               const short = addr && addr !== "0x0000000000000000000000000000000000000000" ? `${addr.slice(0,6)}...${addr.slice(-4)}` : "";
+               return `Level ${lvl} placement${short ? ` from ${short}` : ""}`;
+             }},
+        4:  { type: "Placement Missed",      isIncome: false, currency: "MVT",  detail: (r) => `Level ${Number(r.level)} — need more directs` },
         5:  { type: "Sell MVT",             isIncome: false, currency: "USDT", detail: ()  => "MVT sold for USDT" },
         6:  { type: "BTC Pool Credited",    isIncome: true,  currency: "USDT", detail: ()  => "10% of sell → BTC pool" },
         7:  { type: "Withdrawal",           isIncome: false, currency: "USDT", detail: ()  => "USDT withdrawn to wallet" },

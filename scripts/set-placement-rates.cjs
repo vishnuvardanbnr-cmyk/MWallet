@@ -1,6 +1,6 @@
 const { ethers } = require("hardhat");
 
-const MVAULT = "0x9C81D20E16844566788284C545C6FB191113eB83";
+const MVAULT = "0x02C090edDcDb8fDE8fD72CF271ab5Bf7E2f65D72";
 
 // L1=5% L2-3=2% L4=1% L5-12=0.5% L13-20=0.4% L21-28=0.3% L29-30=0.2%
 const RATES = [

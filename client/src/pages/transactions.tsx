@@ -58,8 +58,8 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
       case "BTC Pool Credited":   return Coins;
       case "Level Income":        return Users;
       case "Level Income Missed": return Ban;
-      case "Binary Income":       return GitBranch;
-      case "Power Leg Income":    return Zap;
+      case "Placement Income":    return GitBranch;
+      case "Placement Missed":    return Ban;
       case "Rebirth":             return Repeat2;
       case "Board Entry":         return Star;
       case "Board Reward":        return Trophy;
@@ -81,8 +81,8 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
       case "BTC Pool Credited":   return { text: "text-amber-300",   bg: "bg-amber-600/10",   border: "border-amber-600/10" };
       case "Level Income":        return { text: "text-yellow-300",  bg: "bg-yellow-600/10",  border: "border-yellow-600/10" };
       case "Level Income Missed": return { text: "text-orange-400",  bg: "bg-orange-500/10",  border: "border-orange-500/10" };
-      case "Binary Income":       return { text: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/10" };
-      case "Power Leg Income":    return { text: "text-violet-400",  bg: "bg-violet-500/10",  border: "border-violet-500/10" };
+      case "Placement Income":    return { text: "text-cyan-400",    bg: "bg-cyan-500/10",    border: "border-cyan-500/10" };
+      case "Placement Missed":    return { text: "text-orange-400",  bg: "bg-orange-500/10",  border: "border-orange-500/10" };
       case "Rebirth":             return { text: "text-sky-400",     bg: "bg-sky-500/10",     border: "border-sky-500/10" };
       case "Board Entry":         return { text: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/10" };
       case "Board Reward":        return { text: "text-yellow-300",  bg: "bg-yellow-600/10",  border: "border-yellow-600/10" };
