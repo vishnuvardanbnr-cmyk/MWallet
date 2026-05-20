@@ -14,10 +14,10 @@ interface IncomeProps {
 }
 
 function fmtVol(wei: bigint): string {
-  const val = parseFloat(ethers.formatUnits(wei, 18));
-  if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(2)}M`;
-  if (val >= 1_000) return `$${(val / 1_000).toFixed(1)}K`;
-  return `$${val.toFixed(2)}`;
+  const val = Number(wei) / 1e18;
+  if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(2)}M`;
+  if (val >= 1_000) return `${(val / 1_000).toFixed(1)}K`;
+  return val.toFixed(2);
 }
 
 
@@ -32,14 +32,15 @@ function usdFmt(mvt: bigint, price: bigint) {
   return `$${(mvtNum * priceNum).toFixed(2)}`;
 }
 
-// 30 placement levels: rate (% of grossMvt), qualification = ceil(level/3) × refsPerGroup
-// Default refsPerGroup = 1, so level 1-3 need 1 direct, 4-6 need 2, 7-9 need 3, etc.
-const PLACEMENT_RATES: { level: number; pct: string; dirReq: number }[] = Array.from({ length: 30 }, (_, i) => {
-  const level = i + 1;
-  const dirReq = Math.ceil(level / 3);
-  const pct = level <= 3 ? "2.0%" : level <= 6 ? "1.0%" : level <= 9 ? "0.75%" : level <= 12 ? "0.5%" : level <= 15 ? "0.4%" : level <= 18 ? "0.35%" : level <= 21 ? "0.3%" : level <= 24 ? "0.25%" : level <= 27 ? "0.2%" : "0.15%";
-  return { level, pct, dirReq };
-});
+// 30 placement levels — exact rates as set on-chain via setPlacementRates
+// L1=5% L2-3=2% L4=1% L5-12=0.5% L13-20=0.4% L21-28=0.3% L29-30=0.2%  (total 20% of grossMvt)
+// Qualification: ceil(level/3) directs required (refsPerGroup=1)
+const RAW_RATES = [500,200,200,100,50,50,50,50,50,50,50,50,40,40,40,40,40,40,40,40,30,30,30,30,30,30,30,30,20,20];
+const PLACEMENT_RATES: { level: number; pct: string; dirReq: number }[] = RAW_RATES.map((bp, i) => ({
+  level: i + 1,
+  pct: `${(bp / 100).toFixed(bp % 100 === 0 ? 0 : 1)}%`,
+  dirReq: Math.ceil((i + 1) / 3),
+}));
 
 export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmount, walletAddress }: IncomeProps) {
   const [, setLocation] = useLocation();

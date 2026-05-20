@@ -85,7 +85,7 @@ MetaMask is forced to add/update BSC testnet via `wallet_addEthereumChain` with 
 ## Placement Income Architecture (on-chain, instant)
 Placement income replaced binary/power-leg distribution. It fires inside `_distributePlacementIncome()` at activation time:
 - 20% of `grossMvt` split across 30 binary upline levels
-- Level rates: L1–3 = 2%, L4–6 = 1%, tapering to L28–30 = 0.15%
+- Level rates: L1=5%, L2–3=2%, L4=1%, L5–12=0.5%, L13–20=0.4%, L21–28=0.3%, L29–30=0.2%
 - Qualification: `ceil(level/3) × refsPerGroup` direct referrals (default `refsPerGroup=1`)
 - Unfilled slots go to `communityPool` (10% of grossMvt also accumulates there)
 - Admin: `setPlacementRates(uint256[30])`, `setRefsPerGroup(uint8)`, `withdrawCommunityPool(address,uint256)`

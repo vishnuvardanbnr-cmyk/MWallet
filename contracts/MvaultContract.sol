@@ -241,11 +241,13 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (_usdt == address(0) || _mvaultToken == address(0)) revert ZeroAddress();
         usdtToken   = IERC20(_usdt);
         mvaultToken = IMvaultToken(_mvaultToken);
-        // Placement rates (bp/10000): L1=5% L2=3% L3=2% L4-6=1% L7-10=0.5% L11-30=0.25%
-        placementRates[0] = 500; placementRates[1] = 300; placementRates[2] = 200;
-        for (uint8 i = 3; i < 6;  i++) placementRates[i] = 100;
-        for (uint8 i = 6; i < 10; i++) placementRates[i] = 50;
-        for (uint8 i = 10; i < 30; i++) placementRates[i] = 25;
+        // Placement rates (bp/10000): L1=5% L2-3=2% L4=1% L5-12=0.5% L13-20=0.4% L21-28=0.3% L29-30=0.2%
+        placementRates[0] = 500; placementRates[1] = 200; placementRates[2] = 200;
+        placementRates[3] = 100;
+        for (uint8 i = 4; i < 12; i++) placementRates[i] = 50;
+        for (uint8 i = 12; i < 20; i++) placementRates[i] = 40;
+        for (uint8 i = 20; i < 28; i++) placementRates[i] = 30;
+        placementRates[28] = 20; placementRates[29] = 20;
         refsPerGroup = 1;
     }
 
