@@ -1,16 +1,35 @@
-import { GitBranch, ArrowLeft, ArrowDownLeft, ArrowDownRight, Users, Zap, TrendingUp, Info, RotateCcw } from "lucide-react";
+import { GitBranch, ArrowLeft, Users, CheckCircle2, XCircle, TrendingUp, Network, Layers } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useLocation } from "wouter";
 import { ethers } from "ethers";
-import { formatTokenAmount } from "@/lib/contract";
 import type { UserInfo, MvtPrice, BinaryPairs } from "@/hooks/use-web3";
 
-function fmtVol(wei: bigint): string {
+// Placement rates per level (in basis points, same as contract)
+const PLACEMENT_RATES_BPS = [
+  500,  // L1  = 5%
+  200, 200,  // L2-3 = 2%
+  100,  // L4  = 1%
+  50, 50, 50, 50, 50, 50, 50, 50,  // L5-12 = 0.5%
+  40, 40, 40, 40, 40, 40, 40, 40,  // L13-20 = 0.4%
+  30, 30, 30, 30, 30, 30, 30, 30,  // L21-28 = 0.3%
+  20, 20,  // L29-30 = 0.2%
+];
+
+function requiredDirects(level: number): number {
+  return Math.ceil(level / 3);
+}
+
+function fmtMvt(wei: bigint): string {
   const val = parseFloat(ethers.formatUnits(wei, 18));
-  if (val >= 1_000_000) return `$${(val / 1_000_000).toFixed(2)}M`;
-  if (val >= 1_000) return `$${(val / 1_000).toFixed(1)}K`;
-  return `$${val.toFixed(2)}`;
+  if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(2)}M MVT`;
+  if (val >= 1_000)     return `${(val / 1_000).toFixed(1)}K MVT`;
+  return `${val.toFixed(2)} MVT`;
+}
+
+function shortenAddr(addr: string): string {
+  if (!addr || addr === "0x0000000000000000000000000000000000000000") return "—";
+  return `${addr.slice(0, 6)}…${addr.slice(-4)}`;
 }
 
 interface BinaryDetailsProps {
@@ -20,127 +39,162 @@ interface BinaryDetailsProps {
   formatAmount: (val: bigint) => string;
 }
 
-export default function BinaryDetails({ userInfo, mvtPrice, binaryPairs, formatAmount }: BinaryDetailsProps) {
+export default function BinaryDetails({ userInfo }: BinaryDetailsProps) {
   const [, navigate] = useLocation();
 
-  const leftVol = userInfo.leftSubUsers;
-  const rightVol = userInfo.rightSubUsers;
-  const leftSubVol = fmtVol(binaryPairs.currentPairs);   // leftSubVolume in MVT wei
-  const rightSubVol = fmtVol(binaryPairs.newPairs);       // rightSubVolume in MVT wei
-  const rebirthCount = Number(userInfo.rebirthCount);
-
-  const stronger = leftVol >= rightVol ? "left" : "right";
-  const weaker = leftVol >= rightVol ? "right" : "left";
-  const strongDisplay = fmtVol(stronger === "left" ? leftVol : rightVol);
-  const weakDisplay = fmtVol(weaker === "left" ? leftVol : rightVol);
+  const directs = Number(userInfo.directCount);
+  const qualifiedLevels = PLACEMENT_RATES_BPS.filter((_, i) => directs >= requiredDirects(i + 1)).length;
+  const nextUnlock = PLACEMENT_RATES_BPS.findIndex((_, i) => directs < requiredDirects(i + 1));
+  const nextRequiredDirects = nextUnlock >= 0 ? requiredDirects(nextUnlock + 1) : null;
+  const leftVol = userInfo.leftSubUsers ?? 0n;
+  const rightVol = userInfo.rightSubUsers ?? 0n;
+  const hasLeft  = userInfo.leftChild  && userInfo.leftChild  !== "0x0000000000000000000000000000000000000000";
+  const hasRight = userInfo.rightChild && userInfo.rightChild !== "0x0000000000000000000000000000000000000000";
 
   return (
     <div className="p-4 sm:p-6 space-y-6 relative z-10">
+      {/* Header */}
       <div className="flex items-center gap-3 slide-in">
-        <button onClick={() => navigate("/")} className="p-2 rounded-lg hover:bg-white/[0.04] text-muted-foreground hover:text-foreground transition-all" data-testid="button-back">
+        <button
+          onClick={() => navigate("/")}
+          className="p-2 rounded-lg hover:bg-white/[0.04] text-muted-foreground hover:text-foreground transition-all"
+          data-testid="button-back"
+        >
           <ArrowLeft className="h-4 w-4" />
         </button>
         <div>
           <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }}>
-            <span className="gradient-text">Binary Details</span>
+            <span className="gradient-text">Placement Income</span>
           </h1>
-          <p className="text-sm text-muted-foreground">Your binary network performance</p>
+          <p className="text-sm text-muted-foreground">Your 30-level binary placement performance</p>
         </div>
       </div>
 
-      {/* Main Stats Grid */}
-      <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 slide-in" style={{ animationDelay: "0.04s" }}>
-        <div className="glass-card rounded-2xl p-4 text-center" data-testid="card-left-team">
-          <ArrowDownLeft className="h-5 w-5 mx-auto text-blue-400 mb-2" />
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Left Team</p>
-          <p className="text-2xl font-bold text-blue-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-left-count">{fmtVol(leftVol)}</p>
-          <p className="text-[10px] text-muted-foreground">USDT vol</p>
-        </div>
-        <div className="glass-card rounded-2xl p-4 text-center" data-testid="card-direct-count">
-          <GitBranch className="h-5 w-5 mx-auto text-emerald-400 mb-2" />
+      {/* Top stats */}
+      <div className="grid grid-cols-3 gap-3 slide-in" style={{ animationDelay: "0.04s" }}>
+        <div className="glass-card rounded-2xl p-4 text-center" data-testid="card-direct-refs">
+          <Users className="h-5 w-5 mx-auto text-emerald-400 mb-2" />
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Direct Refs</p>
-          <p className="text-2xl font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-direct-count">{Number(userInfo.directCount)}</p>
-          <p className="text-[10px] text-muted-foreground">direct referrals</p>
+          <p className="text-2xl font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-direct-count">{directs}</p>
+          <p className="text-[10px] text-muted-foreground">referrals</p>
         </div>
-        <div className="glass-card rounded-2xl p-4 text-center col-span-2 sm:col-span-1" data-testid="card-right-team">
-          <ArrowDownRight className="h-5 w-5 mx-auto text-purple-400 mb-2" />
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Right Team</p>
-          <p className="text-2xl font-bold text-purple-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-right-count">{fmtVol(rightVol)}</p>
-          <p className="text-[10px] text-muted-foreground">USDT vol</p>
+        <div className="glass-card rounded-2xl p-4 text-center" data-testid="card-qualified-levels">
+          <CheckCircle2 className="h-5 w-5 mx-auto text-cyan-400 mb-2" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Qualified</p>
+          <p className="text-2xl font-bold text-cyan-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-qualified-levels">{qualifiedLevels}<span className="text-sm text-muted-foreground">/30</span></p>
+          <p className="text-[10px] text-muted-foreground">levels</p>
         </div>
-      </div>
-
-      {/* Placement volumes */}
-      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.05s" }} data-testid="card-placement-volumes">
-        <h2 className="text-sm font-bold mb-3" style={{ fontFamily: "var(--font-display)" }}>
-          <span className="gradient-text">Cumulative Placement Volumes</span>
-        </h2>
-        <div className="grid grid-cols-2 gap-4">
-          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] text-center" data-testid="card-left-vol">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Left Sub-Volume</p>
-            <p className="text-xl font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-left-vol">{leftSubVol}</p>
-            <p className="text-[10px] text-muted-foreground">MVT in left tree</p>
-          </div>
-          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] text-center" data-testid="card-right-vol">
-            <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Right Sub-Volume</p>
-            <p className="text-xl font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-right-vol">{rightSubVol}</p>
-            <p className="text-[10px] text-muted-foreground">MVT in right tree</p>
-          </div>
-        </div>
-        <div className="mt-3 flex items-start gap-2 p-2.5 rounded-xl bg-amber-500/[0.05] border border-amber-500/10">
-          <Info className="h-3.5 w-3.5 text-amber-400/70 shrink-0 mt-0.5" />
-          <p className="text-[10px] text-muted-foreground">Placement income (20% of grossMvt) is distributed across 30 binary levels instantly when each new user activates in your network.</p>
+        <div className="glass-card rounded-2xl p-4 text-center" data-testid="card-binary-side">
+          <GitBranch className="h-5 w-5 mx-auto text-violet-400 mb-2" />
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">My Side</p>
+          <p className="text-2xl font-bold text-violet-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-binary-side">
+            {userInfo.placedLeft ? "L" : "R"}
+          </p>
+          <p className="text-[10px] text-muted-foreground">{userInfo.placedLeft ? "left leg" : "right leg"}</p>
         </div>
       </div>
 
-      {/* Sub-volumes */}
-      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.06s" }} data-testid="card-sub-volumes">
-        <div className="flex items-center gap-2.5 mb-3">
-          <div className="h-9 w-9 rounded-xl bg-amber-500/15 flex items-center justify-center">
-            <Zap className="h-4 w-4 text-amber-400" />
+      {/* Next unlock hint */}
+      {nextRequiredDirects && (
+        <div className="flex items-center gap-2.5 p-3 rounded-xl bg-amber-500/[0.06] border border-amber-500/10 slide-in" style={{ animationDelay: "0.05s" }} data-testid="card-next-unlock">
+          <TrendingUp className="h-4 w-4 text-amber-400 shrink-0" />
+          <p className="text-xs text-muted-foreground">
+            <span className="text-amber-400 font-medium">{nextRequiredDirects - directs} more direct{nextRequiredDirects - directs !== 1 ? "s" : ""}</span> to unlock level {nextUnlock + 1} placement income
+          </p>
+        </div>
+      )}
+      {qualifiedLevels === 30 && (
+        <div className="flex items-center gap-2.5 p-3 rounded-xl bg-emerald-500/[0.06] border border-emerald-500/10 slide-in" style={{ animationDelay: "0.05s" }}>
+          <CheckCircle2 className="h-4 w-4 text-emerald-400 shrink-0" />
+          <p className="text-xs text-emerald-400 font-medium">You qualify for all 30 placement levels!</p>
+        </div>
+      )}
+
+      {/* Level Qualification Table */}
+      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.06s" }} data-testid="card-level-table">
+        <div className="flex items-center gap-2.5 mb-4">
+          <div className="h-9 w-9 rounded-xl bg-cyan-500/15 flex items-center justify-center">
+            <Layers className="h-4 w-4 text-cyan-400" />
           </div>
           <div>
-            <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Tree Volumes (MVT)</h2>
-            <p className="text-[10px] text-muted-foreground">Cumulative MVT volume flowing through each leg</p>
+            <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Level Qualification</h2>
+            <p className="text-[10px] text-muted-foreground">You need ceil(level÷3) direct referrals per level</p>
           </div>
         </div>
-        <div className="grid grid-cols-2 gap-3">
-          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-            <p className="text-[10px] text-muted-foreground mb-1">Left Sub-Volume</p>
-            <p className="text-lg font-bold text-blue-400">{leftSubVol}</p>
-          </div>
-          <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-            <p className="text-[10px] text-muted-foreground mb-1">Right Sub-Volume</p>
-            <p className="text-lg font-bold text-purple-400">{rightSubVol}</p>
-          </div>
+
+        <div className="space-y-1.5">
+          {PLACEMENT_RATES_BPS.map((bps, i) => {
+            const lvl = i + 1;
+            const need = requiredDirects(lvl);
+            const qualified = directs >= need;
+            const rate = (bps / 100).toFixed(1);
+            return (
+              <div
+                key={lvl}
+                className={`flex items-center gap-2 px-3 py-2 rounded-lg transition-all ${qualified ? "bg-cyan-500/[0.06] border border-cyan-500/10" : "bg-white/[0.015] border border-white/[0.04]"}`}
+                data-testid={`row-level-${lvl}`}
+              >
+                <span className={`text-[10px] font-mono w-6 shrink-0 ${qualified ? "text-cyan-400" : "text-muted-foreground"}`}>L{lvl}</span>
+                <div className="flex-1 flex items-center gap-1.5">
+                  <span className={`text-[11px] font-bold ${qualified ? "text-cyan-300" : "text-muted-foreground"}`}>{rate}%</span>
+                  <span className="text-[9px] text-muted-foreground">of grossMVT</span>
+                </div>
+                <span className="text-[9px] text-muted-foreground mr-1">{need} direct{need !== 1 ? "s" : ""}</span>
+                {qualified
+                  ? <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+                  : <XCircle    className="h-3.5 w-3.5 text-red-400/50 shrink-0" />
+                }
+              </div>
+            );
+          })}
         </div>
-        <div className="mt-3 p-3 rounded-xl bg-amber-500/[0.06] border border-amber-500/10">
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            Sub-volumes accumulate as users activate under each leg. These values are used to determine which arm is stronger for placement tracking.
+
+        <div className="mt-3 px-3 py-2 rounded-lg bg-white/[0.02] border border-white/[0.04]">
+          <p className="text-[10px] text-muted-foreground">
+            Total qualified: <span className="text-cyan-400 font-medium">{qualifiedLevels}/30 levels</span> — capturing{" "}
+            <span className="text-cyan-400 font-medium">
+              {(PLACEMENT_RATES_BPS.filter((_, i) => directs >= requiredDirects(i + 1)).reduce((s, b) => s + b, 0) / 100).toFixed(1)}%
+            </span>{" "}
+            of the 20% placement pool
           </p>
         </div>
       </div>
 
-      {/* Rebirth info */}
-      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.07s" }} data-testid="card-rebirth-info">
-        <div className="flex items-center gap-2.5 mb-3">
-          <div className="h-9 w-9 rounded-xl bg-purple-500/15 flex items-center justify-center">
-            <RotateCcw className="h-4 w-4 text-purple-400" />
+      {/* Binary Structure */}
+      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.07s" }} data-testid="card-binary-structure">
+        <div className="flex items-center gap-2.5 mb-4">
+          <div className="h-9 w-9 rounded-xl bg-violet-500/15 flex items-center justify-center">
+            <Network className="h-4 w-4 text-violet-400" />
           </div>
           <div>
-            <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Rebirth Counter</h2>
-            <p className="text-[10px] text-muted-foreground">Each rebirth resets income limit to $390</p>
+            <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Binary Structure</h2>
+            <p className="text-[10px] text-muted-foreground">Your position in the placement tree</p>
           </div>
-          <Badge variant="outline" className="ml-auto text-[9px] border-purple-500/30 text-purple-400">
-            {rebirthCount} rebirth{rebirthCount !== 1 ? "s" : ""}
-          </Badge>
         </div>
-        <div className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05]">
-          <p className="text-xs text-muted-foreground leading-relaxed">
-            Rebirth Pool: <span className="text-purple-400 font-medium">${parseFloat(formatTokenAmount(userInfo.rebirthPool, 18)).toFixed(2)} USDT</span>.
-            When pool reaches $130, the admin can trigger rebirth — creating a sub-account for you in the binary tree.
-            Your income limit resets to $390 and you start earning again.
-          </p>
+
+        <div className="space-y-2">
+          <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]" data-testid="row-binary-parent">
+            <span className="text-[11px] text-muted-foreground">Binary Parent</span>
+            <span className="text-[11px] font-mono text-foreground">{shortenAddr(userInfo.binaryParent)}</span>
+          </div>
+          <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]" data-testid="row-placed-side">
+            <span className="text-[11px] text-muted-foreground">Placed Side</span>
+            <Badge variant="outline" className={`text-[9px] ${userInfo.placedLeft ? "border-blue-500/30 text-blue-400" : "border-purple-500/30 text-purple-400"}`}>
+              {userInfo.placedLeft ? "Left Leg" : "Right Leg"}
+            </Badge>
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="flex flex-col p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]" data-testid="row-left-child">
+              <span className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Left Child</span>
+              <span className={`text-[11px] font-mono ${hasLeft ? "text-blue-400" : "text-muted-foreground/40"}`}>{hasLeft ? shortenAddr(userInfo.leftChild) : "Empty"}</span>
+              {leftVol > 0n && <span className="text-[9px] text-muted-foreground mt-1">{fmtMvt(leftVol)} vol</span>}
+            </div>
+            <div className="flex flex-col p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]" data-testid="row-right-child">
+              <span className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Right Child</span>
+              <span className={`text-[11px] font-mono ${hasRight ? "text-purple-400" : "text-muted-foreground/40"}`}>{hasRight ? shortenAddr(userInfo.rightChild) : "Empty"}</span>
+              {rightVol > 0n && <span className="text-[9px] text-muted-foreground mt-1">{fmtMvt(rightVol)} vol</span>}
+            </div>
+          </div>
         </div>
       </div>
 
@@ -151,10 +205,10 @@ export default function BinaryDetails({ userInfo, mvtPrice, binaryPairs, formatA
         </h2>
         <div className="space-y-3">
           {[
-            { icon: Users, title: "20% of Activation", desc: "20% of each activation's gross MVT is split across 30 binary upline levels — paid instantly at activation time.", color: "text-amber-400 bg-amber-500/10" },
-            { icon: GitBranch, title: "30 Levels Deep", desc: "Each level receives a share of the 20% pool. Levels 1–3 get 2%, levels 4–6 get 1%, and rates taper down to level 30.", color: "text-blue-400 bg-blue-500/10" },
-            { icon: Zap, title: "Direct Referral Qualification", desc: "You need ceil(level/3) direct referrals to earn from that level. Level 1–3 needs 1 direct, 4–6 needs 2, etc.", color: "text-yellow-300 bg-yellow-600/10" },
-            { icon: TrendingUp, title: "Instant & On-Chain", desc: "No off-chain distributor or claim needed. Income is credited directly to your MVT balance inside the same transaction.", color: "text-emerald-400 bg-emerald-500/10" },
+            { icon: Users,        title: "20% of Each Activation",      desc: "When anyone activates anywhere below you in the binary tree, 20% of their gross MVT is split across their 30 binary uplines — you included.",                        color: "text-amber-400 bg-amber-500/10" },
+            { icon: GitBranch,    title: "30 Levels Deep",               desc: "Level 1 earns 5%, levels 2–3 earn 2%, level 4 earns 1%, levels 5–12 earn 0.5%, and rates taper down to 0.2% at levels 29–30.",                                      color: "text-cyan-400 bg-cyan-500/10" },
+            { icon: CheckCircle2, title: "Direct Referral Qualification", desc: "You need ⌈level÷3⌉ direct referrals to earn from that level. No directs = only level 0 qualifies. Each 3 new directs unlock 3 more levels.",                      color: "text-emerald-400 bg-emerald-500/10" },
+            { icon: TrendingUp,   title: "Instant & On-Chain",           desc: "Income is credited directly to your MVT balance inside the same activation transaction. No claim button, no off-chain step — it just arrives.",                       color: "text-violet-400 bg-violet-500/10" },
           ].map(({ icon: Icon, title, desc, color }) => (
             <div key={title} className="flex items-start gap-3">
               <div className={`w-8 h-8 rounded-lg ${color} flex items-center justify-center shrink-0`}>
