@@ -261,7 +261,7 @@ export default function Dashboard({
                 You've earned your full ${incomeCap.toFixed(0)} cap. {pkgPriceNum <= 55 ? "Upgrade to Pro ($130) to unlock a $390 cap, or reactivate at $55 to reset your limit." : "Reactivate your $130 package to reset your income limit."}
               </p>
               <button
-                onClick={() => setLocation("/activate")}
+                onClick={() => setLocation("/reactivate")}
                 className="mt-2.5 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-orange-500/15 border border-orange-500/25 text-sm font-semibold text-orange-300 hover:bg-orange-500/20 transition-all"
                 data-testid="button-upgrade-reactivate"
               >

@@ -32,6 +32,7 @@ import RegisterForPage from "@/pages/register-for";
 import RebirthAccountPage from "@/pages/rebirth-account";
 import SellTokensPage from "@/pages/sell-tokens";
 import RankPage from "@/pages/rank";
+import ReactivatePage from "@/pages/reactivate";
 
 function ScrollToTop() {
   const [location, setLocation] = useLocation();
@@ -370,6 +371,16 @@ function App() {
                       <RankPage
                         userInfo={web3.userInfo!}
                         account={web3.account!}
+                      />
+                    </Route>
+                    <Route path="/reactivate">
+                      <ReactivatePage
+                        account={web3.account!}
+                        userInfo={web3.userInfo!}
+                        tokenDecimals={web3.tokenDecimals}
+                        reactivateWithWallet={web3.reactivateWithWallet}
+                        reactivateFromIncomeWallet={web3.reactivateFromIncomeWallet}
+                        fetchUserData={web3.fetchUserData}
                       />
                     </Route>
                     <Route path="/store">

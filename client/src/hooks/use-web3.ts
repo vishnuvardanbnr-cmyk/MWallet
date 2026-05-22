@@ -540,6 +540,28 @@ export function useWeb3() {
     if (account) notifyActivation(account);
   }, [getSigner, refreshAfterTx, account, notifyActivation]);
 
+  const reactivateWithWallet = useCallback(async (pkg: number) => {
+    const signer = await getSigner();
+    const contract = getMvaultContract(signer);
+    const price = pkg === 1
+      ? ethers.parseUnits("55", 18)
+      : ethers.parseUnits("130", 18);
+    const usdtContract = getTokenContract(signer);
+    const approveTx = await usdtContract.approve(MVAULT_CONTRACT_ADDRESS, price);
+    await approveTx.wait();
+    const tx = await contract.reactivate(pkg);
+    await tx.wait();
+    await refreshAfterTx();
+  }, [getSigner, refreshAfterTx]);
+
+  const reactivateFromIncomeWallet = useCallback(async (pkg: number) => {
+    const signer = await getSigner();
+    const contract = getMvaultContract(signer);
+    const tx = await contract.reactivateFromBalance(pkg);
+    await tx.wait();
+    await refreshAfterTx();
+  }, [getSigner, refreshAfterTx]);
+
   const claimBinaryIncome = useCallback(async () => {}, []);
   const reactivatePackage = useCallback(async (_pkg: number) => {}, []);
   const repurchase = useCallback(async () => {}, []);
@@ -718,7 +740,7 @@ export function useWeb3() {
     connect, register, approveToken, activatePackage, activateFromBalance,
     sellMvt, withdrawFunds, withdrawBtcPool, rebirth, claimRebirthBalance,
     enterBoardPool, claimBinaryIncome, saveProfileOnChain,
-    reactivatePackage, repurchase,
+    reactivatePackage, repurchase, reactivateWithWallet, reactivateFromIncomeWallet,
     getDirectReferrals, getTokenBalance,
     getTransactionsFromContract, getBinaryFlushedEvents, fetchUserData,
     stakeUsdt, unstakePosition, convertStakeToLocked, getActiveStakesOnChain, registerAndActivateFor,
