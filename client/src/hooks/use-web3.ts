@@ -652,6 +652,19 @@ export function useWeb3() {
     }
 
     const amountBn = ethers.parseUnits(usdtAmount, 18);
+
+    // Simulate first via staticCall to get a decoded revert reason before MetaMask opens
+    try {
+      if (useContractBalance) {
+        await contract.stakeFromBalance.staticCall(amountBn, isLocked);
+      } else {
+        await contract.stake.staticCall(amountBn, isLocked);
+      }
+    } catch (simErr: any) {
+      // Re-throw the original error so decodeContractError() in the UI can decode errorName
+      throw simErr;
+    }
+
     if (useContractBalance) {
       // Uses USDT already in the contract — no wallet approval needed
       const tx = await contract.stakeFromBalance(amountBn, isLocked, { gasLimit: 600_000 });
