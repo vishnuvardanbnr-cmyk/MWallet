@@ -653,6 +653,19 @@ export function useWeb3() {
 
     const amountBn = ethers.parseUnits(usdtAmount, 18);
 
+    if (!useContractBalance) {
+      // Ensure USDT is approved — auto-approve if allowance is insufficient
+      const usdtContract = new ethers.Contract(TOKEN_ADDRESS, [
+        "function allowance(address,address) view returns (uint256)",
+        "function approve(address,uint256) returns (bool)",
+      ], signer);
+      const currentAllowance = await usdtContract.allowance(signerAddress, MVAULT_CONTRACT_ADDRESS);
+      if (currentAllowance < amountBn) {
+        const approveTx = await usdtContract.approve(MVAULT_CONTRACT_ADDRESS, ethers.MaxUint256);
+        await approveTx.wait();
+      }
+    }
+
     // Simulate first via staticCall to get a decoded revert reason before MetaMask opens
     try {
       if (useContractBalance) {

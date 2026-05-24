@@ -14,10 +14,10 @@ module.exports = {
   },
   networks: {
     bscTestnet: {
-      url: "https://data-seed-prebsc-1-s1.binance.org:8545/",
+      url: "https://bsc-testnet-rpc.publicnode.com",
       chainId: 97,
       accounts: DEPLOYER_KEY ? [DEPLOYER_KEY] : [],
-      gasPrice: 200000000,
+      gasPrice: 1000000000,
     },
     bscMainnet: {
       url: "https://bsc-dataseed.binance.org/",
