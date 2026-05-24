@@ -3,7 +3,7 @@ import { ethers } from "ethers";
 import { Loader2, CheckCircle, Copy, ChevronRight, Link2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { getContract, shortenAddress } from "@/lib/contract";
+import { getMvaultContract, shortenAddress } from "@/lib/contract";
 import type { UserInfo } from "@/hooks/use-web3";
 
 interface TreeNode {
@@ -45,7 +45,7 @@ export default function DeepPlacementPage({ userInfo, account }: DeepPlacementPa
     setSelected(null);
     try {
       const prov = new ethers.BrowserProvider((window as any).ethereum);
-      const con = getContract(prov);
+      const con = getMvaultContract(prov);
       const queue = [rootAddr];
       const result: TreeNode[] = [];
 
