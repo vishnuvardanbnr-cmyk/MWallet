@@ -28,11 +28,10 @@ interface Props {
   tokenDecimals?: number;
 }
 
-// New 10-level distribution: rates as % of grossMvt (sums to 20%)
+// Distribution: rates as % of grossMvt (sums to 20%)
 const STAKE_LEVEL_RATES    = [10, 5, 2, 1, 0.5, 0.5, 0.3, 0.3, 0.2, 0.2];
-const STAKE_USER_PCT       = 60;
-const STAKE_ADMIN_PCT      = 5;
-const STAKE_LIQUIDITY_PCT  = 15;
+const STAKE_USER_PCT       = 70;
+const STAKE_ADMIN_PCT      = 10;
 const LOCK_DURATION_S      = 300 * 24 * 60 * 60; // 300 days in seconds
 const FLEX_CAP_MULT        = 2;
 const LOCKED_FEE_RATES     = [5, 2, 1, 1, 1];
@@ -125,14 +124,13 @@ export default function PaidStakingPage({
   const contractBal  = parseFloat(formatTokenAmount(contractUsdt, tokenDecimals));
   const activeBal    = stakeSource === "balance" ? contractBal : walletBal;
 
-  // New distribution: grossMvt = 90% of theoretical; user gets 60% of grossMvt
-  // grossMvt ≈ usdtAmt / buyPrice * 0.9 (contract mints at bonding curve)
+  // grossMvt = 90% of theoretical (bonding curve mints at 90%)
+  // Split: 20% level income → 10 uplines, 10% admin pool, 70% user staked
   const grossMvt     = buyPrice > 0 ? (usdtAmt / buyPrice) * 0.9 : 0;
   const levelIncomes = STAKE_LEVEL_RATES.map(r => (grossMvt * r) / 100);
   const totalLevPct  = STAKE_LEVEL_RATES.reduce((a, b) => a + b, 0); // 20% of grossMvt
-  const userMvt      = grossMvt * STAKE_USER_PCT / 100;              // 60% of grossMvt
-  const adminMvt     = grossMvt * STAKE_ADMIN_PCT / 100;             // 5% of grossMvt
-  const liquidityMvt = grossMvt * STAKE_LIQUIDITY_PCT / 100;         // 15% of grossMvt
+  const userMvt      = grossMvt * STAKE_USER_PCT / 100;              // 70% of grossMvt
+  const adminMvt     = grossMvt * STAKE_ADMIN_PCT / 100;             // 10% of grossMvt
   const estMvt       = userMvt;                                       // what user receives
 
   const amountBn      = usdtAmt > 0 ? (() => { try { return ethers.parseUnits(usdtInput || "0", 18); } catch { return 0n; } })() : 0n;
@@ -427,16 +425,12 @@ export default function PaidStakingPage({
             <div className="h-px bg-white/[0.06]" />
             <div className="space-y-1.5">
               <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Admin pool (5%)</span>
+                <span className="text-muted-foreground">Admin pool (10%)</span>
                 <span className="font-medium text-red-400/80">~{fmt(adminMvt, 4)} MVT</span>
-              </div>
-              <div className="flex justify-between text-xs">
-                <span className="text-muted-foreground">Liquidity backing (15%)</span>
-                <span className="font-medium text-blue-400/80">~{fmt(liquidityMvt, 4)} MVT</span>
               </div>
               <div className="h-px bg-white/[0.06] my-1" />
               <div className="flex justify-between text-xs font-bold">
-                <span className="text-yellow-300">You receive (60%)</span>
+                <span className="text-yellow-300">You receive (70%)</span>
                 <span className="text-yellow-300">~{fmt(estMvt, 4)} MVT</span>
               </div>
               {activeTab === "flexible" && (
