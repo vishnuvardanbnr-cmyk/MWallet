@@ -680,10 +680,10 @@ export function useWeb3() {
 
     if (useContractBalance) {
       // Uses USDT already in the contract — no wallet approval needed
-      const tx = await contract.stakeFromBalance(amountBn, isLocked, { gasLimit: 600_000 });
+      const tx = await contract.stakeFromBalance(amountBn, isLocked, { gasLimit: 1_200_000 });
       await tx.wait();
     } else {
-      const tx = await contract.stake(amountBn, isLocked, { gasLimit: 600_000 });
+      const tx = await contract.stake(amountBn, isLocked, { gasLimit: 1_200_000 });
       await tx.wait();
     }
     await refreshAfterTx();
@@ -692,7 +692,7 @@ export function useWeb3() {
   const unstakePosition = useCallback(async (stakeIndex: number) => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
-    const tx = await contract.unstake(stakeIndex);
+    const tx = await contract.unstake(stakeIndex, { gasLimit: 800_000 });
     await tx.wait();
     await refreshAfterTx();
   }, [getSigner, refreshAfterTx]);
@@ -700,7 +700,7 @@ export function useWeb3() {
   const convertStakeToLocked = useCallback(async (stakeIndex: number) => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
-    const tx = await contract.convertToLocked(stakeIndex);
+    const tx = await contract.convertToLocked(stakeIndex, { gasLimit: 200_000 });
     await tx.wait();
   }, [getSigner]);
 
