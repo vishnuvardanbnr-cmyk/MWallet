@@ -312,6 +312,7 @@ function App() {
                         formatAmount={web3.formatAmount}
                         enterBoardPool={web3.enterBoardPool}
                         account={web3.account!}
+                        fetchUserData={web3.fetchUserData}
                       />
                     </Route>
                     <Route path="/swap">

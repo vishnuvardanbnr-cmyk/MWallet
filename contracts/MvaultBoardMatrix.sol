@@ -60,6 +60,11 @@ contract MvaultBoardMatrix is Ownable, ReentrancyGuard {
     mapping(address => uint256) public boardEntryCount;
     mapping(address => uint256) public totalBoardRewardsEarned;
 
+    // Pending rewards: USDT already transferred to MvaultContract but balance not yet credited
+    // (occurs when creditBoardReward callback is blocked by MvaultContract's reentrancy guard)
+    mapping(address => uint256) public pendingBoardRewards;
+    mapping(address => uint256) public pendingBoardLevel;
+
     uint256[11] public boardPrices; // index 1–10
 
     IERC20  public immutable usdtToken;
@@ -72,6 +77,8 @@ contract MvaultBoardMatrix is Ownable, ReentrancyGuard {
     event BoardHandlerSet(address indexed mvaultContract);
     event LiquidityAddressSet(address indexed addr);
     event SystemAddressSet(address indexed addr);
+    event PendingBoardReward(address indexed user, uint256 amount, uint256 boardLevel);
+    event PendingBoardRewardSettled(address indexed user, uint256 amount);
 
     modifier onlyMvault() {
         require(msg.sender == mvaultContract || msg.sender == owner(), "NA");
@@ -212,8 +219,13 @@ contract MvaultBoardMatrix is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @dev Credit board reward. Tries callback to MvaultContract first so income
-     *      is tracked in the main contract. Falls back to direct USDT transfer.
+     * @dev Credit board reward. Transfers USDT to MvaultContract and calls the
+     *      creditBoardReward callback to update the user's withdrawable balance.
+     *
+     *      If the callback reverts (e.g. MvaultContract's reentrancy guard is locked
+     *      because we're inside enterBoardPool), the USDT is already safely in
+     *      MvaultContract and the pending amount is stored here.
+     *      Call settlePendingReward(user) once the lock is released.
      */
     function _creditReward(address _owner, uint256 _reward, uint256 _boardLevel) internal {
         if (_reward == 0) return;
@@ -221,14 +233,42 @@ contract MvaultBoardMatrix is Ownable, ReentrancyGuard {
         totalBoardRewardsEarned[_owner] += _reward;
 
         if (mvaultContract != address(0)) {
-            // Approve MvaultContract to pull the reward USDT (for the callback)
+            // Transfer USDT to MvaultContract first — this is NOT rolled back if the
+            // subsequent external call is caught by try/catch.
             usdtToken.safeTransfer(mvaultContract, _reward);
-            // Notify MvaultContract to credit the user's usdtBalance
-            IMvaultBoardCallback(mvaultContract).creditBoardReward(_owner, _reward, _boardLevel);
+
+            // Try to credit the balance via callback. If MvaultContract's nonReentrant
+            // guard is active (e.g. called from within enterBoardPool), this reverts.
+            // We catch that and record the amount as pending — the USDT is already in
+            // MvaultContract and will be credited when settlePendingReward is called.
+            try IMvaultBoardCallback(mvaultContract).creditBoardReward(_owner, _reward, _boardLevel) {
+                // success
+            } catch {
+                pendingBoardRewards[_owner] += _reward;
+                pendingBoardLevel[_owner]    = _boardLevel;
+                emit PendingBoardReward(_owner, _reward, _boardLevel);
+            }
         } else {
             // Fallback: send directly to owner's wallet
             usdtToken.safeTransfer(_owner, _reward);
         }
+    }
+
+    /**
+     * @notice Settle any pending board reward for `user`.
+     *         The USDT was already forwarded to MvaultContract during board completion.
+     *         This simply triggers the balance-credit callback once the reentrancy lock is free.
+     *         Callable by anyone (permissionless — USDT is already secured in MvaultContract).
+     */
+    function settlePendingReward(address user) external nonReentrant {
+        uint256 pending = pendingBoardRewards[user];
+        require(pending > 0, "NP");
+        uint256 level = pendingBoardLevel[user];
+        pendingBoardRewards[user] = 0;
+        pendingBoardLevel[user]   = 0;
+        // USDT is already in MvaultContract — just trigger the balance credit
+        IMvaultBoardCallback(mvaultContract).creditBoardReward(user, pending, level);
+        emit PendingBoardRewardSettled(user, pending);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

@@ -2,8 +2,8 @@
   "_format": "hh-sol-cache-2",
   "files": {
     "/home/runner/workspace/contracts/MvaultBoardMatrix.sol": {
-      "lastModificationDate": 1778738762011,
-      "contentHash": "60979dc1809de91d37f195183ce98b51",
+      "lastModificationDate": 1780002283509,
+      "contentHash": "02c49377cd032dbd078bc3a0987c3afb",
       "sourceName": "contracts/MvaultBoardMatrix.sol",
       "solcConfig": {
         "version": "0.8.27",

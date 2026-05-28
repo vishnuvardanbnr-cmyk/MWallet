@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { Coins, Loader2, Lock, Unlock, ChevronRight, Users, Trophy, Zap, CheckCircle2, Grid2X2 } from "lucide-react";
+import { Coins, Loader2, Lock, Unlock, ChevronRight, Users, Trophy, Zap, CheckCircle2, Grid2X2, Gift } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { BOARD_PRICES_USD, getMvaultContract, BOARD_HANDLER_ABI, formatTokenAmount } from "@/lib/contract";
 
@@ -8,6 +8,7 @@ interface BoardProps {
   formatAmount: (val: bigint) => string;
   enterBoardPool: () => Promise<void>;
   account: string;
+  fetchUserData?: () => void;
 }
 
 interface UserBoardEntry {
@@ -34,11 +35,13 @@ function getPoolReward(level: number): number {
   return Math.floor(price * 12 * 0.875);
 }
 
-export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool, account }: BoardProps) {
+export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool, account, fetchUserData }: BoardProps) {
   const { toast } = useToast();
   const [entering, setEntering] = useState(false);
+  const [settling, setSettling] = useState(false);
   const [loading, setLoading] = useState(true);
   const [boardTiers, setBoardTiers] = useState<BoardTier[]>([]);
+  const [pendingReward, setPendingReward] = useState<bigint>(0n);
 
   const btcPoolFormatted = formatAmount(btcPoolBalance);
   const btcPoolNum = parseFloat(btcPoolFormatted.replace(/,/g, ''));
@@ -59,6 +62,14 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
       const boardContract = boardHandlerAddr && boardHandlerAddr !== ZERO_ADDR
         ? new ethers.Contract(boardHandlerAddr, BOARD_HANDLER_ABI, provider)
         : null;
+
+      // Check pending board reward for this user
+      if (boardContract) {
+        try {
+          const pending = await boardContract.pendingBoardRewards(account);
+          setPendingReward(BigInt(pending.toString()));
+        } catch { setPendingReward(0n); }
+      }
 
       const tiers: BoardTier[] = [];
       for (let i = 1; i <= 10; i++) {
@@ -131,10 +142,33 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
       await enterBoardPool();
       toast({ title: "Entered Board Pool", description: "You have successfully entered Pool 1." });
       loadBoardData();
+      fetchUserData?.();
     } catch (err: any) {
       toast({ title: "Failed to enter", description: err?.message || "Transaction failed", variant: "destructive" });
     } finally {
       setEntering(false);
+    }
+  };
+
+  const handleSettlePendingReward = async () => {
+    setSettling(true);
+    try {
+      const { ethers } = await import("ethers");
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const signer = await provider.getSigner();
+      const mvaultContract = getMvaultContract(provider);
+      const boardHandlerAddr = await mvaultContract.boardHandler();
+      const boardContract = new ethers.Contract(boardHandlerAddr, BOARD_HANDLER_ABI, signer);
+      const tx = await boardContract.settlePendingReward(account, { gasLimit: 200_000 });
+      await tx.wait();
+      toast({ title: "Board Reward Claimed!", description: "Your pending board reward has been credited to your wallet balance." });
+      setPendingReward(0n);
+      loadBoardData();
+      fetchUserData?.();
+    } catch (err: any) {
+      toast({ title: "Claim failed", description: err?.reason || err?.message || "Transaction failed", variant: "destructive" });
+    } finally {
+      setSettling(false);
     }
   };
 
@@ -172,6 +206,31 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
         </h1>
         <p className="text-muted-foreground text-sm mt-0.5">Global BTC Reward Pool with 10 tiers</p>
       </div>
+
+      {pendingReward > 0n && (
+        <div className="rounded-2xl p-4 slide-in border border-emerald-500/30 bg-emerald-500/10" style={{ animationDelay: '0.03s' }} data-testid="card-pending-reward">
+          <div className="flex items-center gap-3">
+            <div className="h-9 w-9 rounded-xl bg-emerald-500/20 flex items-center justify-center shrink-0">
+              <Gift className="h-4 w-4 text-emerald-400" />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-bold text-emerald-400" style={{ fontFamily: 'var(--font-display)' }}>Board Reward Ready to Claim!</p>
+              <p className="text-xs text-muted-foreground">
+                ${(Number(pendingReward) / 1e18).toFixed(2)} USDT earned — tap to credit to your wallet balance
+              </p>
+            </div>
+            <button
+              onClick={handleSettlePendingReward}
+              disabled={settling}
+              className="px-4 py-2 rounded-xl text-xs font-bold bg-emerald-500 text-white hover:bg-emerald-400 transition-colors flex items-center gap-1.5 shrink-0"
+              data-testid="button-claim-board-reward"
+            >
+              {settling ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Gift className="h-3.5 w-3.5" />}
+              {settling ? "Claiming..." : "Claim"}
+            </button>
+          </div>
+        </div>
+      )}
 
       <div className="earnings-card rounded-2xl p-6 slide-in" style={{ animationDelay: '0.05s' }} data-testid="card-btc-pool">
         <div className="flex flex-col sm:flex-row items-center gap-6">
