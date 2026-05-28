@@ -96,6 +96,7 @@ export function useWeb3() {
   const [btcPoolBalance, setBtcPoolBalance] = useState<bigint>(0n);
   const [totalUsers, setTotalUsers] = useState<number>(0);
   const [profileOnChain, setProfileOnChain] = useState<ProfileOnChain | null>(null);
+  const [btcPoolRate, setBtcPoolRateState] = useState<number>(10);
   const [contractMvtBalance, setContractMvtBalance] = useState<bigint>(0n);
   const tokenDecimals = 18;
 
@@ -212,6 +213,14 @@ export function useWeb3() {
           setProfileOnChain({ displayName, email, phone, country, profileSet });
         } catch {
           setProfileOnChain(null);
+        }
+
+        // Per-user BTC pool rate (stored in user struct — 0 = default 10%)
+        try {
+          const rate = Number(info.btcPoolRate ?? 0);
+          setBtcPoolRateState(rate === 0 ? 10 : rate);
+        } catch {
+          setBtcPoolRateState(10);
         }
       }
     } catch (err) {
@@ -376,6 +385,15 @@ export function useWeb3() {
     const tx = await contract.setProfile(displayName, email, phone, country);
     await tx.wait();
     setProfileOnChain({ displayName, email, phone, country, profileSet: true });
+  }, [account, getSigner]);
+
+  const setBtcPoolRate = useCallback(async (rate: number) => {
+    if (!account) return;
+    const signer = await getSigner();
+    const contract = getMvaultContract(signer);
+    const tx = await contract.setBtcPoolRate(rate, { gasLimit: 80_000 });
+    await tx.wait();
+    setBtcPoolRateState(rate);
   }, [account, getSigner]);
 
   // ── Direct referrals (via contract view getDirectReferralsPaginated — no event scanning) ───
@@ -762,10 +780,10 @@ export function useWeb3() {
     account, loading, initialLoaded, isRegistered, userInfo,
     incomeInfo, binaryInfo, slabInfo: null as SlabInfo | null,
     mvtPrice, binaryPairs,
-    btcPoolBalance, tokenDecimals, totalUsers, profileOnChain, contractMvtBalance,
+    btcPoolBalance, btcPoolRate, tokenDecimals, totalUsers, profileOnChain, contractMvtBalance,
     connect, register, approveToken, activatePackage, activateFromBalance,
     sellMvt, withdrawFunds, withdrawBtcPool, rebirth, claimRebirthBalance,
-    enterBoardPool, claimBinaryIncome, saveProfileOnChain,
+    enterBoardPool, claimBinaryIncome, saveProfileOnChain, setBtcPoolRate,
     reactivatePackage, repurchase, reactivateWithWallet, reactivateFromIncomeWallet,
     getDirectReferrals, getTokenBalance,
     getTransactionsFromContract, getBinaryFlushedEvents, fetchUserData,

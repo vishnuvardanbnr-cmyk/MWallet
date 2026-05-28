@@ -17,11 +17,11 @@ M-Vault is a Web3 MLM/DeFi platform for BNB Smart Chain. Users connect MetaMask 
 ## Smart Contracts (BSC Testnet — ACTIVE)
 | Contract | Address |
 |---|---|
-| **MVault Main** | `0xbF39dF754f1993F993566F77c316ea83Cb57772e` |
-| **MVT Token** | `0xad570A96FC7B8c7FFA5b5f608Ec81191284E2667` |
-| **Board Matrix** | `0x263D5b570B06e82406a6004283259258c3bFE196` |
-| **MvaultStaking** | `0x8E985648783EAf83d271e8Db5B9B1f8C5Aa17AF3` |
-| **MvaultView** | `0x523C39A81410477b78C887403d106B0f0A982380` |
+| **MVault Main** | `0x9809e686b26D22DC76c287bFe3d9ff5683D4FF91` |
+| **MVT Token** | `0xb903B6773cbC93Da0e109ef6c28545841BDEFD4B` |
+| **Board Matrix** | `0x25cDa3A83773c88c06F4F972919470fb89bd0f03` |
+| **MvaultStaking** | `0xA7fcdAf191830D2dE216479854aD237a9BB565a1` |
+| **MvaultView** | `0x0B2949cED5E7A74abBEcb571f241BAEb4AEB0766` |
 | **USDT (testnet)** | `0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3` |
 | **Owner/Deployer Wallet** | `0x12Fcf3d1084455d3677a110925D73b01F3846750` (DEPLOYER_PRIVATE_KEY) — owns all contracts |
 

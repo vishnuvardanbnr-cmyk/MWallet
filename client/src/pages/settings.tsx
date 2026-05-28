@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { User, Mail, Phone, Globe, Wallet, Loader2, Save, Users, Copy, Check, Shield } from "lucide-react";
+import { User, Mail, Phone, Globe, Wallet, Loader2, Save, Users, Copy, Check, Shield, Zap } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
@@ -15,15 +15,19 @@ interface SettingsProps {
   profileOnChain: { displayName: string; email: string; phone: string; country: string; profileSet: boolean } | null;
   saveProfileOnChain: (name: string, email: string, phone: string, country: string) => Promise<void>;
   fetchUserData: () => Promise<void>;
+  btcPoolRate?: number;
+  setBtcPoolRate?: (rate: number) => Promise<void>;
 }
 
-export default function Settings({ account, userInfo, profileOnChain, saveProfileOnChain, fetchUserData }: SettingsProps) {
+export default function Settings({ account, userInfo, profileOnChain, saveProfileOnChain, fetchUserData, btcPoolRate = 10, setBtcPoolRate }: SettingsProps) {
   const { toast } = useToast();
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState("");
   const [phone, setPhone] = useState("");
   const [country, setCountry] = useState("");
   const [saving, setSaving] = useState(false);
+  const [btcRateInput, setBtcRateInput] = useState(btcPoolRate);
+  const [savingRate, setSavingRate] = useState(false);
   const [sponsorName, setSponsorName] = useState<string | null>(null);
   const [sponsorEmail, setSponsorEmail] = useState<string | null>(null);
   const [sponsorLoading, setSponsorLoading] = useState(false);
@@ -38,10 +42,10 @@ export default function Settings({ account, userInfo, profileOnChain, saveProfil
       try {
         const provider = new ethers.BrowserProvider((window as any).ethereum);
         const contract = getMvaultContract(provider);
-        const [displayName, email, , , profileSet] = await contract.getProfile(userInfo.sponsor);
-        if (profileSet) {
-          if (displayName) setSponsorName(displayName);
-          if (email) setSponsorEmail(email);
+        const info = await contract.users(userInfo.sponsor);
+        if (info.profileSet) {
+          if (info.displayName) setSponsorName(info.displayName);
+          if (info.email) setSponsorEmail(info.email);
         }
       } catch {}
       setSponsorLoading(false);
@@ -56,6 +60,23 @@ export default function Settings({ account, userInfo, profileOnChain, saveProfil
       setCountry(profileOnChain.country);
     }
   }, [profileOnChain]);
+
+  useEffect(() => { setBtcRateInput(btcPoolRate); }, [btcPoolRate]);
+
+  const handleSaveRate = async () => {
+    if (!setBtcPoolRate) return;
+    if (btcRateInput < 10 || btcRateInput > 80) {
+      toast({ title: "Invalid rate", description: "Rate must be between 10% and 80%.", variant: "destructive" });
+      return;
+    }
+    setSavingRate(true);
+    try {
+      await setBtcPoolRate(btcRateInput);
+      toast({ title: "BTC Pool Rate Updated", description: `${btcRateInput}% of your sell proceeds will go to your BTC pool.` });
+    } catch (err: any) {
+      toast({ title: "Failed", description: err?.reason || err?.message || "Transaction failed", variant: "destructive" });
+    } finally { setSavingRate(false); }
+  };
 
   const handleSave = async () => {
     if (!displayName.trim()) {
@@ -165,6 +186,58 @@ export default function Settings({ account, userInfo, profileOnChain, saveProfil
             )}
           </div>
         )}
+      </div>
+
+      <div className="glass-card rounded-2xl p-5 slide-in gradient-border" style={{ animationDelay: '0.18s' }} data-testid="card-btc-pool-rate">
+        <div className="flex items-center gap-2 mb-4">
+          <div className="h-8 w-8 rounded-xl bg-orange-600/15 flex items-center justify-center">
+            <Zap className="h-4 w-4 text-orange-400" />
+          </div>
+          <div>
+            <h3 className="text-sm font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }}>BTC Pool Allocation</h3>
+            <p className="text-xs text-muted-foreground">How much of your sell proceeds go to your BTC board pool</p>
+          </div>
+        </div>
+
+        <div className="space-y-4">
+          <div className="flex items-center justify-between text-sm">
+            <span className="text-muted-foreground">Allocation Rate</span>
+            <span className="font-bold text-orange-400 text-lg" data-testid="text-btc-rate-value">{btcRateInput}%</span>
+          </div>
+          <div className="relative px-1">
+            <input
+              type="range"
+              min={10}
+              max={80}
+              step={5}
+              value={btcRateInput}
+              onChange={(e) => setBtcRateInput(Number(e.target.value))}
+              className="w-full accent-orange-400 cursor-pointer"
+              data-testid="slider-btc-rate"
+            />
+            <div className="flex justify-between text-[10px] text-muted-foreground/60 mt-1 px-0.5">
+              <span>10% (min)</span>
+              <span>80% (max)</span>
+            </div>
+          </div>
+
+          <div className="rounded-xl bg-orange-500/5 border border-orange-500/10 px-4 py-2.5 text-xs text-orange-200/70 leading-relaxed">
+            At <span className="text-orange-400 font-semibold">{btcRateInput}%</span>: for every 100 USDT of MVT sold,{" "}
+            <span className="text-orange-400 font-semibold">{btcRateInput} USDT</span> goes to your BTC pool and{" "}
+            <span className="text-yellow-400 font-semibold">{100 - btcRateInput} USDT</span> goes to your income wallet.
+          </div>
+
+          <button
+            onClick={handleSaveRate}
+            disabled={savingRate || !setBtcPoolRate || btcRateInput === btcPoolRate}
+            className="w-full glow-button text-white font-bold py-2.5 px-6 rounded-xl transition-all disabled:opacity-50 flex items-center justify-center gap-2 text-sm"
+            data-testid="button-save-btc-rate"
+            style={{ fontFamily: 'var(--font-display)' }}
+          >
+            {savingRate ? <Loader2 className="h-4 w-4 animate-spin" /> : <Zap className="h-4 w-4" />}
+            {savingRate ? "Saving..." : btcRateInput === btcPoolRate ? "Rate Saved" : "Save Rate"}
+          </button>
+        </div>
       </div>
 
       <div className="glass-card rounded-2xl p-6 slide-in" style={{ animationDelay: '0.2s' }} data-testid="card-profile-form">

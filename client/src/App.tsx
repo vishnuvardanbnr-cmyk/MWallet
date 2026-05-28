@@ -304,6 +304,8 @@ function App() {
                         profileOnChain={web3.profileOnChain}
                         saveProfileOnChain={web3.saveProfileOnChain}
                         fetchUserData={web3.fetchUserData}
+                        btcPoolRate={web3.btcPoolRate}
+                        setBtcPoolRate={web3.setBtcPoolRate}
                       />
                     </Route>
                     <Route path="/board">

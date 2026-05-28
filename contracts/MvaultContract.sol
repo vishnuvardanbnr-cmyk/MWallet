@@ -111,6 +111,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         string  phone;
         string  country;
         bool    profileSet;
+        // BTC pool allocation rate: 10–80% (0 = default 10%)
+        uint8   btcPoolRate;
     }
 
     mapping(address => User) public users;
@@ -136,6 +138,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // ── Board Matrix tracking ──────────────────────────────────────────────────
     mapping(address => uint256) public boardEntryCount;
     mapping(address => uint256) public totalBoardRewardsEarned;
+
 
     // ── Transaction History (on-chain) ────────────────────────────────────────
     // txType constants
@@ -791,8 +794,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         mvaultToken.sell(amount);
         uint256 usdtReceived = usdtToken.balanceOf(address(this)) - usdtBefore;
 
-        // ── Deduct 10% to user's BTC pool first ──────────────────────────────
-        uint256 btcCharge = (usdtReceived * BTC_POOL_RATE) / 100;
+        // ── Deduct BTC pool % (user-configurable 10–80%, default 10%) ───────
+        uint256 _btcRate  = u.btcPoolRate != 0 ? u.btcPoolRate : BTC_POOL_RATE;
+        uint256 btcCharge = (usdtReceived * _btcRate) / 100;
         uint256 netUsdt   = usdtReceived - btcCharge;
 
         u.btcPoolBalance += btcCharge;
@@ -1265,15 +1269,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         emit ProfileUpdated(msg.sender);
     }
 
-    function getProfile(address _user) external view returns (
-        string memory displayName,
-        string memory email,
-        string memory phone,
-        string memory country,
-        bool profileSet
-    ) {
-        User storage u = users[_user];
-        return (u.displayName, u.email, u.phone, u.country, u.profileSet);
+    function setBtcPoolRate(uint8 _rate) external {
+        require(users[msg.sender].isRegistered && _rate >= 10 && _rate <= 80, "E");
+        users[msg.sender].btcPoolRate = _rate;
     }
 
     // ─────────────────────────────────────────────────────────────────────────

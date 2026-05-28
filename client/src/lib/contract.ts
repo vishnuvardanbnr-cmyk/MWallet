@@ -105,8 +105,9 @@ export const MVAULT_ABI = [
   // Profile
   "function setProfile(string _displayName, string _email, string _phone, string _country) external",
   "function getProfile(address _user) view returns (string displayName, string email, string phone, string country, bool profileSet)",
-  // Public state — users mapping (31 fields, no matchedVolume/powerLegPoints)
-  "function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, string displayName, string email, string phone, string country, bool profileSet)",
+  "function setBtcPoolRate(uint8 _rate) external",
+  // Public state — users mapping (32 fields incl. btcPoolRate)
+  "function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, string displayName, string email, string phone, string country, bool profileSet, uint8 btcPoolRate)",
   // Public pool variables
   "function communityPool() view returns (uint256)",
   "function reservePool() view returns (uint256)",
