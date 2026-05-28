@@ -137,6 +137,14 @@ contract MvaultStaking is Ownable, ReentrancyGuard {
         uint256 stakedMvt = grossMvt - levelDistributed - levelToAdmin - adminAmt;
         if (stakedMvt == 0) revert NoMvtMinted();
 
+        // Transfer all non-staked MVT to MvaultContract so virtual mvtBalance + adminPool credits
+        // are backed by real ERC20 tokens that MvaultContract can burn when users call sellMvt().
+        // Only stakedMvt stays here (burned on unstake via mvaultToken.sell()).
+        uint256 toTransfer = levelDistributed + levelToAdmin + adminAmt;
+        if (toTransfer > 0) {
+            IERC20(address(mvaultToken)).transfer(address(mvaultMain), toTransfer);
+        }
+
         uint256 stakeIndex = _stakes[user].length;
         _stakes[user].push(StakePosition({
             mvtAmount:    stakedMvt,

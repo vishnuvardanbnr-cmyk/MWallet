@@ -631,8 +631,8 @@
       ]
     },
     "/home/runner/workspace/contracts/MvaultStaking.sol": {
-      "lastModificationDate": 1779172653410,
-      "contentHash": "82d81bc5bf6c7cf8199162f49eb73408",
+      "lastModificationDate": 1779990399452,
+      "contentHash": "611257a591c4468fc3a5774020c4d79a",
       "sourceName": "contracts/MvaultStaking.sol",
       "solcConfig": {
         "version": "0.8.27",
