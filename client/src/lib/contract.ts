@@ -56,6 +56,41 @@ export function getDirectProvider(): ethers.JsonRpcProvider {
   return new ethers.JsonRpcProvider(rpcs[0]);
 }
 
+// MChain block headers use a bech32 `miner` address that ethers.js v6 cannot
+// parse, causing tx.wait() to throw BAD_DATA on every confirmed transaction.
+// This helper polls eth_getTransactionReceipt directly (no block fetch) so we
+// never hit the broken block-parsing path.  Works on all networks.
+export async function waitForTx(txHash: string): Promise<void> {
+  const rpcUrl = import.meta.env.VITE_BSC_NETWORK === "mchain"
+    ? (typeof window !== "undefined"
+        ? `${window.location.origin}/api/rpc/mchain`
+        : "https://node.mymchain.com/api/rpc")
+    : import.meta.env.VITE_BSC_NETWORK === "mainnet"
+    ? BSC_MAINNET_RPC_LIST[0]
+    : BSC_TESTNET_RPC_LIST[0];
+
+  for (let i = 0; i < 120; i++) {
+    const res = await fetch(rpcUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", method: "eth_getTransactionReceipt",
+        params: [txHash], id: 1,
+      }),
+    });
+    const data = await res.json();
+    const receipt = data.result;
+    if (receipt) {
+      if (receipt.status === "0x0") {
+        throw new Error("Transaction reverted on-chain");
+      }
+      return;
+    }
+    await new Promise(r => setTimeout(r, 2500));
+  }
+  throw new Error("Timeout waiting for transaction confirmation");
+}
+
 const _net = import.meta.env.VITE_BSC_NETWORK;
 export const NETWORK = _net === "mainnet" ? BSC_MAINNET : _net === "mchain" ? MCHAIN : BSC_TESTNET;
 
