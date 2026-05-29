@@ -13,6 +13,13 @@ module.exports = {
     },
   },
   networks: {
+    mchain: {
+      url: "https://node.mymchain.com/api/rpc",
+      chainId: 1888,
+      accounts: DEPLOYER_KEY ? [DEPLOYER_KEY] : [],
+      gasPrice: "auto",
+      timeout: 120000,
+    },
     bscTestnet: {
       url: "https://bsc-testnet-rpc.publicnode.com",
       chainId: 97,

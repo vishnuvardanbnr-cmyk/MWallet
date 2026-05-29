@@ -14,15 +14,15 @@ M-Vault is a Web3 MLM/DeFi platform for BNB Smart Chain. Users connect MetaMask 
 - **Blockchain**: BSC (BNB Smart Chain) — testnet active
 - **Process manager (VPS)**: PM2 (name: `mvault`)
 
-## Smart Contracts (BSC Testnet — ACTIVE)
+## Smart Contracts (MChain — Chain ID 1888 — ACTIVE)
 | Contract | Address |
 |---|---|
-| **MVault Main** | `0x9809e686b26D22DC76c287bFe3d9ff5683D4FF91` |
-| **MVT Token** | `0xb903B6773cbC93Da0e109ef6c28545841BDEFD4B` |
-| **Board Matrix** | `0x25cDa3A83773c88c06F4F972919470fb89bd0f03` |
-| **MvaultStaking** | `0xA7fcdAf191830D2dE216479854aD237a9BB565a1` |
-| **MvaultView** | `0x0B2949cED5E7A74abBEcb571f241BAEb4AEB0766` |
-| **USDT (testnet)** | `0x0D3E80cBc9DDC0a3Fdee912b99C50cd0b5761eE3` |
+| **MVault Main** | `0x9e71d588e0E5eAa51f7489B47F4cC1BB48e4383a` |
+| **MVT Token** | `0xF7417D167b4CD52a025d59cE1C1B560ea692Aee5` |
+| **Board Matrix** | `0xaa7E340b633a90FA36e981cA10d0D7059Be9520b` |
+| **MvaultStaking** | `0xB345a75d05f654E3109F59b08Af0C3410f8730Fe` |
+| **MvaultView** | `0xeae33b0ef77b8ea51b866dfd923117dbbd5caf9d` |
+| **USDT (MChain)** | `0xab8c6267dcca9e70b625014c8f77eee9728e14c3` |
 | **Owner/Deployer Wallet** | `0x12Fcf3d1084455d3677a110925D73b01F3846750` (DEPLOYER_PRIVATE_KEY) — owns all contracts |
 
 > MvaultDistributor is retired — binary/power-leg distribution replaced by on-chain placement income.
@@ -72,8 +72,9 @@ bash scripts/update-vps.sh
 | `NEW_USER_PRIVATE_KEY` | Test wallet for registration scripts |
 
 ## RPC Configuration
-All reads, BFS, and simulations use `https://bsc-testnet-rpc.publicnode.com` (direct, not MetaMask).  
-MetaMask is forced to add/update BSC testnet via `wallet_addEthereumChain` with publicnode as primary RPC on every connect, fixing inconsistent MetaMask simulations.
+All reads, BFS, and simulations use `https://node.mymchain.com/api/rpc` (direct, not MetaMask).  
+MetaMask is forced to add/update MChain (1888) via `wallet_addEthereumChain` on every connect.  
+Set `VITE_BSC_NETWORK=mchain` to activate MChain; `mainnet` for BSC Mainnet; default = BSC Testnet.
 
 ## Registration Flow
 1. Sponsor address validated via publicnode RPC

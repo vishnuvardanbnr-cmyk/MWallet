@@ -11,7 +11,6 @@ export const BSC_MAINNET = {
 export const BSC_TESTNET = {
   chainId: "0x61",
   chainName: "BSC Testnet",
-  // publicnode is far more reliable than Binance's own testnet RPCs
   rpcUrls: [
     "https://bsc-testnet-rpc.publicnode.com",
     "https://data-seed-prebsc-1-s1.binance.org:8545/",
@@ -20,8 +19,15 @@ export const BSC_TESTNET = {
   nativeCurrency: { name: "tBNB", symbol: "tBNB", decimals: 18 },
 };
 
-// Reliable public RPCs used for read-only simulation (staticCall),
-// bypassing whatever RPC MetaMask happens to use.
+export const MCHAIN = {
+  chainId: "0x760",  // 1888
+  chainName: "MChain",
+  rpcUrls: ["https://node.mymchain.com/api/rpc"],
+  blockExplorerUrls: [],
+  nativeCurrency: { name: "MxC", symbol: "MxC", decimals: 18 },
+};
+
+// Reliable public RPCs used for read-only simulation (staticCall)
 export const BSC_TESTNET_RPC_LIST = [
   "https://bsc-testnet-rpc.publicnode.com",
   "https://data-seed-prebsc-1-s1.binance.org:8545/",
@@ -32,17 +38,23 @@ export const BSC_MAINNET_RPC_LIST = [
   "https://bsc-dataseed1.binance.org/",
   "https://bsc-dataseed2.binance.org/",
 ];
+export const MCHAIN_RPC_LIST = [
+  "https://node.mymchain.com/api/rpc",
+];
 
 // Returns a direct JsonRpcProvider (not MetaMask) for reliable eth_call simulation
 export function getDirectProvider(): ethers.JsonRpcProvider {
-  const rpcs = import.meta.env.VITE_BSC_NETWORK === "mainnet"
+  const net = import.meta.env.VITE_BSC_NETWORK;
+  const rpcs = net === "mainnet"
     ? BSC_MAINNET_RPC_LIST
+    : net === "mchain"
+    ? MCHAIN_RPC_LIST
     : BSC_TESTNET_RPC_LIST;
   return new ethers.JsonRpcProvider(rpcs[0]);
 }
 
-const isMainnet = import.meta.env.VITE_BSC_NETWORK === "mainnet";
-export const NETWORK = isMainnet ? BSC_MAINNET : BSC_TESTNET;
+const _net = import.meta.env.VITE_BSC_NETWORK;
+export const NETWORK = _net === "mainnet" ? BSC_MAINNET : _net === "mchain" ? MCHAIN : BSC_TESTNET;
 
 // ── New MvaultContract + MvaultToken ──────────────────────────────────────────
 export const MVAULT_CONTRACT_ADDRESS =
