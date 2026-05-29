@@ -272,18 +272,12 @@ export function useWeb3() {
     // The contract now handles placement on-chain via _findSlotOnSide.
     // Always pass ZERO_ADDRESS as binaryParent → contract defaults to sponsor and
     // walks the tree to find the deepest open slot on the requested side.
-    //
-    // NOTE: MChain's RPC treats eth_call as a strict static call — it rejects
-    // any function that writes state with "static state change". Skip simulation
-    // on MChain and rely on MetaMask + fixed gasLimit instead.
-    const isMchain = import.meta.env.VITE_BSC_NETWORK === "mchain";
-    if (!isMchain) {
-      const directProvider = getDirectProvider();
-      const signerAddress = await signer.getAddress();
-      const simContract = getMvaultContract(directProvider);
-      await simContract.register.staticCall(sponsor, ZERO_ADDRESS, placeLeft, { from: signerAddress });
-    }
-    // Send through MetaMask with fixed gasLimit (bypasses eth_estimateGas)
+    // Step 1 — simulate via direct RPC to catch any revert reason before sending
+    const directProvider = getDirectProvider();
+    const signerAddress = await signer.getAddress();
+    const simContract = getMvaultContract(directProvider);
+    await simContract.register.staticCall(sponsor, ZERO_ADDRESS, placeLeft, { from: signerAddress });
+    // Step 2 — send through MetaMask with fixed gasLimit (bypasses eth_estimateGas)
     const sendContract = getMvaultContract(signer);
     const tx = await sendContract.register(sponsor, ZERO_ADDRESS, placeLeft, { gasLimit: 600_000n });
     await tx.wait();
@@ -690,19 +684,16 @@ export function useWeb3() {
       }
     }
 
-    // Simulate first via staticCall to get a decoded revert reason before MetaMask opens.
-    // Skip on MChain — its RPC rejects all state-changing eth_calls with "static state change".
-    const isMchainStake = import.meta.env.VITE_BSC_NETWORK === "mchain";
-    if (!isMchainStake) {
-      try {
-        if (useContractBalance) {
-          await contract.stakeFromBalance.staticCall(amountBn, isLocked);
-        } else {
-          await contract.stake.staticCall(amountBn, isLocked);
-        }
-      } catch (simErr: any) {
-        throw simErr;
+    // Simulate first via staticCall to get a decoded revert reason before MetaMask opens
+    try {
+      if (useContractBalance) {
+        await contract.stakeFromBalance.staticCall(amountBn, isLocked);
+      } else {
+        await contract.stake.staticCall(amountBn, isLocked);
       }
+    } catch (simErr: any) {
+      // Re-throw the original error so decodeContractError() in the UI can decode errorName
+      throw simErr;
     }
 
     if (useContractBalance) {
