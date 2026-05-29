@@ -38,8 +38,11 @@ export const BSC_MAINNET_RPC_LIST = [
   "https://bsc-dataseed1.binance.org/",
   "https://bsc-dataseed2.binance.org/",
 ];
+// MChain RPC has no CORS headers — proxy through our own backend to avoid browser block
 export const MCHAIN_RPC_LIST = [
-  "https://node.mymchain.com/api/rpc",
+  typeof window !== "undefined"
+    ? `${window.location.origin}/api/rpc/mchain`
+    : "https://node.mymchain.com/api/rpc",
 ];
 
 // Returns a direct JsonRpcProvider (not MetaMask) for reliable eth_call simulation

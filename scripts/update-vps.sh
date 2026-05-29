@@ -124,14 +124,14 @@ echo "  ✓ VPS .env updated"
 # ── 5. Restart server via systemd-run (avoids SSH timeout / PM2 deadlock) ─
 echo ""
 echo "[5/5] Restarting server via systemd-run..."
-# Stop existing units, kill any zombie processes, then start fresh — all in one SSH call
-$SSH 'for u in mvault-srv mvault-app mvault-node; do systemctl stop ${u}.service 2>/dev/null || true; done; \
-  pkill -f "dist/index.cjs" 2>/dev/null || true; sleep 1; \
-  systemd-run --unit=mvault-srv --working-directory=/opt/mvault \
-    bash -c "set -a; source /opt/mvault/.env; set +a; exec node /opt/mvault/dist/index.cjs" 2>&1 || \
-  systemd-run --working-directory=/opt/mvault \
-    bash -c "set -a; source /opt/mvault/.env; set +a; exec node /opt/mvault/dist/index.cjs" 2>&1'
-echo "  ✓ Server restarted via systemd-run"
+UNIT="mv$(date +%s)"
+# Kill old node processes non-blocking, then start fresh unit with timestamp name
+$SSH "pkill -f 'dist/index.cjs' 2>/dev/null || true; \
+  systemctl stop --no-block mvault-srv.service mvault-app.service mvault-node.service 2>/dev/null || true; \
+  sleep 1; \
+  systemd-run --unit=${UNIT} --working-directory=/opt/mvault \
+    bash -c 'set -a; source /opt/mvault/.env; set +a; exec node /opt/mvault/dist/index.cjs'"
+echo "  ✓ Server restarted as ${UNIT}.service"
 
 echo ""
 echo "══════════════════════════════════════════════════"
