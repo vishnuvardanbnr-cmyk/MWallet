@@ -1627,5 +1627,26 @@ export async function registerRoutes(
     }
   });
 
+  // ── RPC proxy — forwards JSON-RPC to MChain (avoids browser CORS block) ────
+  app.post("/api/rpc/mchain", async (req, res) => {
+    try {
+      const upstream = process.env.VITE_BSC_NETWORK === "mchain"
+        ? "https://node.mymchain.com/api/rpc"
+        : process.env.VITE_BSC_NETWORK === "mainnet"
+        ? "https://bsc-rpc.publicnode.com"
+        : "https://bsc-testnet-rpc.publicnode.com";
+
+      const response = await fetch(upstream, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(req.body),
+      });
+      const data = await response.json();
+      res.json(data);
+    } catch (err: any) {
+      res.status(502).json({ jsonrpc: "2.0", error: { code: -32603, message: err.message }, id: req.body?.id ?? null });
+    }
+  });
+
   return httpServer;
 }

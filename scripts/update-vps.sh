@@ -110,6 +110,10 @@ echo "VITE_DISTRIBUTOR_ADDRESS=${DISTRIBUTOR}" >> ${VPS_PATH}/.env
 echo "VITE_PAYMENT_TOKEN_ADDRESS=${USDT}" >> ${VPS_PATH}/.env
 echo "VITE_BSC_NETWORK=${BSC_NETWORK}" >> ${VPS_PATH}/.env
 
+# Ensure NODE_ENV=production is always set
+sed -i '/^NODE_ENV=/d' ${VPS_PATH}/.env
+echo "NODE_ENV=production" >> ${VPS_PATH}/.env
+
 # Ensure DATABASE_URL is always present (never overwrite if already set with creds)
 if ! grep -q '^DATABASE_URL=' ${VPS_PATH}/.env; then
   echo "DATABASE_URL=postgresql://mvault:mvault_secure_2026!@localhost:5432/mvault_db" >> ${VPS_PATH}/.env
@@ -117,29 +121,20 @@ fi
 EOF
 echo "  ✓ VPS .env updated"
 
-# ── 5. Write run.sh wrapper and restart PM2 ───────────────────────────────
+# ── 5. Restart server via systemd-run (avoids SSH timeout / PM2 deadlock) ─
 echo ""
-echo "[5/5] Writing startup wrapper and restarting PM2..."
-$SSH bash <<'SSHEOF'
-# Write the run.sh wrapper that sources .env then exec node
-cat > /opt/mvault/run.sh << 'WRAPPER'
-#!/bin/bash
-cd /opt/mvault
-set -a
-source /opt/mvault/.env
-set +a
-exec node /opt/mvault/dist/index.cjs
-WRAPPER
-chmod +x /opt/mvault/run.sh
+echo "[5/5] Restarting server via systemd-run..."
+# Kill old zombie pm2 commands and any existing mvault systemd units
+$SSH 'pkill -f "/usr/bin/pm2 (describe|restart|delete|list|save|stop|start|logs)" 2>/dev/null; \
+  systemctl stop mvault-srv.service 2>/dev/null; \
+  systemctl stop mvault-app.service 2>/dev/null; \
+  systemctl stop mvault-node.service 2>/dev/null; \
+  pkill -f "dist/index.cjs" 2>/dev/null; sleep 1; echo killed'
 
-# Restart via PM2 — use wrapper so env vars are always loaded
-if pm2 describe mvault >/dev/null 2>&1; then
-  pm2 delete mvault
-fi
-pm2 start /opt/mvault/run.sh --name mvault --interpreter bash
-pm2 save
-SSHEOF
-echo "  ✓ PM2 restarted"
+# Start via systemd-run with bash so "source" works and env vars are loaded
+$SSH 'systemd-run --unit=mvault-srv --working-directory=/opt/mvault \
+  bash -c "set -a; source /opt/mvault/.env; set +a; exec node /opt/mvault/dist/index.cjs" 2>&1'
+echo "  ✓ Server restarted via systemd-run (mvault-srv.service)"
 
 echo ""
 echo "══════════════════════════════════════════════════"
