@@ -38,9 +38,8 @@ export const BSC_MAINNET_RPC_LIST = [
   "https://bsc-dataseed1.binance.org/",
   "https://bsc-dataseed2.binance.org/",
 ];
-// Use our backend proxy for MChain — the real RPC blocks browser CORS requests
 export const MCHAIN_RPC_LIST = [
-  "/api/rpc/mchain",
+  "https://node.mymchain.com/api/rpc",
 ];
 
 // Returns a direct JsonRpcProvider (not MetaMask) for reliable eth_call simulation
