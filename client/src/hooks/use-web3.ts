@@ -113,15 +113,22 @@ export function useWeb3() {
   const switchNetwork = useCallback(async () => {
     const ethereum = (window as any).ethereum;
     if (!ethereum) return;
-    // Always call addEthereumChain — this adds it if new, or updates the RPC
-    // if already added, ensuring MetaMask uses our reliable publicnode endpoint.
     try {
-      await ethereum.request({ method: "wallet_addEthereumChain", params: [NETWORK] });
-    } catch (addErr: any) {
-      // addEthereumChain fails when user rejects; fall back to plain switch
-      try {
-        await ethereum.request({ method: "wallet_switchEthereumChain", params: [{ chainId: NETWORK.chainId }] });
-      } catch { /* ignore */ }
+      // Try switching first — works even if chain was added with a different symbol/name,
+      // and avoids the MetaMask "nativeCurrency.symbol mismatch" rejection on addEthereumChain.
+      await ethereum.request({
+        method: "wallet_switchEthereumChain",
+        params: [{ chainId: NETWORK.chainId }],
+      });
+    } catch (switchErr: any) {
+      if (switchErr?.code === 4902) {
+        // Chain not in MetaMask yet — add it
+        try {
+          await ethereum.request({ method: "wallet_addEthereumChain", params: [NETWORK] });
+        } catch { /* user rejected add */ }
+      }
+      // code 4001 (user rejected switch) or any other error — proceed anyway;
+      // all contract reads use getDirectProvider() and don't need MetaMask's network.
     }
   }, []);
 
@@ -208,11 +215,14 @@ export function useWeb3() {
         } catch { }
 
         // Profile from new MvaultContract (on-chain)
+        // On failure set an empty-but-resolved profile so hasProfile resolves to false
+        // (never leave profileOnChain as null after fetchUserData completes — that would
+        //  keep the loading screen stuck forever).
         try {
           const [displayName, email, phone, country, profileSet] = await contract.getProfile(address);
           setProfileOnChain({ displayName, email, phone, country, profileSet });
         } catch {
-          setProfileOnChain(null);
+          setProfileOnChain({ displayName: "", email: "", phone: "", country: "", profileSet: false });
         }
 
         // Per-user BTC pool rate (stored in user struct — 0 = default 10%)
