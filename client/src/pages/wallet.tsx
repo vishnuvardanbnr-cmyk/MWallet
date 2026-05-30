@@ -1,11 +1,12 @@
 import { useState, useEffect, useCallback } from "react";
-import { Wallet as WalletIcon, ArrowDownToLine, Bitcoin, Loader2, ArrowUpRight, RefreshCw, ChevronLeft, ChevronRight, CheckCircle2, Banknote, Info, ChevronDown, ChevronUp, Repeat2 } from "lucide-react";
+import { Wallet as WalletIcon, ArrowDownToLine, Bitcoin, Loader2, ArrowUpRight, RefreshCw, ChevronLeft, ChevronRight, CheckCircle2, Banknote, Info, ChevronDown, ChevronUp, Repeat2, RotateCcw } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { formatTokenAmount, shortenAddress } from "@/lib/contract";
+import { formatTokenAmount, shortenAddress, decodeContractError } from "@/lib/contract";
+import { useLocation } from "wouter";
 import { ethers } from "ethers";
 import type { UserInfo } from "@/hooks/use-web3";
 
@@ -39,6 +40,7 @@ const REBIRTH_THRESHOLD = 130;
 
 export default function WalletPage({ userInfo, account, formatAmount, withdrawFunds, claimRebirthBalance, getTransactionsFromContract }: WalletProps) {
   const { toast } = useToast();
+  const [, setLocation] = useLocation();
 
   const [withdrawAmount, setWithdrawAmount] = useState("");
   const [withdrawing, setWithdrawing] = useState(false);
@@ -98,8 +100,8 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
       await claimRebirthBalance();
       toast({ title: "Rebirth Balance Claimed!", description: `$${rebirthPool.toFixed(2)} USDT has been moved to your wallet balance.` });
     } catch (err: any) {
-      const msg = err?.reason || err?.shortMessage || err?.message || "Claim failed";
-      toast({ title: "Claim Failed", description: msg.slice(0, 120), variant: "destructive" });
+      const msg = decodeContractError(err);
+      toast({ title: "Claim Failed", description: msg, variant: "destructive" });
     } finally {
       setClaiming(false);
     }
@@ -203,10 +205,26 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
             </div>
           )}
 
-          {rebirthPool < REBIRTH_THRESHOLD ? (
+          {rebirthPool >= REBIRTH_THRESHOLD ? (
+            <div className="space-y-2">
+              <p className="text-[11px] text-emerald-400 font-medium">
+                Rebirth pool is ready! Use it to activate a new sub-account and reset your income limit to $390.
+              </p>
+              <p className="text-[11px] text-muted-foreground">
+                After rebirth: $130 activates sub-account → income limit resets to $390 → remaining <span className="text-violet-300">${(rebirthPool - REBIRTH_THRESHOLD).toFixed(2)} credits to your new limit</span>. Any amount beyond $390 stays here for the next rebirth.
+              </p>
+              <button
+                onClick={() => setLocation("/rebirth")}
+                className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-sm font-semibold text-emerald-300 hover:bg-emerald-500/15 transition-all"
+                data-testid="button-go-to-rebirth"
+              >
+                <RotateCcw className="h-4 w-4" /> Create Sub-Account Now
+              </button>
+            </div>
+          ) : (
             <div className="space-y-2">
               <p className="text-[11px] text-muted-foreground">
-                Keep selling MVT to fill this wallet. Once it hits $130, rebirth triggers — sub-account gets $130, income limit resets to $390, and <span className="text-violet-300 font-medium">remaining funds credit to your main wallet (reducing the new income limit)</span>.
+                Keep selling MVT to fill this wallet. Once it hits $130, you can create a sub-account — income limit resets to $390, and <span className="text-violet-300 font-medium">remaining funds credit to your new income limit</span>.
               </p>
               <button
                 onClick={handleClaimRebirth}
@@ -215,17 +233,8 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
                 data-testid="button-claim-rebirth"
               >
                 {claiming ? <Loader2 className="h-4 w-4 animate-spin" /> : <ArrowDownToLine className="h-4 w-4" />}
-                {claiming ? "Claiming..." : "Claim Balance to Wallet Now"}
+                {claiming ? "Claiming..." : "Claim Small Balance to Wallet"}
               </button>
-            </div>
-          ) : (
-            <div className="space-y-1.5">
-              <p className="text-xs text-emerald-400 font-medium">
-                Rebirth ready — go to Dashboard to create your sub-account.
-              </p>
-              <p className="text-[11px] text-muted-foreground">
-                After rebirth: $130 activates sub-account → income limit resets to $390 → remaining <span className="text-violet-300">${(rebirthPool - REBIRTH_THRESHOLD).toFixed(2)} credits to your wallet</span>, reducing your new income limit. Any amount beyond $390 stays here for the next rebirth.
-              </p>
             </div>
           )}
         </div>
