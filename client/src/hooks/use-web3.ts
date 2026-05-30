@@ -378,7 +378,7 @@ export function useWeb3() {
     await simContract.rebirth.staticCall(subAccount, placeLeft, { from: signerAddress });
     // Send with 800K gas — rebirth calls _doActivate + placement/rank income + BFS
     const contract = getMvaultContract(signer);
-    const tx = await contract.rebirth(subAccount, placeLeft, { gasLimit: 800_000 });
+    const tx = await contract.rebirth(subAccount, placeLeft, { gasLimit: 5_000_000 });
     await waitForTx(tx.hash);
     await refreshAfterTx();
   }, [getSigner, refreshAfterTx]);
