@@ -359,6 +359,9 @@ function App() {
                         account={web3.account!}
                         rebirth={web3.rebirth}
                         rebirthPool={web3.userInfo?.rebirthPool}
+                        packagePrice={web3.userInfo?.packagePrice}
+                        incomeLimit={web3.userInfo?.incomeLimit}
+                        incomeLimitCap={web3.userInfo?.incomeLimitCap}
                         tokenDecimals={web3.tokenDecimals}
                       />
                     </Route>

@@ -15,6 +15,9 @@ interface Props {
   account: string;
   rebirth: (subAccount: string, placeLeft: boolean) => Promise<void>;
   rebirthPool?: bigint;
+  packagePrice?: bigint;
+  incomeLimit?: bigint;
+  incomeLimitCap?: bigint;
   tokenDecimals?: number;
 }
 
@@ -28,7 +31,7 @@ function isAddr(addr: string) {
 }
 
 export default function RebirthAccountPage({
-  account, rebirth, rebirthPool, tokenDecimals = 18,
+  account, rebirth, rebirthPool, packagePrice, incomeLimit, incomeLimitCap, tokenDecimals = 18,
 }: Props) {
   const { toast } = useToast();
 
@@ -38,10 +41,15 @@ export default function RebirthAccountPage({
   const [processing, setProcessing]   = useState(false);
   const [lastSuccess, setLastSuccess] = useState<string | null>(null);
 
-  const poolBal   = rebirthPool ? parseFloat(formatTokenAmount(rebirthPool, tokenDecimals)) : 0;
-  const hasFunds  = poolBal >= PACKAGE_PRICE;
-  const addrValid = isAddr(subAccount) && subAccount.toLowerCase() !== account.toLowerCase();
-  const canSubmit = addrValid && hasFunds;
+  const PRO_PRICE = 130n * 10n ** 18n;
+  const poolBal     = rebirthPool   ? parseFloat(formatTokenAmount(rebirthPool,   tokenDecimals)) : 0;
+  const limitLeft   = incomeLimit   ? parseFloat(formatTokenAmount(incomeLimit,   tokenDecimals)) : -1;
+  const limitCap    = incomeLimitCap? parseFloat(formatTokenAmount(incomeLimitCap,tokenDecimals)) : 0;
+  const isPro       = !packagePrice || packagePrice >= PRO_PRICE; // default to PRO assumption until loaded
+  const limitFull   = limitLeft < 0 || limitLeft >= limitCap * 0.99; // income limit still full
+  const hasFunds    = poolBal >= PACKAGE_PRICE;
+  const addrValid   = isAddr(subAccount) && subAccount.toLowerCase() !== account.toLowerCase();
+  const canSubmit   = addrValid && hasFunds && isPro;
 
   const handleSubmit = async () => {
     if (!canSubmit) return;
@@ -119,14 +127,38 @@ export default function RebirthAccountPage({
         </div>
       </div>
 
-      {/* Not enough funds */}
-      {!hasFunds && (
+      {/* Not PRO package */}
+      {packagePrice !== undefined && !isPro && (
+        <div className="flex items-start gap-3 p-4 rounded-2xl bg-red-500/8 border border-red-500/20 slide-in">
+          <AlertCircle className="h-4 w-4 text-red-400 shrink-0 mt-0.5" />
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-red-300">STARTER package — rebirth not available</p>
+            <p className="text-xs text-red-300/80">
+              Only PRO accounts ($130 activation) can create sub-accounts. Your current package is STARTER ($55).
+            </p>
+          </div>
+        </div>
+      )}
+
+      {/* Not enough funds — show why */}
+      {isPro && !hasFunds && (
         <div className="flex items-start gap-3 p-4 rounded-2xl bg-amber-500/8 border border-amber-500/20 slide-in">
           <AlertCircle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
-          <p className="text-xs text-amber-300">
-            Your rebirth pool has <strong>${poolBal.toFixed(2)}</strong> — need $130 to create a sub-account.
-            Keep selling MVT to fill it.
-          </p>
+          <div className="space-y-1">
+            <p className="text-xs font-semibold text-amber-300">
+              Rebirth pool has <strong>${poolBal.toFixed(2)}</strong> — need $130
+            </p>
+            {limitFull ? (
+              <p className="text-xs text-amber-300/80">
+                Your income limit is still open (${limitLeft >= 0 ? limitLeft.toFixed(0) : '—'} / ${limitCap.toFixed(0)} remaining).
+                Sell MVT to earn USDT — once your limit hits $0, any further MVT sells automatically fill the rebirth pool.
+              </p>
+            ) : (
+              <p className="text-xs text-amber-300/80">
+                Your income limit is nearly exhausted — keep selling MVT and the excess will flow into this rebirth pool automatically.
+              </p>
+            )}
+          </div>
         </div>
       )}
 
