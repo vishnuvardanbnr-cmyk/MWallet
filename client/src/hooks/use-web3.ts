@@ -491,55 +491,7 @@ export function useWeb3() {
         return base;
       });
 
-      // Supplement with Staked/Unstaked events if no staking records found in stored TXs
-      const hasStakingRecords = transactions.some(t => t.type === "Staked" || t.type === "Unstaked");
-      if (!hasStakingRecords && offset === 0) {
-        try {
-          const currentBlock = await provider.getBlockNumber();
-          // MChain limits eth_getLogs to 10 000 blocks per request
-          const fromBlock = Math.max(0, currentBlock - 9_000);
 
-          // Try to find Staked events
-          const stakedFilter = contract.filters.Staked?.(account);
-          const unstakedFilter = contract.filters.Unstaked?.(account);
-          const [stakedEvts, unstakedEvts] = await Promise.all([
-            stakedFilter ? contract.queryFilter(stakedFilter, fromBlock, currentBlock).catch(() => []) : Promise.resolve([]),
-            unstakedFilter ? contract.queryFilter(unstakedFilter, fromBlock, currentBlock).catch(() => []) : Promise.resolve([]),
-          ]);
-
-          for (const evt of stakedEvts as any[]) {
-            const block = await provider.getBlock(evt.blockNumber);
-            // Event: Staked(address user, uint256 stakeIndex, uint256 usdtAmount, uint256 mvtMinted, bool isLocked)
-            const isLocked = evt.args?.isLocked ?? false;
-            transactions.unshift({
-              type: "Staked",
-              amount: evt.args?.usdtAmount ?? evt.args?.[2] ?? 0n,
-              detail: isLocked ? "USDT staked for MVT (Locked)" : "USDT staked for MVT (Flexible)",
-              timestamp: block?.timestamp ?? 0,
-              isIncome: false,
-              currency: "USDT",
-              mvtMinted: evt.args?.mvtMinted ?? evt.args?.[3] ?? 0n,
-            } as any);
-          }
-          for (const evt of unstakedEvts as any[]) {
-            const block = await provider.getBlock(evt.blockNumber);
-            // Event: Unstaked(address user, uint256 stakeIndex, uint256 mvtReturned, uint256 usdtReceived, uint256 adminCapCut)
-            transactions.unshift({
-              type: "Unstaked",
-              amount: evt.args?.usdtReceived ?? evt.args?.[3] ?? 0n,
-              detail: "USDT credited from unstake",
-              timestamp: block?.timestamp ?? 0,
-              isIncome: true,
-              currency: "USDT",
-              mvtReturned: evt.args?.mvtReturned ?? evt.args?.[2] ?? 0n,
-            } as any);
-          }
-          // sort by timestamp desc
-          transactions.sort((a, b) => b.timestamp - a.timestamp);
-        } catch {
-          // Staked/Unstaked events not available — continue without them
-        }
-      }
 
       return { transactions, total };
     } catch (err) {
