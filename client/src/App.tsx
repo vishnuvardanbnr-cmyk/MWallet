@@ -122,7 +122,11 @@ function App() {
 
   useEffect(() => {
     if (web3.account && web3.isRegistered) {
-      setHasProfile(web3.profileOnChain?.profileSet ?? false);
+      if (web3.profileOnChain !== null) {
+        setHasProfile(web3.profileOnChain.profileSet);
+      }
+      // if profileOnChain is still null (not yet fetched), leave hasProfile as null so
+      // the loading screen shows — it will update once the on-chain call completes
     } else {
       setHasProfile(null);
     }
