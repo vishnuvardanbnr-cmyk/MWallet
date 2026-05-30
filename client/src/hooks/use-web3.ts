@@ -613,13 +613,16 @@ export function useWeb3() {
 
   const stakeUsdt = useCallback(async (usdtAmount: string, isLocked: boolean, useContractBalance = false) => {
     const signer = await getSigner();
-    const contract = getMvaultContract(signer);
     const signerAddress = await signer.getAddress();
 
-    // Pre-flight checks (read-only, before MetaMask opens)
+    // All reads use direct provider — MetaMask's eth_call on MChain returns "missing revert data"
+    const directProvider = getDirectProvider();
+    const readContract = getMvaultContract(directProvider);
+
+    // Pre-flight checks (read-only, via direct RPC — not MetaMask)
     const [stakingAddr, userInfo] = await Promise.all([
-      contract.stakingModule(),
-      contract.users(signerAddress),
+      readContract.stakingModule(),
+      readContract.users(signerAddress),
     ]);
     if (!stakingAddr || stakingAddr === ethers.ZeroAddress) {
       throw new Error("Staking module not yet configured on-chain. Please contact support.");
@@ -634,37 +637,35 @@ export function useWeb3() {
     const amountBn = ethers.parseUnits(usdtAmount, 18);
 
     if (!useContractBalance) {
-      // Ensure USDT is approved — auto-approve if allowance is insufficient
-      const usdtContract = new ethers.Contract(TOKEN_ADDRESS, [
+      // Check allowance via direct provider, approve via MetaMask signer
+      const usdtRead = new ethers.Contract(TOKEN_ADDRESS, [
         "function allowance(address,address) view returns (uint256)",
-        "function approve(address,uint256) returns (bool)",
-      ], signer);
-      const currentAllowance = await usdtContract.allowance(signerAddress, MVAULT_CONTRACT_ADDRESS);
+      ], directProvider);
+      const currentAllowance = await usdtRead.allowance(signerAddress, MVAULT_CONTRACT_ADDRESS);
       if (currentAllowance < amountBn) {
-        const approveTx = await usdtContract.approve(MVAULT_CONTRACT_ADDRESS, ethers.MaxUint256);
+        const usdtWrite = new ethers.Contract(TOKEN_ADDRESS, [
+          "function approve(address,uint256) returns (bool)",
+        ], signer);
+        const approveTx = await usdtWrite.approve(MVAULT_CONTRACT_ADDRESS, ethers.MaxUint256);
         await waitForTx(approveTx.hash);
       }
     }
 
-    // Simulate via direct RPC (not MetaMask) to get a decoded revert reason before MetaMask opens
-    // MetaMask's eth_call on MChain returns "missing revert data" — direct provider works correctly
-    const directProvider = getDirectProvider();
+    // Simulate via direct RPC to get a decoded revert reason before MetaMask opens
     const simContract = getMvaultContract(directProvider);
-    try {
-      if (useContractBalance) {
-        await simContract.stakeFromBalance.staticCall(amountBn, isLocked, { from: signerAddress });
-      } else {
-        await simContract.stake.staticCall(amountBn, isLocked, { from: signerAddress });
-      }
-    } catch (simErr: any) {
-      throw simErr;
+    if (useContractBalance) {
+      await simContract.stakeFromBalance.staticCall(amountBn, isLocked, { from: signerAddress });
+    } else {
+      await simContract.stake.staticCall(amountBn, isLocked, { from: signerAddress });
     }
 
+    // Actual transaction through MetaMask
+    const writeContract = getMvaultContract(signer);
     if (useContractBalance) {
-      const tx = await contract.stakeFromBalance(amountBn, isLocked, { gasLimit: 2_000_000 });
+      const tx = await writeContract.stakeFromBalance(amountBn, isLocked, { gasLimit: 2_000_000 });
       await waitForTx(tx.hash);
     } else {
-      const tx = await contract.stake(amountBn, isLocked, { gasLimit: 2_000_000 });
+      const tx = await writeContract.stake(amountBn, isLocked, { gasLimit: 2_000_000 });
       await waitForTx(tx.hash);
     }
     await refreshAfterTx();
