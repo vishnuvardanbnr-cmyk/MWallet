@@ -297,12 +297,15 @@ export function useWeb3() {
 
   const approveToken = useCallback(async (_amount?: string) => {
     const signer = await getSigner();
-    const token = getTokenContract(signer);
     const signerAddress = await signer.getAddress();
-    const currentAllowance = await token.allowance(signerAddress, MVAULT_CONTRACT_ADDRESS);
+    // Read via direct provider — MetaMask eth_call on MChain returns 0x
+    const tokenRead = getTokenContract(getDirectProvider());
+    const currentAllowance = await tokenRead.allowance(signerAddress, MVAULT_CONTRACT_ADDRESS);
     const needed = _amount ? ethers.parseUnits(_amount, tokenDecimals) : 0n;
     if (currentAllowance >= needed && needed > 0n) return;
-    const tx = await token.approve(MVAULT_CONTRACT_ADDRESS, ethers.MaxUint256);
+    const tokenWrite = getTokenContract(signer);
+    // gasLimit required — MetaMask eth_estimateGas on MChain returns 0x
+    const tx = await tokenWrite.approve(MVAULT_CONTRACT_ADDRESS, ethers.MaxUint256, { gasLimit: 100_000 });
     await waitForTx(tx.hash);
   }, [getSigner, tokenDecimals]);
 
@@ -326,7 +329,7 @@ export function useWeb3() {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
     const pkg = _pkg ?? 2; // default PRO ($130)
-    const tx = await contract.activate(pkg);
+    const tx = await contract.activate(pkg, { gasLimit: 500_000 });
     await waitForTx(tx.hash);
     await refreshAfterTx();
     if (account) notifyActivation(account);
@@ -338,7 +341,7 @@ export function useWeb3() {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
     const parsed = ethers.parseUnits(amount, tokenDecimals);
-    const tx = await contract.sellMvt(parsed);
+    const tx = await contract.sellMvt(parsed, { gasLimit: 300_000 });
     await waitForTx(tx.hash);
     await refreshAfterTx();
   }, [getSigner, tokenDecimals, refreshAfterTx]);
@@ -349,7 +352,7 @@ export function useWeb3() {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
     const parsed = ethers.parseUnits(amount, tokenDecimals);
-    const tx = await contract.withdrawUsdt(parsed);
+    const tx = await contract.withdrawUsdt(parsed, { gasLimit: 200_000 });
     await waitForTx(tx.hash);
     await refreshAfterTx();
   }, [getSigner, tokenDecimals, refreshAfterTx]);
@@ -360,7 +363,7 @@ export function useWeb3() {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
     const parsed = ethers.parseUnits(amount, tokenDecimals);
-    const tx = await contract.withdrawBtcPool(parsed);
+    const tx = await contract.withdrawBtcPool(parsed, { gasLimit: 200_000 });
     await waitForTx(tx.hash);
     await refreshAfterTx();
   }, [getSigner, tokenDecimals, refreshAfterTx]);
@@ -370,7 +373,7 @@ export function useWeb3() {
   const rebirth = useCallback(async (subAccount: string, placeLeft: boolean) => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
-    const tx = await contract.rebirth(subAccount, placeLeft);
+    const tx = await contract.rebirth(subAccount, placeLeft, { gasLimit: 500_000 });
     await waitForTx(tx.hash);
     await refreshAfterTx();
   }, [getSigner, refreshAfterTx]);
@@ -378,7 +381,7 @@ export function useWeb3() {
   const claimRebirthBalance = useCallback(async () => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
-    const tx = await contract.claimRebirthBalance();
+    const tx = await contract.claimRebirthBalance({ gasLimit: 200_000 });
     await waitForTx(tx.hash);
     await refreshAfterTx();
   }, [getSigner, refreshAfterTx]);
@@ -391,7 +394,7 @@ export function useWeb3() {
     if (!account) return;
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
-    const tx = await contract.setProfile(displayName, email, phone, country);
+    const tx = await contract.setProfile(displayName, email, phone, country, { gasLimit: 200_000 });
     await waitForTx(tx.hash);
     setProfileOnChain({ displayName, email, phone, country, profileSet: true });
   }, [account, getSigner]);
@@ -505,7 +508,7 @@ export function useWeb3() {
   const enterBoardPool = useCallback(async () => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
-    const tx = await contract.enterBoardPool();
+    const tx = await contract.enterBoardPool({ gasLimit: 500_000 });
     await waitForTx(tx.hash);
     await refreshAfterTx();
   }, [getSigner, refreshAfterTx]);
@@ -514,7 +517,7 @@ export function useWeb3() {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
     const pkg = _pkg ?? 2; // default PRO ($130)
-    const tx = await contract.activateFromBalance(pkg);
+    const tx = await contract.activateFromBalance(pkg, { gasLimit: 500_000 });
     await waitForTx(tx.hash);
     await refreshAfterTx();
     if (account) notifyActivation(account);
@@ -527,9 +530,9 @@ export function useWeb3() {
       ? ethers.parseUnits("55", 18)
       : ethers.parseUnits("130", 18);
     const usdtContract = getTokenContract(signer);
-    const approveTx = await usdtContract.approve(MVAULT_CONTRACT_ADDRESS, price);
+    const approveTx = await usdtContract.approve(MVAULT_CONTRACT_ADDRESS, price, { gasLimit: 100_000 });
     await waitForTx(approveTx.hash);
-    const tx = await contract.reactivate(pkg);
+    const tx = await contract.reactivate(pkg, { gasLimit: 500_000 });
     await waitForTx(tx.hash);
     await refreshAfterTx();
   }, [getSigner, refreshAfterTx]);
@@ -537,7 +540,7 @@ export function useWeb3() {
   const reactivateFromIncomeWallet = useCallback(async (pkg: number) => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
-    const tx = await contract.reactivateFromBalance(pkg);
+    const tx = await contract.reactivateFromBalance(pkg, { gasLimit: 500_000 });
     await waitForTx(tx.hash);
     await refreshAfterTx();
   }, [getSigner, refreshAfterTx]);
@@ -646,7 +649,8 @@ export function useWeb3() {
         const usdtWrite = new ethers.Contract(TOKEN_ADDRESS, [
           "function approve(address,uint256) returns (bool)",
         ], signer);
-        const approveTx = await usdtWrite.approve(MVAULT_CONTRACT_ADDRESS, ethers.MaxUint256);
+        // gasLimit required — MetaMask eth_estimateGas on MChain returns 0x
+        const approveTx = await usdtWrite.approve(MVAULT_CONTRACT_ADDRESS, ethers.MaxUint256, { gasLimit: 100_000 });
         await waitForTx(approveTx.hash);
       }
     }
