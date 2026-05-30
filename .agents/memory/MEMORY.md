@@ -1,3 +1,3 @@
 - [MChain build env vars](mchain-build.md) — VITE_BSC_NETWORK must be set at build time; bare `npm run build` silently targets BSC testnet and breaks all MChain users.
-- [VPS restart pattern](vps-restart.md) — cron watchdog at /etc/cron.d/mvault-watchdog auto-restarts node; deploy with scp then let watchdog handle restart; direct SSH nohup/systemd-run commands time out.
+- [VPS restart pattern](vps-restart.md) — server runs as systemd `mvault.service`; always use `systemctl restart mvault.service`; cron/nohup/systemd-run all set cwd=/root causing immediate crash.
 - [MChain eth_call via MetaMask](mchain-ethcall.md) — MetaMask's eth_call on MChain returns "missing revert data"; all staticCall simulations must use getDirectProvider() + { from: signerAddress }, not the MetaMask signer.
