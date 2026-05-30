@@ -141,12 +141,37 @@ async function tryDecodeRevertReason(txHash: string, rpcUrl: string): Promise<st
     if (!revertData || revertData === "0x" || revertData.length < 10) return null;
 
     const selector = revertData.slice(0, 10).toLowerCase();
+
+    // Standard Error(string) — 0x08c379a0
+    if (selector === "0x08c379a0") {
+      try {
+        const iface = new ethers.Interface(["function Error(string)"]);
+        const decoded = iface.decodeFunctionData("Error", revertData);
+        return `[Error] ${decoded[0]}`;
+      } catch { /* fall through */ }
+    }
+
+    // Standard Panic(uint256) — 0x4e487b71
+    if (selector === "0x4e487b71") {
+      try {
+        const code = parseInt(revertData.slice(10), 16);
+        const PANIC_CODES: Record<number, string> = {
+          0x01: "assert failed", 0x11: "arithmetic overflow/underflow",
+          0x12: "division by zero", 0x21: "invalid enum value",
+          0x22: "invalid storage array", 0x31: "pop on empty array",
+          0x32: "array index out of bounds", 0x41: "too much memory",
+          0x51: "bad function pointer",
+        };
+        return `[Panic] ${PANIC_CODES[code] ?? `code ${code}`}`;
+      } catch { /* fall through */ }
+    }
+
     const errorName = ERROR_SELECTOR_MAP[selector];
     if (errorName) {
       const friendly = CONTRACT_ERROR_MESSAGES_EXPORT[errorName];
       return friendly ? `[${errorName}] ${friendly}` : errorName;
     }
-    return `Revert data: ${revertData.slice(0, 18)}`;
+    return `Revert selector: ${selector}`;
   } catch {
     return null;
   }

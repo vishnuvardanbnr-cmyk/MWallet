@@ -617,6 +617,7 @@ export function useWeb3() {
   const stakeUsdt = useCallback(async (usdtAmount: string, isLocked: boolean, useContractBalance = false) => {
     const signer = await getSigner();
     const signerAddress = await signer.getAddress();
+    console.log("[stake] signer:", signerAddress, "amount:", usdtAmount, "locked:", isLocked, "fromBalance:", useContractBalance);
 
     // All reads use direct provider — MetaMask's eth_call on MChain returns "missing revert data"
     const directProvider = getDirectProvider();
@@ -627,6 +628,7 @@ export function useWeb3() {
       readContract.stakingModule(),
       readContract.users(signerAddress),
     ]);
+    console.log("[stake] stakingAddr:", stakingAddr, "isRegistered:", userInfo.isRegistered, "isActive:", userInfo.isActive);
     if (!stakingAddr || stakingAddr === ethers.ZeroAddress) {
       throw new Error("Staking module not yet configured on-chain. Please contact support.");
     }
@@ -643,15 +645,25 @@ export function useWeb3() {
       // Check allowance via direct provider, approve via MetaMask signer
       const usdtRead = new ethers.Contract(TOKEN_ADDRESS, [
         "function allowance(address,address) view returns (uint256)",
+        "function balanceOf(address) view returns (uint256)",
       ], directProvider);
-      const currentAllowance = await usdtRead.allowance(signerAddress, MVAULT_CONTRACT_ADDRESS);
+      const [currentAllowance, walletBal] = await Promise.all([
+        usdtRead.allowance(signerAddress, MVAULT_CONTRACT_ADDRESS),
+        usdtRead.balanceOf(signerAddress),
+      ]);
+      console.log("[stake] on-chain allowance:", currentAllowance.toString(), "walletUSDT:", walletBal.toString(), "need:", amountBn.toString());
       if (currentAllowance < amountBn) {
+        console.log("[stake] sending approve tx...");
         const usdtWrite = new ethers.Contract(TOKEN_ADDRESS, [
           "function approve(address,uint256) returns (bool)",
         ], signer);
         // gasLimit required — MetaMask eth_estimateGas on MChain returns 0x
         const approveTx = await usdtWrite.approve(MVAULT_CONTRACT_ADDRESS, ethers.MaxUint256, { gasLimit: 100_000 });
+        console.log("[stake] approve tx hash:", approveTx.hash);
         await waitForTx(approveTx.hash);
+        console.log("[stake] approve confirmed");
+      } else {
+        console.log("[stake] allowance sufficient, skipping approve");
       }
     }
 
@@ -660,10 +672,14 @@ export function useWeb3() {
     // Pre-flight reads above already catch the most common revert cases.
     const writeContract = getMvaultContract(signer);
     if (useContractBalance) {
+      console.log("[stake] calling stakeFromBalance...");
       const tx = await writeContract.stakeFromBalance(amountBn, isLocked, { gasLimit: 2_000_000 });
+      console.log("[stake] stakeFromBalance tx hash:", tx.hash);
       await waitForTx(tx.hash);
     } else {
+      console.log("[stake] calling stake()...");
       const tx = await writeContract.stake(amountBn, isLocked, { gasLimit: 2_000_000 });
+      console.log("[stake] stake tx hash:", tx.hash);
       await waitForTx(tx.hash);
     }
     await refreshAfterTx();
