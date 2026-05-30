@@ -12,9 +12,9 @@ const OVERRIDE_MAX_LEVELS = [0, 1, 2, 3, 4, 6, 15];
 // Staking invest level reward rates (10 levels, sum = 20% of theoretical tokens)
 const STAKING_INVEST_LEVEL_RATES = [0.10, 0.05, 0.02, 0.01, 0.005, 0.005, 0.003, 0.003, 0.002, 0.002];
 
-const BSC_TESTNET_RPC = "https://bsc-testnet-rpc.publicnode.com";
+const MCHAIN_RPC = "https://node.mymchain.com/api/rpc";
 const MLM_READ_ABI = [
-  "function getUserInfo(address _user) external view returns (uint256 userId, address sponsor, address binaryParent, address leftChild, address rightChild, uint8 placementSide, uint8 userPackage, uint8 status, uint256 walletBalance, uint256 tempWalletBalance, uint256 totalEarnings, uint256 directReferralCount, uint256 joinedAt)",
+  "function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, string displayName, string email, string phone, string country, bool profileSet)",
 ];
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
 const MLM_CONTRACT_ADDR = process.env.VITE_MVAULT_CONTRACT_ADDRESS || process.env.VITE_CONTRACT_ADDRESS || "0x393eDB201A29A2d25673aAB8E57CCC5fd6Fe2866";
@@ -34,13 +34,13 @@ async function distributeStakingInvestLevelIncome(
   let toAdmin = 0;
   try {
     const { ethers } = await import("ethers");
-    const provider = new ethers.JsonRpcProvider(BSC_TESTNET_RPC);
+    const provider = new ethers.JsonRpcProvider(MCHAIN_RPC);
     const mlm = new ethers.Contract(MLM_CONTRACT_ADDR, MLM_READ_ABI, provider);
 
     let current = fromWallet;
     for (let i = 0; i < STAKING_INVEST_LEVEL_RATES.length; i++) {
-      const info = await mlm.getUserInfo(current);
-      const sponsor: string = info[1];
+      const info = await mlm.users(current);
+      const sponsor: string = info.sponsor;
       if (!sponsor || sponsor === ZERO_ADDR) {
         // No more uplines — all remaining level shares go to admin
         for (let r = i; r < STAKING_INVEST_LEVEL_RATES.length; r++) {
@@ -49,8 +49,8 @@ async function distributeStakingInvestLevelIncome(
         break;
       }
 
-      const sponsorInfo = await mlm.getUserInfo(sponsor);
-      const isActive = Number(sponsorInfo[7]) > 0;
+      const sponsorInfo = await mlm.users(sponsor);
+      const isActive = sponsorInfo.isActive === true;
       const share = theoreticalTokens * STAKING_INVEST_LEVEL_RATES[i];
 
       if (isActive && share > 0) {
@@ -81,17 +81,17 @@ async function distributeStakingInvestLevelIncome(
 async function distributeStakingOverride(fromWallet: string, usdtProfit: number): Promise<void> {
   try {
     const { ethers } = await import("ethers");
-    const provider = new ethers.JsonRpcProvider(BSC_TESTNET_RPC);
+    const provider = new ethers.JsonRpcProvider(MCHAIN_RPC);
     const mlm = new ethers.Contract(MLM_CONTRACT_ADDR, MLM_READ_ABI, provider);
 
     let current = fromWallet;
     for (let level = 1; level <= 15; level++) {
-      const info = await mlm.getUserInfo(current);
-      const sponsor: string = info[1];
+      const info = await mlm.users(current);
+      const sponsor: string = info.sponsor;
       if (!sponsor || sponsor === ZERO_ADDR) break;
-      const pkg = Number(info[6]);
-      const maxLevels = pkg >= 0 && pkg < OVERRIDE_MAX_LEVELS.length ? OVERRIDE_MAX_LEVELS[pkg] : 0;
-      if (level <= maxLevels && pkg >= 1) {
+      const rank = Number(info.rank);
+      const maxLevels = rank >= 0 && rank < OVERRIDE_MAX_LEVELS.length ? OVERRIDE_MAX_LEVELS[rank] : 0;
+      if (level <= maxLevels && rank >= 1) {
         const rate = OVERRIDE_RATES[level] ?? 0;
         const amount = usdtProfit * rate;
         if (amount > 0) {
@@ -368,7 +368,7 @@ export async function registerRoutes(
       }
 
       const { ethers } = await import("ethers");
-      const provider = new ethers.JsonRpcProvider(BSC_TESTNET_RPC);
+      const provider = new ethers.JsonRpcProvider(MCHAIN_RPC);
 
       const receipt = await provider.getTransactionReceipt(hash);
       if (!receipt) {
@@ -1080,10 +1080,10 @@ export async function registerRoutes(
 
   // ── BTC Swap via backend liquidity wallet ──────────────────────────────────
 
-  // MvaultContract on BSC testnet — source of truth for board rewards
-  const MVAULT_CONTRACT_TESTNET = process.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x164E4c01958c623CeF48C7DF8C66deFbB5eB4f57";
+  // MvaultContract on MChain — source of truth for board rewards
+  const MVAULT_CONTRACT_MCHAIN = process.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x60c5bd746f6245ecE5daC006082a7bd13f521aF8";
   const MVAULT_BOARD_REWARD_ABI = [
-    "function totalBoardRewardsEarned(address user) view returns (uint256)",
+    "function totalBoardRewardsEarned(address) view returns (uint256)",
   ];
 
   // POST /api/btcswap/sync/:walletAddress — sync on-chain board rewards to backend virtual balance
@@ -1092,8 +1092,8 @@ export async function registerRoutes(
     try {
       const addr = req.params.walletAddress.toLowerCase();
       const { ethers } = await import("ethers");
-      const provider = new ethers.JsonRpcProvider(BSC_TESTNET_RPC);
-      const mvaultContract = new ethers.Contract(MVAULT_CONTRACT_TESTNET, MVAULT_BOARD_REWARD_ABI, provider);
+      const provider = new ethers.JsonRpcProvider(MCHAIN_RPC);
+      const mvaultContract = new ethers.Contract(MVAULT_CONTRACT_MCHAIN, MVAULT_BOARD_REWARD_ABI, provider);
 
       const onChainTotalWei: bigint = await mvaultContract.totalBoardRewardsEarned(addr);
       const onChainTotal = parseFloat(ethers.formatUnits(onChainTotalWei, 18));
