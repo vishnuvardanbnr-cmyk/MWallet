@@ -341,7 +341,7 @@ export function useWeb3() {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
     const parsed = ethers.parseUnits(amount, tokenDecimals);
-    const tx = await contract.sellMvt(parsed, { gasLimit: 300_000 });
+    const tx = await contract.sellMvt(parsed, { gasLimit: 600_000 });
     await waitForTx(tx.hash);
     await refreshAfterTx();
   }, [getSigner, tokenDecimals, refreshAfterTx]);
