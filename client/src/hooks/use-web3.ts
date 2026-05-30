@@ -646,20 +646,21 @@ export function useWeb3() {
       }
     }
 
-    // Simulate first via staticCall to get a decoded revert reason before MetaMask opens
+    // Simulate via direct RPC (not MetaMask) to get a decoded revert reason before MetaMask opens
+    // MetaMask's eth_call on MChain returns "missing revert data" — direct provider works correctly
+    const directProvider = getDirectProvider();
+    const simContract = getMvaultContract(directProvider);
     try {
       if (useContractBalance) {
-        await contract.stakeFromBalance.staticCall(amountBn, isLocked);
+        await simContract.stakeFromBalance.staticCall(amountBn, isLocked, { from: signerAddress });
       } else {
-        await contract.stake.staticCall(amountBn, isLocked);
+        await simContract.stake.staticCall(amountBn, isLocked, { from: signerAddress });
       }
     } catch (simErr: any) {
-      // Re-throw the original error so decodeContractError() in the UI can decode errorName
       throw simErr;
     }
 
     if (useContractBalance) {
-      // Uses USDT already in the contract — no wallet approval needed
       const tx = await contract.stakeFromBalance(amountBn, isLocked, { gasLimit: 2_000_000 });
       await waitForTx(tx.hash);
     } else {
