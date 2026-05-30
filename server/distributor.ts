@@ -44,12 +44,15 @@ export async function runRankCheck(): Promise<void> {
   try {
     const { ethers } = await import("ethers");
 
-    const MAIN       = process.env.VITE_MVAULT_CONTRACT_ADDRESS;
-    const VIEW       = process.env.VITE_MVAULT_VIEW_ADDRESS;
+    // Hardcoded MChain contract addresses — NOT read from env vars.
+    // PM2 may cache a stale VITE_MVAULT_VIEW_ADDRESS pointing at the old VIEW
+    // contract, so we bypass env entirely for these two immutable addresses.
+    const MAIN = "0x60c5bd746f6245ecE5daC006082a7bd13f521aF8";
+    const VIEW = "0x1324CE45d2c043760bEe056c534c94386B1BEFEE";
     const DEPLOYER_PK = process.env.DEPLOYER_PRIVATE_KEY;
 
-    if (!MAIN || !VIEW || !DEPLOYER_PK) {
-      log("runRankCheck: missing VITE_MVAULT_CONTRACT_ADDRESS / VITE_MVAULT_VIEW_ADDRESS / DEPLOYER_PRIVATE_KEY", "rank");
+    if (!DEPLOYER_PK) {
+      log("runRankCheck: missing DEPLOYER_PRIVATE_KEY", "rank");
       return;
     }
 

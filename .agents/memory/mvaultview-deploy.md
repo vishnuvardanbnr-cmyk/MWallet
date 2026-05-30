@@ -1,34 +1,31 @@
 ---
 name: MvaultView deployment
-description: How to redeploy MvaultView when the main contract address changes, and MChain-specific CREATE address quirk
+description: Current MvaultView address, why it was redeployed, and the env-var bypass pattern needed in distributor.ts
 ---
 
-## Rule
+## Current addresses (MChain, Chain ID 1888)
+- **MvaultView**: `0x1324CE45d2c043760bEe056c534c94386B1BEFEE` (deployed May 2026)
+- **MvaultContract main**: `0x60c5bd746f6245ecE5daC006082a7bd13f521aF8`
 
-MvaultView is an **immutable** contract — its `mvault` pointer is set at deploy time and cannot be changed. When MvaultContract is redeployed, MvaultView MUST be redeployed too.
+## Why redeployed
+The old MvaultView (`0xeae33B0EF77B8eA51B866DFD923117dBbD5cAF9d`) was pointing at a dead/wrong main contract (`0x9e71d588...`). All VIEW calls reverted → "could not decode result data" in the rank check.
 
-**Current live addresses (as of 2026-05-30):**
-- MvaultContract: `0x60c5bd746f6245ecE5daC006082a7bd13f521aF8`
-- MvaultView: `0x1324CE45d2c043760bEe056c534c94386B1BEFEE` (points to above)
+## The env-var override problem
+`process.env.VITE_MVAULT_VIEW_ADDRESS || "hardcoded_fallback"` does NOT work when the env var IS set (even to a wrong/stale value). The `||` pattern only provides a fallback when the var is absent.
 
-## MChain CREATE address quirk
-
-`ethers.getCreateAddress({ from, nonce })` gives the **wrong** address on MChain. Always use `receipt.contractAddress` from the transaction receipt — that is the authoritative deployed address.
-
-## How to redeploy
-
-Use `scripts/deploy-mvault-view.cjs` with `VITE_BSC_NETWORK=mchain`. The script uses raw `eth_sendRawTransaction` (standard `factory.deploy()` crashes on MChain due to bech32 miner field).
-
-After deploy:
-1. Update `VITE_MVAULT_VIEW_ADDRESS` in VPS `.env`
-2. Rebuild frontend with new address
-3. Deploy build to VPS + restart pm2
-
-## Smoke-test check
-```
-getMvaultAddress() === MvaultContract address  // confirms correct wiring
-getAllUsersCount() > 0                          // confirms live data
-getRankBatch([addr])                            // confirms rank reads work
+**Fix**: In `server/distributor.ts`, the VIEW and MAIN addresses are hardcoded directly (no env var lookup) because PM2 may cache the old address indefinitely:
+```ts
+const MAIN = "0x60c5bd746f6245ecE5daC006082a7bd13f521aF8";
+const VIEW = "0x1324CE45d2c043760bEe056c534c94386B1BEFEE";
 ```
 
-**Why:** The old MvaultView at `0xeae33B0EF77B8eA51B866DFD923117dBbD5cAF9d` was pointing to `0x9e71d588...` (an old contract). Every VIEW call reverted with "could not decode result data" — which surfaced as the 500 rank check error.
+**Why:** The VPS `.env` file was updated but PM2 caches env vars at process start and doesn't reload from `.env` unless `--update-env` is passed AND the process actually restarts (which kept failing due to EADDRINUSE). Hardcoding bypasses this entirely for immutable contract addresses.
+
+## MvaultView ABI (confirmed working)
+```ts
+const VIEW_ABI = [
+  "function getAllUsersCount() view returns (uint256)",
+  "function getUserSlice(uint256 offset, uint256 limit) view returns (address[])",
+  "function getRankBatch(address[] calldata addrs) view returns (tuple(bool isActive, uint8 rank, address sponsor, uint256 directCount, uint256 teamSalesUsdt, uint256 leftSubVolume, uint256 rightSubVolume)[])",
+];
+```

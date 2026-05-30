@@ -1,4 +1,2 @@
-- [MChain deploy & TX rules](mchain-rules.md) — raw eth_sendRawTransaction required; gasPrice fixed at 1 gwei; never use eth_estimateGas or wallet.sendTransaction()
-- [MVT sell gas budget](mvt-sell-gas.md) — sellMvt uses ~444K gas (not 300K); gasLimit must be >= 600K
-- [Rank check architecture](rank-check.md) — runRankCheck() was stubbed; all rank/activation routes were using BSC RPC instead of MChain
-- [MvaultView deployment](mvaultview-deploy.md) — VIEW must be redeployed when main contract changes; receipt.contractAddress is authoritative on MChain (getCreateAddress() gives wrong result)
+- [VPS PM2 restart pattern](vps-pm2-restart.md) — interactive SSH always times out; use fuser -k + SCP to reload new binary
+- [MvaultView deployment](mvaultview-deploy.md) — current VIEW at 0x1324CE45...; env-var || fallback pattern doesn't bypass a stale set value
