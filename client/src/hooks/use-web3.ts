@@ -214,16 +214,15 @@ export function useWeb3() {
           setContractMvtBalance(bal);
         } catch { }
 
-        // Profile from new MvaultContract (on-chain)
-        // On failure set an empty-but-resolved profile so hasProfile resolves to false
-        // (never leave profileOnChain as null after fetchUserData completes — that would
-        //  keep the loading screen stuck forever).
-        try {
-          const [displayName, email, phone, country, profileSet] = await contract.getProfile(address);
-          setProfileOnChain({ displayName, email, phone, country, profileSet });
-        } catch {
-          setProfileOnChain({ displayName: "", email: "", phone: "", country: "", profileSet: false });
-        }
+        // Profile — read directly from the users() struct already fetched above.
+        // There is no separate getProfile() on-chain; the data lives in the User struct.
+        setProfileOnChain({
+          displayName: info.displayName ?? "",
+          email:       info.email       ?? "",
+          phone:       info.phone       ?? "",
+          country:     info.country     ?? "",
+          profileSet:  !!info.profileSet,
+        });
 
         // Per-user BTC pool rate (stored in user struct — 0 = default 10%)
         try {
