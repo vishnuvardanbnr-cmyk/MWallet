@@ -1,3 +1,5 @@
 - [MChain build env vars](mchain-build.md) — VITE_BSC_NETWORK must be set at build time; bare `npm run build` silently targets BSC testnet and breaks all MChain users.
 - [VPS restart pattern](vps-restart.md) — server runs as systemd `mvault.service`; always use `systemctl restart mvault.service`; cron/nohup/systemd-run all set cwd=/root causing immediate crash.
 - [MChain eth_call via MetaMask](mchain-ethcall.md) — MetaMask's eth_call on MChain returns "missing revert data"; all staticCall simulations must use getDirectProvider() + { from: signerAddress }, not the MetaMask signer.
+- [Staking module MVT mismatch](staking-mvt-mismatch.md) — MvaultStaking.mvaultToken is immutable; old deployed staking had wrong address; fix = redeploy MvaultStaking + re-link via setStakingModule on both main and MVT token.
+- [MChain staticCall unreliable](mchain-staticcall.md) — MChain RPC returns 0x for state-mutating eth_call simulations (staticCall); simple reads work fine; never use staticCall pre-flight on MChain — send tx directly with explicit gasLimit.
