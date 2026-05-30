@@ -1,7 +1,3 @@
-- [MChain build env vars](mchain-build.md) — VITE_BSC_NETWORK must be set at build time; bare `npm run build` silently targets BSC testnet and breaks all MChain users.
-- [VPS restart pattern](vps-restart.md) — server runs as systemd `mvault.service`; always use `systemctl restart mvault.service`; cron/nohup/systemd-run all set cwd=/root causing immediate crash.
-- [MChain eth_call via MetaMask](mchain-ethcall.md) — MetaMask's eth_call on MChain returns "missing revert data"; all staticCall simulations must use getDirectProvider() + { from: signerAddress }, not the MetaMask signer.
-- [Staking module MVT mismatch](staking-mvt-mismatch.md) — MvaultStaking.mvaultToken is immutable; old deployed staking had wrong address; fix = redeploy MvaultStaking + re-link via setStakingModule on both main and MVT token.
-- [MChain CREATE address offset](mchain-create-address.md) — MChain uses nonce+1 for CREATE address; ethers getCreateAddress({nonce}) is WRONG; always read contractAddress from the deployment receipt.
-- [MChain EVM version](mchain-evm-version.md) — MChain does NOT support Cancun opcodes (TLOAD 0x5c, TSTORE 0x5d, MCOPY 0x5e, PUSH0 0x5f); hardhat.config.cjs MUST set evmVersion:"london"; Solidity 0.8.20+ defaults to shanghai/cancun which breaks deploys.
-- [MChain deploy script](mchain-deploy-script.md) — use scripts/deploy-staking-mchain.cjs pattern (raw eth_sendRawTransaction + waitReceipt + read contractAddress) for all future MChain contract deployments; never use Hardhat's ContractFactory.getAddress().
+- [MChain deploy & TX rules](mchain-rules.md) — raw eth_sendRawTransaction required; gasPrice fixed at 1 gwei; never use eth_estimateGas or wallet.sendTransaction()
+- [MVT sell gas budget](mvt-sell-gas.md) — sellMvt uses ~444K gas (not 300K); gasLimit must be >= 600K
+- [Rank check architecture](rank-check.md) — runRankCheck() was stubbed; all rank/activation routes were using BSC RPC instead of MChain

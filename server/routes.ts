@@ -1361,11 +1361,7 @@ export async function registerRoutes(
       const MVAULT = process.env.VITE_MVAULT_CONTRACT_ADDRESS || "";
       if (!MVAULT) return res.status(500).json({ message: "Contract not configured" });
 
-      const isMainnet = process.env.VITE_BSC_NETWORK === "mainnet";
-      const RPC = isMainnet
-        ? "https://bsc-rpc.publicnode.com"
-        : "https://bsc-testnet-rpc.publicnode.com";
-      const provider = new ethers.JsonRpcProvider(RPC);
+      const provider = new ethers.JsonRpcProvider(MCHAIN_RPC);
 
       const USER_ABI = ["function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, string displayName, string email, string phone, string country, bool profileSet)"];
       const mvault = new ethers.Contract(MVAULT, USER_ABI, provider);
@@ -1453,9 +1449,7 @@ export async function registerRoutes(
       const MVAULT = process.env.VITE_MVAULT_CONTRACT_ADDRESS || "";
       if (!MVAULT) return res.status(500).json({ message: "Contract address not configured" });
 
-      const isMainnet = process.env.VITE_BSC_NETWORK === "mainnet";
-      const RPC = isMainnet ? "https://bsc-rpc.publicnode.com" : "https://bsc-testnet-rpc.publicnode.com";
-      const provider = new ethers.JsonRpcProvider(RPC);
+      const provider = new ethers.JsonRpcProvider(MCHAIN_RPC);
 
       const USERS_ABI = [
         "function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, string displayName, string email, string phone, string country, bool profileSet)",
@@ -1484,7 +1478,7 @@ export async function registerRoutes(
       // M1 thresholds (same as distributor)
       const M1_MIN_DIRECTS   = 5n;
       const M1_MIN_TEAM_USDT = ethers.parseUnits("2000", 18);
-      const MIN_COUNTS       = [0, 0, 2, 4, 4]; // slots 1-4 for M2-M5
+      const MIN_COUNTS       = [0, 0, 2, 4, 4, 4]; // index = target rank (M2=2, M3=4, M4=4, M5=4)
 
       // Determine next expected rank from cache if fresh
       let cachedEligible = false;
@@ -1550,10 +1544,7 @@ export async function registerRoutes(
         "function getPoolBalances() view returns (uint256 community, uint256 reserve, uint256 admin)",
         "function getAllUsersCount() view returns (uint256)",
       ];
-      const rpc = process.env.VITE_BSC_NETWORK === "mainnet"
-        ? "https://bsc-rpc.publicnode.com"
-        : "https://bsc-testnet-rpc.publicnode.com";
-      const provider = new ethers.JsonRpcProvider(rpc);
+      const provider = new ethers.JsonRpcProvider(MCHAIN_RPC);
       const contract = new ethers.Contract(MVAULT_CONTRACT_ADDRESS, ABI, provider);
       const [community, reserve, admin] = await contract.getPoolBalances() as [bigint, bigint, bigint];
       const totalUsers = Number(await contract.getAllUsersCount());
@@ -1588,10 +1579,7 @@ export async function registerRoutes(
       if (DIST_ADDR) {
         try {
           const { ethers } = await import("ethers");
-          const RPC = process.env.VITE_BSC_NETWORK === "mainnet"
-            ? "https://bsc-rpc.publicnode.com"
-            : "https://bsc-testnet-rpc.publicnode.com";
-          const provider = new ethers.JsonRpcProvider(RPC);
+          const provider = new ethers.JsonRpcProvider(MCHAIN_RPC);
           const dist = new ethers.Contract(DIST_ADDR, [
             "function hasClaimed(uint256 cycle, address user) view returns (bool)",
           ], provider);
