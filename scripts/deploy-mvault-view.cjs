@@ -23,10 +23,11 @@ const path = require("path");
 const MVAULT_ADDRESS = process.env.VITE_MVAULT_CONTRACT_ADDRESS
   || "0x164E4c01958c623CeF48C7DF8C66deFbB5eB4f57";
 
-const isMainnet = process.env.VITE_BSC_NETWORK === "mainnet";
-const RPC = isMainnet
-  ? "https://bsc-rpc.publicnode.com"
-  : "https://bsc-testnet-rpc.publicnode.com";
+const RPC = process.env.VITE_BSC_NETWORK === "mchain"
+  ? "https://node.mymchain.com/api/rpc"
+  : process.env.VITE_BSC_NETWORK === "mainnet"
+    ? "https://bsc-rpc.publicnode.com"
+    : "https://bsc-testnet-rpc.publicnode.com";
 
 const PRIVATE_KEY = process.env.DEPLOYER_PRIVATE_KEY;
 if (!PRIVATE_KEY) { console.error("DEPLOYER_PRIVATE_KEY not set"); process.exit(1); }
