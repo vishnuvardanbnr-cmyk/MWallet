@@ -10,6 +10,7 @@ module.exports = {
     settings: {
       optimizer: { enabled: true, runs: 1 },
       viaIR: true,
+      evmVersion: "london",
     },
   },
   networks: {
@@ -17,7 +18,8 @@ module.exports = {
       url: "https://node.mymchain.com/api/rpc",
       chainId: 1888,
       accounts: DEPLOYER_KEY ? [DEPLOYER_KEY] : [],
-      gasPrice: "auto",
+      gasPrice: 1000000000,
+      gas: 6000000,
       timeout: 120000,
     },
     bscTestnet: {
