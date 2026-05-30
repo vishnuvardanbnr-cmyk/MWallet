@@ -60,6 +60,98 @@ export function getDirectProvider(): ethers.JsonRpcProvider {
 // parse, causing tx.wait() to throw BAD_DATA on every confirmed transaction.
 // This helper polls eth_getTransactionReceipt directly (no block fetch) so we
 // never hit the broken block-parsing path.  Works on all networks.
+// Known custom error signatures → 4-byte selectors (computed at module load)
+const KNOWN_ERROR_SIGS = [
+  "NotAuthorized()", "AlreadyRegistered()", "NotRegistered()", "AlreadyActive()",
+  "NotActive()", "InvalidSponsor()", "PositionTaken()", "InsufficientVirtualBalance()",
+  "InsufficientUsdtBalance()", "InsufficientBtcPool()", "InsufficientRebirthPool()",
+  "NoOpenBinarySlot()", "ZeroAddress()", "ZeroAmount()", "TransferFailed()",
+  "BoardHandlerNotSet()", "InsufficientBtcPoolForBoard()", "ExceedsPool()",
+  "IncomeNotExhausted()", "CannotDowngradePackage()",
+  "BelowMinStake()", "NoMvtMinted()", "AlreadyUnstaked()", "AlreadyLocked()",
+  "StillLocked()", "InvalidIndex()", "NotMvaultContract()",
+  "OnlyMvault()", "InsufficientBalance()", "InsufficientLiquidity()",
+  "NotStakingModule()",
+];
+const ERROR_SELECTOR_MAP: Record<string, string> = {};
+for (const sig of KNOWN_ERROR_SIGS) {
+  const name = sig.split("(")[0];
+  const selector = ethers.id(sig).slice(0, 10).toLowerCase();
+  ERROR_SELECTOR_MAP[selector] = name;
+}
+
+const CONTRACT_ERROR_MESSAGES_EXPORT: Record<string, string> = {
+  AlreadyRegistered:          "This wallet is already registered.",
+  NotRegistered:              "This wallet is not registered.",
+  AlreadyActive:              "Your account is already activated.",
+  InvalidSponsor:             "Invalid sponsor address — they must be a registered member.",
+  PositionTaken:              "That binary tree position is already taken. Try the other side.",
+  InsufficientVirtualBalance: "Insufficient MVT balance.",
+  InsufficientUsdtBalance:    "Insufficient USDT balance.",
+  InsufficientBtcPool:        "Insufficient BTC pool balance.",
+  InsufficientRebirthPool:    "Insufficient rebirth pool balance ($130 needed).",
+  NoOpenBinarySlot:           "No open slot found in the binary tree.",
+  ZeroAddress:                "Invalid address provided.",
+  ZeroAmount:                 "Amount must be greater than zero.",
+  TransferFailed:             "Token transfer failed. Check your USDT balance and approval.",
+  NotAuthorized:              "Not authorized to call this function.",
+  ExceedsPool:                "Amount exceeds pool balance.",
+  BoardHandlerNotSet:         "Board module not configured yet.",
+  InsufficientBtcPoolForBoard:"Insufficient BTC pool balance to enter the board.",
+  NotActive:                  "Your account is not yet activated. Please activate ($130 USDT) before staking.",
+  BelowMinStake:              "Minimum stake is $50 USDT.",
+  NoMvtMinted:                "MVT minting failed — bonding curve issue, please contact support.",
+  AlreadyUnstaked:            "This position has already been unstaked.",
+  AlreadyLocked:              "This position is already locked.",
+  StillLocked:                "This position is still in the lock period.",
+  InvalidIndex:               "Invalid stake position index.",
+  NotMvaultContract:          "Call not allowed from this address.",
+  OnlyMvault:                 "Caller not authorized in MVT token (staking module address mismatch).",
+  InsufficientLiquidity:      "MVT pool has insufficient liquidity for this operation.",
+  NotStakingModule:           "Caller is not the staking module.",
+};
+
+async function tryDecodeRevertReason(txHash: string, rpcUrl: string): Promise<string | null> {
+  try {
+    const txRes = await fetch(rpcUrl, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", method: "eth_getTransactionByHash", params: [txHash], id: 1 }),
+    });
+    const tx = (await txRes.json()).result;
+    if (!tx) return null;
+
+    const callRes = await fetch(rpcUrl, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        jsonrpc: "2.0", method: "eth_call",
+        params: [{ from: tx.from, to: tx.to, data: tx.input, value: tx.value }, tx.blockNumber ?? "latest"],
+        id: 2,
+      }),
+    });
+    const callJson = await callRes.json();
+
+    // Different nodes encode revert data differently
+    let revertData: string | null = null;
+    if (callJson.error?.data && typeof callJson.error.data === "string") {
+      revertData = callJson.error.data;
+    } else if (typeof callJson.result === "string" && callJson.result.length >= 10 && callJson.result !== "0x") {
+      revertData = callJson.result;
+    }
+
+    if (!revertData || revertData === "0x" || revertData.length < 10) return null;
+
+    const selector = revertData.slice(0, 10).toLowerCase();
+    const errorName = ERROR_SELECTOR_MAP[selector];
+    if (errorName) {
+      const friendly = CONTRACT_ERROR_MESSAGES_EXPORT[errorName];
+      return friendly ? `[${errorName}] ${friendly}` : errorName;
+    }
+    return `Revert data: ${revertData.slice(0, 18)}`;
+  } catch {
+    return null;
+  }
+}
+
 export async function waitForTx(txHash: string): Promise<void> {
   const rpcUrl = import.meta.env.VITE_BSC_NETWORK === "mchain"
     ? (typeof window !== "undefined"
@@ -82,7 +174,8 @@ export async function waitForTx(txHash: string): Promise<void> {
     const receipt = data.result;
     if (receipt) {
       if (receipt.status === "0x0") {
-        throw new Error("Transaction reverted on-chain");
+        const reason = await tryDecodeRevertReason(txHash, rpcUrl);
+        throw new Error(reason ?? "Transaction reverted on-chain");
       }
       return;
     }
@@ -428,45 +521,10 @@ export function shortenAddress(addr: string): string {
   return `${addr.slice(0, 6)}...${addr.slice(-4)}`;
 }
 
-// ── Contract error decoder ────────────────────────────────────────────────────
-// Maps Ethers v6 custom error names to user-friendly messages.
-const CONTRACT_ERROR_MESSAGES: Record<string, string> = {
-  AlreadyRegistered:          "This wallet is already registered.",
-  NotRegistered:              "This wallet is not registered.",
-  AlreadyActive:              "Your account is already activated.",
-  InvalidSponsor:             "Invalid sponsor address — they must be a registered member.",
-  PositionTaken:              "That binary tree position is already taken. Try the other side.",
-  InsufficientVirtualBalance: "Insufficient MVT balance.",
-  InsufficientUsdtBalance:    "Insufficient USDT balance.",
-  InsufficientBtcPool:        "Insufficient BTC pool balance.",
-  InsufficientRebirthPool:    "Insufficient rebirth pool balance ($130 needed).",
-  NoOpenBinarySlot:           "No open slot found in the binary tree.",
-  ZeroAddress:                "Invalid address provided.",
-  ZeroAmount:                 "Amount must be greater than zero.",
-  TransferFailed:             "Token transfer failed. Check your USDT balance and approval.",
-  NotAuthorized:              "Not authorized to call this function.",
-  ExceedsPool:                "Amount exceeds pool balance.",
-  BoardHandlerNotSet:         "Board module not configured yet.",
-  InsufficientBtcPoolForBoard:"Insufficient BTC pool balance to enter the board.",
-  NotActive:                  "Your account is not yet activated. Please activate ($130 USDT) before staking.",
-  // MvaultStaking errors
-  BelowMinStake:              "Minimum stake is $50 USDT.",
-  NoMvtMinted:                "MVT minting failed — please try again.",
-  AlreadyUnstaked:            "This position has already been unstaked.",
-  AlreadyLocked:              "This position is already locked.",
-  StillLocked:                "This position is still in the lock period.",
-  InvalidIndex:               "Invalid stake position index.",
-  NotMvaultContract:          "Call not allowed from this address.",
-  // MvaultDistributor errors
-  AlreadyClaimed:             "You have already claimed your distribution for this cycle.",
-  InvalidProof:               "Invalid Merkle proof — proof may be stale or wallet mismatch.",
-  PoolMismatch:               "Distribution pool amount does not match committed total.",
-};
-
 export function decodeContractError(err: any): string {
   // Ethers v6: custom errors set err.errorName when the error is in the ABI
-  if (err?.errorName && CONTRACT_ERROR_MESSAGES[err.errorName]) {
-    return CONTRACT_ERROR_MESSAGES[err.errorName];
+  if (err?.errorName && CONTRACT_ERROR_MESSAGES_EXPORT[err.errorName]) {
+    return CONTRACT_ERROR_MESSAGES_EXPORT[err.errorName];
   }
   // User rejected the transaction
   if (err?.code === "ACTION_REJECTED" || err?.code === 4001) {
