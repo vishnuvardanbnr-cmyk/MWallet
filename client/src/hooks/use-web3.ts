@@ -655,15 +655,9 @@ export function useWeb3() {
       }
     }
 
-    // Simulate via direct RPC to get a decoded revert reason before MetaMask opens
-    const simContract = getMvaultContract(directProvider);
-    if (useContractBalance) {
-      await simContract.stakeFromBalance.staticCall(amountBn, isLocked, { from: signerAddress });
-    } else {
-      await simContract.stake.staticCall(amountBn, isLocked, { from: signerAddress });
-    }
-
-    // Actual transaction through MetaMask
+    // Send directly through MetaMask — gasLimit bypasses eth_estimateGas.
+    // MChain's eth_call returns 0x for state-mutating simulations (staticCall unreliable).
+    // Pre-flight reads above already catch the most common revert cases.
     const writeContract = getMvaultContract(signer);
     if (useContractBalance) {
       const tx = await writeContract.stakeFromBalance(amountBn, isLocked, { gasLimit: 2_000_000 });
