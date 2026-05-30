@@ -338,6 +338,27 @@ export interface HardwareProduct {
   inStock: boolean;
 }
 
+// ── On-chain Event Index (backup mirror of contract events) ──────────────────
+
+export const onChainEvents = pgTable("on_chain_events", {
+  id:            serial("id").primaryKey(),
+  txHash:        varchar("tx_hash",        { length: 66  }).notNull(),
+  blockNumber:   integer("block_number").notNull(),
+  logIndex:      integer("log_index").notNull(),
+  eventType:     varchar("event_type",     { length: 50  }).notNull(),
+  walletAddress: varchar("wallet_address", { length: 42  }).notNull(),
+  fromAddress:   varchar("from_address",   { length: 42  }),
+  level:         integer("level"),
+  amountRaw:     text("amount_raw"),
+  extraData:     text("extra_data"),
+  blockTimestamp: timestamp("block_timestamp"),
+  createdAt:     timestamp("created_at").defaultNow(),
+}, (t) => ({
+  uniqueEvent: uniqueIndex("unique_on_chain_event").on(t.txHash, t.logIndex),
+}));
+
+export type OnChainEvent = typeof onChainEvents.$inferSelect;
+
 export interface HardwareOrder {
   id: string;
   walletAddress: string;

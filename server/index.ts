@@ -61,11 +61,13 @@ app.use((req, res, next) => {
 
 import { setupWebSocket } from "./websocket";
 import { startDistributor } from "./distributor";
+import { startIndexer } from "./indexer";
 setupWebSocket(httpServer);
 
 (async () => {
   await registerRoutes(httpServer, app);
   startDistributor();
+  startIndexer();
 
   app.use((err: any, _req: Request, res: Response, next: NextFunction) => {
     const status = err.status || err.statusCode || 500;

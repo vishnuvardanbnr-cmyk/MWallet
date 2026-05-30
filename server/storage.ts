@@ -1,4 +1,4 @@
-import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome, usdtDeposits, type UsdtDeposit, leadershipRewards, type LeadershipReward, musdtStakingPlans, type MusdtStakingPlan, type InsertMusdtStakingPlan, musdtOverrideIncome, type MusdtOverrideIncome, mTokenPurchaseBatches, type MTokenPurchaseBatch, type InsertTokenBatch, distributionCycles, type DistributionCycle, distributionProofs, type DistributionProof, kvStore, onchainUsers, type OnchainUser } from "@shared/schema";
+import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome, usdtDeposits, type UsdtDeposit, leadershipRewards, type LeadershipReward, musdtStakingPlans, type MusdtStakingPlan, type InsertMusdtStakingPlan, musdtOverrideIncome, type MusdtOverrideIncome, mTokenPurchaseBatches, type MTokenPurchaseBatch, type InsertTokenBatch, distributionCycles, type DistributionCycle, distributionProofs, type DistributionProof, kvStore, onchainUsers, type OnchainUser, onChainEvents, type OnChainEvent } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -98,6 +98,13 @@ export interface IStorage {
   // Key-Value store (used by distributors to persist state like lastBlock)
   getKv(key: string): Promise<string | null>;
   setKv(key: string, value: string): Promise<void>;
+  // On-chain event backup
+  saveOnChainEvent(event: {
+    txHash: string; blockNumber: number; logIndex: number; eventType: string;
+    walletAddress: string; fromAddress?: string; level?: number;
+    amountRaw?: string; extraData?: string; blockTimestamp?: Date;
+  }): Promise<void>;
+  getOnChainEventsByWallet(walletAddress: string, limit?: number): Promise<import("../shared/schema").OnChainEvent[]>;
   // On-chain user mirror (populated by runRankCheck, used for fast rank evaluation)
   upsertOnchainUsersBulk(users: Array<{
     address: string; sponsor: string; rank: number; directCount: number;
@@ -801,6 +808,32 @@ export class DatabaseStorage implements IStorage {
     const [row] = await db.select().from(onchainUsers)
       .where(eq(onchainUsers.address, address.toLowerCase()));
     return row;
+  }
+
+  async saveOnChainEvent(event: {
+    txHash: string; blockNumber: number; logIndex: number; eventType: string;
+    walletAddress: string; fromAddress?: string; level?: number;
+    amountRaw?: string; extraData?: string; blockTimestamp?: Date;
+  }): Promise<void> {
+    await db.insert(onChainEvents).values({
+      txHash:        event.txHash.toLowerCase(),
+      blockNumber:   event.blockNumber,
+      logIndex:      event.logIndex,
+      eventType:     event.eventType,
+      walletAddress: event.walletAddress.toLowerCase(),
+      fromAddress:   event.fromAddress?.toLowerCase(),
+      level:         event.level,
+      amountRaw:     event.amountRaw,
+      extraData:     event.extraData,
+      blockTimestamp: event.blockTimestamp,
+    }).onConflictDoNothing();
+  }
+
+  async getOnChainEventsByWallet(walletAddress: string, limit = 500): Promise<OnChainEvent[]> {
+    return db.select().from(onChainEvents)
+      .where(eq(onChainEvents.walletAddress, walletAddress.toLowerCase()))
+      .orderBy(desc(onChainEvents.blockNumber))
+      .limit(limit);
   }
 }
 
