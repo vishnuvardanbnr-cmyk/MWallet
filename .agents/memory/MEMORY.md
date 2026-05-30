@@ -1,0 +1,1 @@
+- [MChain build env vars](mchain-build.md) — VITE_BSC_NETWORK must be set at build time; bare `npm run build` silently targets BSC testnet and breaks all MChain users.
