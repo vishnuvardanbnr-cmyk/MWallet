@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect } from "react";
 import { DollarSign, TrendingUp, TrendingDown, Coins, RefreshCw, Copy, User, Users, Wallet, Zap, Shield, Bitcoin, RotateCcw, Info, ChevronRight, Check, ExternalLink, Award, AlertTriangle } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { formatTokenAmount, shortenAddress, getMvaultContract } from "@/lib/contract";
+import { formatTokenAmount, shortenAddress, getMvaultContract, getDirectProvider } from "@/lib/contract";
 import type { UserInfo, MvtPrice, BinaryPairs, ProfileOnChain } from "@/hooks/use-web3";
 import { getRankInfo } from "@/pages/rank";
 import { useLocation } from "wouter";
@@ -76,15 +76,18 @@ export default function Dashboard({
     if (!account || isSubAccount) return;
     (async () => {
       try {
-        const provider = new ethers.BrowserProvider((window as any).ethereum);
+        // Use direct provider (proxy) — MetaMask's eth_getLogs on MChain fails (-32603)
+        const provider = getDirectProvider();
         const contract = getMvaultContract(provider);
         const filter = contract.filters.Reborn(account);
+        // MChain limits eth_getLogs to 10 000 blocks per request
+        const current = await provider.getBlockNumber();
+        const fromBlock = Math.max(0, current - 9_000);
         let events: any[];
         try {
-          events = await contract.queryFilter(filter, 0);
+          events = await contract.queryFilter(filter, fromBlock, current);
         } catch {
-          const current = await provider.getBlockNumber();
-          events = await contract.queryFilter(filter, Math.max(0, current - 100000));
+          events = [];
         }
         if (!events.length) { setSubAccounts([]); return; }
 

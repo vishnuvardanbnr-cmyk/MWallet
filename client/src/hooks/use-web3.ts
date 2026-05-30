@@ -496,7 +496,8 @@ export function useWeb3() {
       if (!hasStakingRecords && offset === 0) {
         try {
           const currentBlock = await provider.getBlockNumber();
-          const fromBlock = Math.max(0, currentBlock - 200_000);
+          // MChain limits eth_getLogs to 10 000 blocks per request
+          const fromBlock = Math.max(0, currentBlock - 9_000);
 
           // Try to find Staked events
           const stakedFilter = contract.filters.Staked?.(account);
