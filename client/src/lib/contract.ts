@@ -253,6 +253,11 @@ export const MVAULT_ABI = [
   "error ExceedsPool()",
   "error IncomeNotExhausted()",
   "error CannotDowngradePackage()",
+  // Rebirth-specific errors
+  "error NotEligibleForRebirth()",
+  "error SubAccountAlreadyRegistered()",
+  "error UseRebirthInstead()",
+  "error NoRebirthBalance()",
   // MvaultStaking errors (bubbled through MvaultContract)
   "error BelowMinStake()",
   "error NoMvtMinted()",

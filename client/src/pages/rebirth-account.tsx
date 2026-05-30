@@ -6,7 +6,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { formatTokenAmount } from "@/lib/contract";
+import { formatTokenAmount, decodeContractError } from "@/lib/contract";
 import { ethers } from "ethers";
 
 const PACKAGE_PRICE = 130;
@@ -46,7 +46,8 @@ export default function RebirthAccountPage({
   const limitLeft   = incomeLimit   ? parseFloat(formatTokenAmount(incomeLimit,   tokenDecimals)) : -1;
   const limitCap    = incomeLimitCap? parseFloat(formatTokenAmount(incomeLimitCap,tokenDecimals)) : 0;
   const isPro       = !packagePrice || packagePrice >= PRO_PRICE; // default to PRO assumption until loaded
-  const limitFull   = limitLeft < 0 || limitLeft >= limitCap * 0.99; // income limit still full
+  const limitFull   = limitLeft < 0 || (limitCap > 0 && limitLeft >= limitCap * 0.99); // income limit still full (≥99%)
+  const limitExhausted = limitCap > 0 && limitLeft >= 0 && limitLeft < 1; // income limit at $0
   const hasFunds    = poolBal >= PACKAGE_PRICE;
   const addrValid   = isAddr(subAccount) && subAccount.toLowerCase() !== account.toLowerCase();
   const canSubmit   = addrValid && hasFunds && isPro;
@@ -62,10 +63,7 @@ export default function RebirthAccountPage({
       setPlaceLeft(true);
       toast({ title: "Rebirth Successful!", description: `Sub-account ${shortenAddr(subAccount)} is registered and activated. Your income limit is reset to $390.` });
     } catch (e: any) {
-      const msg = (e?.message ?? "Transaction failed")
-        .replace(/^execution reverted: /, "")
-        .replace(/\s*\(.*\)\s*$/, "")
-        .trim();
+      const msg = decodeContractError(e);
       toast({ title: "Rebirth Failed", description: msg, variant: "destructive" });
     } finally {
       setProcessing(false);
@@ -148,14 +146,20 @@ export default function RebirthAccountPage({
             <p className="text-xs font-semibold text-amber-300">
               Rebirth pool has <strong>${poolBal.toFixed(2)}</strong> — need $130
             </p>
-            {limitFull ? (
+            {limitExhausted ? (
+              <p className="text-xs text-amber-300/80">
+                Your income limit is fully exhausted ($0 remaining) — every MVT you sell now goes directly into your rebirth pool.
+                Keep selling MVT to reach $130.
+              </p>
+            ) : limitFull ? (
               <p className="text-xs text-amber-300/80">
                 Your income limit is still open (${limitLeft >= 0 ? limitLeft.toFixed(0) : '—'} / ${limitCap.toFixed(0)} remaining).
                 Sell MVT to earn USDT — once your limit hits $0, any further MVT sells automatically fill the rebirth pool.
               </p>
             ) : (
               <p className="text-xs text-amber-300/80">
-                Your income limit is nearly exhausted — keep selling MVT and the excess will flow into this rebirth pool automatically.
+                Your income limit is nearly exhausted (${limitLeft.toFixed(0)} left) — keep selling MVT and the excess will flow
+                into this rebirth pool automatically.
               </p>
             )}
           </div>
