@@ -280,7 +280,7 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
   }, [tab]);
 
   const copyLink = (side: "left" | "right") => {
-    const link = `${window.location.origin}?ref=${account}&side=${side}`;
+    const link = `${window.location.origin}/open?ref=${account}&side=${side}`;
     navigator.clipboard.writeText(link);
     setCopiedSide(side);
     toast({ title: "Copied!", description: `${side.charAt(0).toUpperCase() + side.slice(1)} referral link copied.` });
@@ -288,7 +288,7 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
   };
 
   const shareWhatsApp = (side: "left" | "right") => {
-    const link = `${window.location.origin}?ref=${account}&side=${side}`;
+    const link = `${window.location.origin}/open?ref=${account}&side=${side}`;
     const msg = `Join me on M-Vault — the DeFi MLM ecosystem on BNB Smart Chain! Activate for $130 and earn up to $390 (3×). Use my ${side} referral link: ${link}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
   };
@@ -357,7 +357,7 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
           {(["left", "right"] as const).map((side) => (
             <div key={side} className="flex items-center gap-2">
               <div className="flex-1 rounded-xl bg-white/[0.03] border border-white/[0.06] px-3 py-2 font-mono text-[10px] text-muted-foreground overflow-hidden text-ellipsis whitespace-nowrap" data-testid={`text-ref-link-${side}`}>
-                {window.location.origin}?ref={account.slice(0, 10)}...&side={side}
+                {window.location.origin}/open?ref={account.slice(0, 10)}...&side={side}
               </div>
               <button onClick={() => copyLink(side)}
                 className={`p-2 rounded-xl transition-all shrink-0 ${copiedSide === side ? "bg-emerald-500/20 border border-emerald-500/30" : "bg-white/[0.04] border border-white/[0.06] hover:bg-amber-500/10"}`}

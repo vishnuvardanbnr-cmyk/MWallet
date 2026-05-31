@@ -25,7 +25,7 @@ import SettingsPage from "@/pages/settings";
 import SupportPage from "@/pages/support";
 import BoardPage from "@/pages/board";
 import BinaryDetailsPage from "@/pages/binary-details";
-
+import WalletOpenPage from "@/pages/wallet-open";
 import StorePage from "@/pages/store";
 import PaidStakingPage from "@/pages/paid-staking";
 import RegisterForPage from "@/pages/register-for";
@@ -119,7 +119,7 @@ function LoadingScreen() {
 function App() {
   const web3 = useWeb3();
   const [hasProfile, setHasProfile] = useState<boolean | null>(null);
-  const [, navigate] = useLocation();
+  const [location, navigate] = useLocation();
 
   useEffect(() => {
     if (web3.account && web3.isRegistered) {
@@ -147,6 +147,15 @@ function App() {
   };
 
   const currentStep = getFlowStep();
+
+  // Public wallet-redirect page — no wallet connection required
+  if (location.startsWith("/open")) {
+    return (
+      <ThemeProvider>
+        <WalletOpenPage />
+      </ThemeProvider>
+    );
+  }
 
   if (currentStep === "connect") {
     return (
