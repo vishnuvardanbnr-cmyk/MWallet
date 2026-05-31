@@ -329,7 +329,7 @@ export function useWeb3() {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
     const pkg = _pkg ?? 2; // default PRO ($130)
-    const tx = await contract.activate(pkg, { gasLimit: 500_000 });
+    const tx = await contract.activate(pkg, { gasLimit: 5_000_000 });
     await waitForTx(tx.hash);
     await refreshAfterTx();
     if (account) notifyActivation(account);
@@ -522,7 +522,7 @@ export function useWeb3() {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
     const pkg = _pkg ?? 2; // default PRO ($130)
-    const tx = await contract.activateFromBalance(pkg, { gasLimit: 500_000 });
+    const tx = await contract.activateFromBalance(pkg, { gasLimit: 5_000_000 });
     await waitForTx(tx.hash);
     await refreshAfterTx();
     if (account) notifyActivation(account);
@@ -537,7 +537,7 @@ export function useWeb3() {
     const usdtContract = getTokenContract(signer);
     const approveTx = await usdtContract.approve(MVAULT_CONTRACT_ADDRESS, price, { gasLimit: 100_000 });
     await waitForTx(approveTx.hash);
-    const tx = await contract.reactivate(pkg, { gasLimit: 500_000 });
+    const tx = await contract.reactivate(pkg, { gasLimit: 5_000_000 });
     await waitForTx(tx.hash);
     await refreshAfterTx();
   }, [getSigner, refreshAfterTx]);
@@ -545,7 +545,7 @@ export function useWeb3() {
   const reactivateFromIncomeWallet = useCallback(async (pkg: number) => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
-    const tx = await contract.reactivateFromBalance(pkg, { gasLimit: 500_000 });
+    const tx = await contract.reactivateFromBalance(pkg, { gasLimit: 5_000_000 });
     await waitForTx(tx.hash);
     await refreshAfterTx();
   }, [getSigner, refreshAfterTx]);
@@ -713,7 +713,7 @@ export function useWeb3() {
   ) => {
     const signer = await getSigner();
     const contract = getMvaultContract(signer);
-    const tx = await contract.registerAndActivateFor(newUser, binaryParent, placeLeft, pkg, { gasLimit: 800000 });
+    const tx = await contract.registerAndActivateFor(newUser, binaryParent, placeLeft, pkg, { gasLimit: 5_000_000 });
     await waitForTx(tx.hash);
     await refreshAfterTx();
     // Notify for the newly activated user (not the caller)
