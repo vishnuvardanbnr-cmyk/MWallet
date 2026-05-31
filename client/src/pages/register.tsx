@@ -424,9 +424,8 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
           </div>
 
           {/* Footer */}
-          <div className="px-6 pb-5 flex items-center justify-between">
+          <div className="px-6 pb-5">
             <p className="text-[10px] text-muted-foreground/50">Registration is free</p>
-            <p className="text-[10px] text-muted-foreground/50">Activation costs $130 USDT</p>
           </div>
         </div>
       </div>
