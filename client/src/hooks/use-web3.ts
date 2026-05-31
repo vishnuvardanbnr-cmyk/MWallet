@@ -144,6 +144,36 @@ export function useWeb3() {
     }
   }, []);
 
+  // ── sendRawTx ────────────────────────────────────────────────────────────────
+  // Builds a fully pre-populated legacy (type:0) transaction using nonce+gasPrice
+  // from our direct RPC, then sends it through the wallet signer.
+  // This bypasses the wallet's internal eth_estimateGas / eth_gasPrice calls which
+  // fail on Token Pocket and SafePal for custom chains like MChain.
+  const sendRawTx = useCallback(async (
+    signer: ethers.JsonRpcSigner,
+    to: string,
+    data: string,
+    gasLimit = 600_000,
+  ): Promise<string> => {
+    const direct = getDirectProvider();
+    const addr = await signer.getAddress();
+    const [nonce, feeData] = await Promise.all([
+      direct.getTransactionCount(addr, "pending"),
+      direct.getFeeData(),
+    ]);
+    const gasPrice = feeData.gasPrice ?? 1_000_000_000n; // 1 gwei fallback
+    const tx = await signer.sendTransaction({
+      to,
+      data,
+      gasLimit: BigInt(gasLimit),
+      gasPrice,
+      nonce,
+      chainId: parseInt(NETWORK.chainId, 16),
+      type: 0, // legacy — avoids EIP-1559 failures on Token Pocket / SafePal
+    });
+    return tx.hash;
+  }, []);
+
   // Ensures the wallet is on the correct chain before sending a tx.
   // Throws a user-friendly error if the chain can't be switched.
   const ensureCorrectChain = useCallback(async () => {
@@ -331,10 +361,11 @@ export function useWeb3() {
       // Network/proxy error — proceed anyway and let the wallet tx fail with a real reason
       console.warn("staticCall simulation failed (network error), proceeding with tx:", simMsg);
     }
-    // Step 2 — send through wallet with fixed gasLimit (bypasses eth_estimateGas)
-    const sendContract = getMvaultContract(signer);
-    const tx = await sendContract.register(sponsor, ZERO_ADDRESS, placeLeft, { gasLimit: 600_000n });
-    await waitForTx(tx.hash);
+    // Step 2 — send via pre-populated raw tx (bypasses wallet eth_estimateGas/gasPrice)
+    const iface = getMvaultContract(getDirectProvider()).interface;
+    const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
+      iface.encodeFunctionData("register", [sponsor, ZERO_ADDRESS, placeLeft]), 600_000);
+    await waitForTx(txHash);
     await refreshAfterTx();
   }, [getSigner, ensureCorrectChain, refreshAfterTx]);
 
@@ -348,10 +379,10 @@ export function useWeb3() {
     const currentAllowance = await tokenRead.allowance(signerAddress, MVAULT_CONTRACT_ADDRESS);
     const needed = _amount ? ethers.parseUnits(_amount, tokenDecimals) : 0n;
     if (currentAllowance >= needed && needed > 0n) return;
-    const tokenWrite = getTokenContract(signer);
-    // gasLimit required — MetaMask eth_estimateGas on MChain returns 0x
-    const tx = await tokenWrite.approve(MVAULT_CONTRACT_ADDRESS, ethers.MaxUint256, { gasLimit: 100_000 });
-    await waitForTx(tx.hash);
+    const tokenIface = getTokenContract(getDirectProvider()).interface;
+    const txHash = await sendRawTx(signer, TOKEN_ADDRESS,
+      tokenIface.encodeFunctionData("approve", [MVAULT_CONTRACT_ADDRESS, ethers.MaxUint256]), 100_000);
+    await waitForTx(txHash);
   }, [getSigner, tokenDecimals]);
 
   // ── Activation ($130 USDT, no package selection) ───────────────────────────
@@ -372,10 +403,11 @@ export function useWeb3() {
 
   const activatePackage = useCallback(async (_pkg?: number) => {
     const signer = await getSigner();
-    const contract = getMvaultContract(signer);
-    const pkg = _pkg ?? 2; // default PRO ($130)
-    const tx = await contract.activate(pkg, { gasLimit: 5_000_000 });
-    await waitForTx(tx.hash);
+    const pkg = _pkg ?? 2;
+    const iface = getMvaultContract(getDirectProvider()).interface;
+    const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
+      iface.encodeFunctionData("activate", [pkg]), 5_000_000);
+    await waitForTx(txHash);
     await refreshAfterTx();
     if (account) notifyActivation(account);
   }, [getSigner, refreshAfterTx, account, notifyActivation]);
@@ -384,10 +416,11 @@ export function useWeb3() {
 
   const sellMvt = useCallback(async (amount: string) => {
     const signer = await getSigner();
-    const contract = getMvaultContract(signer);
     const parsed = ethers.parseUnits(amount, tokenDecimals);
-    const tx = await contract.sellMvt(parsed, { gasLimit: 600_000 });
-    await waitForTx(tx.hash);
+    const iface = getMvaultContract(getDirectProvider()).interface;
+    const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
+      iface.encodeFunctionData("sellMvt", [parsed]), 600_000);
+    await waitForTx(txHash);
     await refreshAfterTx();
   }, [getSigner, tokenDecimals, refreshAfterTx]);
 
@@ -395,10 +428,11 @@ export function useWeb3() {
 
   const withdrawFunds = useCallback(async (amount: string) => {
     const signer = await getSigner();
-    const contract = getMvaultContract(signer);
     const parsed = ethers.parseUnits(amount, tokenDecimals);
-    const tx = await contract.withdrawUsdt(parsed, { gasLimit: 200_000 });
-    await waitForTx(tx.hash);
+    const iface = getMvaultContract(getDirectProvider()).interface;
+    const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
+      iface.encodeFunctionData("withdrawUsdt", [parsed]), 200_000);
+    await waitForTx(txHash);
     await refreshAfterTx();
   }, [getSigner, tokenDecimals, refreshAfterTx]);
 
@@ -406,10 +440,11 @@ export function useWeb3() {
 
   const withdrawBtcPool = useCallback(async (amount: string) => {
     const signer = await getSigner();
-    const contract = getMvaultContract(signer);
     const parsed = ethers.parseUnits(amount, tokenDecimals);
-    const tx = await contract.withdrawBtcPool(parsed, { gasLimit: 200_000 });
-    await waitForTx(tx.hash);
+    const iface = getMvaultContract(getDirectProvider()).interface;
+    const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
+      iface.encodeFunctionData("withdrawBtcPool", [parsed]), 200_000);
+    await waitForTx(txHash);
     await refreshAfterTx();
   }, [getSigner, tokenDecimals, refreshAfterTx]);
 
@@ -421,18 +456,19 @@ export function useWeb3() {
     // Simulate first to surface a clean revert reason
     const simContract = getMvaultContract(getDirectProvider());
     await simContract.rebirth.staticCall(subAccount, placeLeft, { from: signerAddress });
-    // Send with 800K gas — rebirth calls _doActivate + placement/rank income + BFS
-    const contract = getMvaultContract(signer);
-    const tx = await contract.rebirth(subAccount, placeLeft, { gasLimit: 5_000_000 });
-    await waitForTx(tx.hash);
+    const iface = getMvaultContract(getDirectProvider()).interface;
+    const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
+      iface.encodeFunctionData("rebirth", [subAccount, placeLeft]), 5_000_000);
+    await waitForTx(txHash);
     await refreshAfterTx();
   }, [getSigner, refreshAfterTx]);
 
   const claimRebirthBalance = useCallback(async () => {
     const signer = await getSigner();
-    const contract = getMvaultContract(signer);
-    const tx = await contract.claimRebirthBalance({ gasLimit: 200_000 });
-    await waitForTx(tx.hash);
+    const iface = getMvaultContract(getDirectProvider()).interface;
+    const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
+      iface.encodeFunctionData("claimRebirthBalance", []), 200_000);
+    await waitForTx(txHash);
     await refreshAfterTx();
   }, [getSigner, refreshAfterTx]);
 
@@ -443,18 +479,20 @@ export function useWeb3() {
   ) => {
     if (!account) return;
     const signer = await getSigner();
-    const contract = getMvaultContract(signer);
-    const tx = await contract.setProfile(displayName, email, phone, country, { gasLimit: 200_000 });
-    await waitForTx(tx.hash);
+    const iface = getMvaultContract(getDirectProvider()).interface;
+    const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
+      iface.encodeFunctionData("setProfile", [displayName, email, phone, country]), 200_000);
+    await waitForTx(txHash);
     setProfileOnChain({ displayName, email, phone, country, profileSet: true });
   }, [account, getSigner]);
 
   const setBtcPoolRate = useCallback(async (rate: number) => {
     if (!account) return;
     const signer = await getSigner();
-    const contract = getMvaultContract(signer);
-    const tx = await contract.setBtcPoolRate(rate, { gasLimit: 80_000 });
-    await waitForTx(tx.hash);
+    const iface = getMvaultContract(getDirectProvider()).interface;
+    const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
+      iface.encodeFunctionData("setBtcPoolRate", [rate]), 80_000);
+    await waitForTx(txHash);
     setBtcPoolRateState(rate);
   }, [account, getSigner]);
 
@@ -557,41 +595,44 @@ export function useWeb3() {
 
   const enterBoardPool = useCallback(async () => {
     const signer = await getSigner();
-    const contract = getMvaultContract(signer);
-    const tx = await contract.enterBoardPool({ gasLimit: 500_000 });
-    await waitForTx(tx.hash);
+    const iface = getMvaultContract(getDirectProvider()).interface;
+    const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
+      iface.encodeFunctionData("enterBoardPool", []), 500_000);
+    await waitForTx(txHash);
     await refreshAfterTx();
   }, [getSigner, refreshAfterTx]);
 
   const activateFromBalance = useCallback(async (_pkg?: number) => {
     const signer = await getSigner();
-    const contract = getMvaultContract(signer);
-    const pkg = _pkg ?? 2; // default PRO ($130)
-    const tx = await contract.activateFromBalance(pkg, { gasLimit: 5_000_000 });
-    await waitForTx(tx.hash);
+    const pkg = _pkg ?? 2;
+    const iface = getMvaultContract(getDirectProvider()).interface;
+    const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
+      iface.encodeFunctionData("activateFromBalance", [pkg]), 5_000_000);
+    await waitForTx(txHash);
     await refreshAfterTx();
     if (account) notifyActivation(account);
   }, [getSigner, refreshAfterTx, account, notifyActivation]);
 
   const reactivateWithWallet = useCallback(async (pkg: number) => {
     const signer = await getSigner();
-    const contract = getMvaultContract(signer);
-    const price = pkg === 1
-      ? ethers.parseUnits("55", 18)
-      : ethers.parseUnits("130", 18);
-    const usdtContract = getTokenContract(signer);
-    const approveTx = await usdtContract.approve(MVAULT_CONTRACT_ADDRESS, price, { gasLimit: 100_000 });
-    await waitForTx(approveTx.hash);
-    const tx = await contract.reactivate(pkg, { gasLimit: 5_000_000 });
-    await waitForTx(tx.hash);
+    const price = pkg === 1 ? ethers.parseUnits("55", 18) : ethers.parseUnits("130", 18);
+    const tokenIface = getTokenContract(getDirectProvider()).interface;
+    const approveHash = await sendRawTx(signer, TOKEN_ADDRESS,
+      tokenIface.encodeFunctionData("approve", [MVAULT_CONTRACT_ADDRESS, price]), 100_000);
+    await waitForTx(approveHash);
+    const iface = getMvaultContract(getDirectProvider()).interface;
+    const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
+      iface.encodeFunctionData("reactivate", [pkg]), 5_000_000);
+    await waitForTx(txHash);
     await refreshAfterTx();
   }, [getSigner, refreshAfterTx]);
 
   const reactivateFromIncomeWallet = useCallback(async (pkg: number) => {
     const signer = await getSigner();
-    const contract = getMvaultContract(signer);
-    const tx = await contract.reactivateFromBalance(pkg, { gasLimit: 5_000_000 });
-    await waitForTx(tx.hash);
+    const iface = getMvaultContract(getDirectProvider()).interface;
+    const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
+      iface.encodeFunctionData("reactivateFromBalance", [pkg]), 5_000_000);
+    await waitForTx(txHash);
     await refreshAfterTx();
   }, [getSigner, refreshAfterTx]);
 
@@ -704,13 +745,11 @@ export function useWeb3() {
       console.log("[stake] on-chain allowance:", currentAllowance.toString(), "walletUSDT:", walletBal.toString(), "need:", amountBn.toString());
       if (currentAllowance < amountBn) {
         console.log("[stake] sending approve tx...");
-        const usdtWrite = new ethers.Contract(TOKEN_ADDRESS, [
-          "function approve(address,uint256) returns (bool)",
-        ], signer);
-        // gasLimit required — MetaMask eth_estimateGas on MChain returns 0x
-        const approveTx = await usdtWrite.approve(MVAULT_CONTRACT_ADDRESS, ethers.MaxUint256, { gasLimit: 100_000 });
-        console.log("[stake] approve tx hash:", approveTx.hash);
-        await waitForTx(approveTx.hash);
+        const tokenIface = getTokenContract(getDirectProvider()).interface;
+        const approveHash = await sendRawTx(signer, TOKEN_ADDRESS,
+          tokenIface.encodeFunctionData("approve", [MVAULT_CONTRACT_ADDRESS, ethers.MaxUint256]), 100_000);
+        console.log("[stake] approve tx hash:", approveHash);
+        await waitForTx(approveHash);
         console.log("[stake] approve confirmed");
       } else {
         console.log("[stake] allowance sufficient, skipping approve");
@@ -720,34 +759,38 @@ export function useWeb3() {
     // Send directly through MetaMask — gasLimit bypasses eth_estimateGas.
     // MChain's eth_call returns 0x for state-mutating simulations (staticCall unreliable).
     // Pre-flight reads above already catch the most common revert cases.
-    const writeContract = getMvaultContract(signer);
+    const iface = getMvaultContract(getDirectProvider()).interface;
     if (useContractBalance) {
       console.log("[stake] calling stakeFromBalance...");
-      const tx = await writeContract.stakeFromBalance(amountBn, isLocked, { gasLimit: 2_000_000 });
-      console.log("[stake] stakeFromBalance tx hash:", tx.hash);
-      await waitForTx(tx.hash);
+      const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
+        iface.encodeFunctionData("stakeFromBalance", [amountBn, isLocked]), 2_000_000);
+      console.log("[stake] stakeFromBalance tx hash:", txHash);
+      await waitForTx(txHash);
     } else {
       console.log("[stake] calling stake()...");
-      const tx = await writeContract.stake(amountBn, isLocked, { gasLimit: 2_000_000 });
-      console.log("[stake] stake tx hash:", tx.hash);
-      await waitForTx(tx.hash);
+      const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
+        iface.encodeFunctionData("stake", [amountBn, isLocked]), 2_000_000);
+      console.log("[stake] stake tx hash:", txHash);
+      await waitForTx(txHash);
     }
     await refreshAfterTx();
   }, [getSigner, refreshAfterTx]);
 
   const unstakePosition = useCallback(async (stakeIndex: number) => {
     const signer = await getSigner();
-    const contract = getMvaultContract(signer);
-    const tx = await contract.unstake(stakeIndex, { gasLimit: 800_000 });
-    await waitForTx(tx.hash);
+    const iface = getMvaultContract(getDirectProvider()).interface;
+    const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
+      iface.encodeFunctionData("unstake", [stakeIndex]), 800_000);
+    await waitForTx(txHash);
     await refreshAfterTx();
   }, [getSigner, refreshAfterTx]);
 
   const convertStakeToLocked = useCallback(async (stakeIndex: number) => {
     const signer = await getSigner();
-    const contract = getMvaultContract(signer);
-    const tx = await contract.convertToLocked(stakeIndex, { gasLimit: 200_000 });
-    await waitForTx(tx.hash);
+    const iface = getMvaultContract(getDirectProvider()).interface;
+    const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
+      iface.encodeFunctionData("convertToLocked", [stakeIndex]), 200_000);
+    await waitForTx(txHash);
   }, [getSigner]);
 
   const registerAndActivateFor = useCallback(async (
@@ -757,9 +800,10 @@ export function useWeb3() {
     pkg = 2
   ) => {
     const signer = await getSigner();
-    const contract = getMvaultContract(signer);
-    const tx = await contract.registerAndActivateFor(newUser, binaryParent, placeLeft, pkg, { gasLimit: 5_000_000 });
-    await waitForTx(tx.hash);
+    const iface = getMvaultContract(getDirectProvider()).interface;
+    const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
+      iface.encodeFunctionData("registerAndActivateFor", [newUser, binaryParent, placeLeft, pkg]), 5_000_000);
+    await waitForTx(txHash);
     await refreshAfterTx();
     // Notify for the newly activated user (not the caller)
     notifyActivation(newUser);
