@@ -1,6 +1,6 @@
-import { useState } from "react";
+import { useState, useRef } from "react";
 import { ethers } from "ethers";
-import { ShieldCheck, UserCheck, Loader2, CheckCircle, AlertCircle, Settings, Smartphone, Save } from "lucide-react";
+import { ShieldCheck, UserCheck, Loader2, CheckCircle, AlertCircle, Settings, Smartphone, Save, Upload, Link } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -31,6 +31,9 @@ export default function AdminPage({ account }: AdminPageProps) {
   const [mwalletType, setMwalletType]         = useState<"apk" | "playstore">("apk");
   const [savingMwallet, setSavingMwallet]     = useState(false);
   const [mwalletResult, setMwalletResult]     = useState<{ success: boolean; msg: string } | null>(null);
+  const [uploadProgress, setUploadProgress]   = useState<number | null>(null);
+  const [uploadedSize, setUploadedSize]       = useState<string | null>(null);
+  const apkFileRef                            = useRef<HTMLInputElement>(null);
 
   const isAdmin = account?.toLowerCase() === ADMIN_WALLET;
 
@@ -68,6 +71,44 @@ export default function AdminPage({ account }: AdminPageProps) {
     } finally {
       setActivating(false);
     }
+  };
+
+  const handleUploadApk = async (file: File) => {
+    if (!file.name.endsWith(".apk")) {
+      toast({ title: "Wrong file type", description: "Please select an .apk file.", variant: "destructive" });
+      return;
+    }
+    setUploadProgress(0);
+    setMwalletResult(null);
+    setUploadedSize(null);
+    const formData = new FormData();
+    formData.append("apk", file);
+    const xhr = new XMLHttpRequest();
+    xhr.open("POST", `/api/admin/upload/apk?wallet=${encodeURIComponent(account)}`);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) setUploadProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => {
+      setUploadProgress(null);
+      if (xhr.status === 200) {
+        const data = JSON.parse(xhr.responseText);
+        const mb = (data.size / 1024 / 1024).toFixed(1);
+        setUploadedSize(`${mb} MB`);
+        setMwalletUrl(data.url);
+        setMwalletResult({ success: true, msg: `APK uploaded (${mb} MB). Users will now see the Install button.` });
+        toast({ title: "APK Uploaded!", description: `${mb} MB — download link is now live.` });
+      } else {
+        const msg = JSON.parse(xhr.responseText)?.message || "Upload failed";
+        setMwalletResult({ success: false, msg });
+        toast({ title: "Upload failed", description: msg, variant: "destructive" });
+      }
+    };
+    xhr.onerror = () => {
+      setUploadProgress(null);
+      setMwalletResult({ success: false, msg: "Network error during upload" });
+      toast({ title: "Upload failed", description: "Network error", variant: "destructive" });
+    };
+    xhr.send(formData);
   };
 
   const handleSaveMwalletUrl = async () => {
@@ -275,7 +316,7 @@ export default function AdminPage({ account }: AdminPageProps) {
             MWallet Download Link
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Set the URL users see when MWallet is not installed on their device. Can be an APK file link or a Play Store page.
+            Set the download link users see when MWallet is not installed. Upload an APK directly or paste a Play Store / external URL.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -284,45 +325,95 @@ export default function AdminPage({ account }: AdminPageProps) {
             {(["apk", "playstore"] as const).map((t) => (
               <button
                 key={t}
-                onClick={() => setMwalletType(t)}
+                onClick={() => { setMwalletType(t); setMwalletResult(null); setUploadProgress(null); }}
                 className={`rounded-lg border p-2.5 text-xs font-semibold transition-all ${
                   mwalletType === t
                     ? "border-amber-500/60 bg-amber-500/10 text-amber-300"
                     : "border-white/[0.08] bg-white/[0.02] text-muted-foreground hover:border-white/20"
                 }`}
               >
-                {t === "apk" ? "📦 APK Download" : "🟢 Play Store"}
+                {t === "apk" ? "📦 Upload APK" : "🟢 Play Store URL"}
               </button>
             ))}
           </div>
 
-          <div className="space-y-2">
-            <Label className="text-xs text-muted-foreground uppercase tracking-wider">
-              {mwalletType === "apk" ? "APK Download URL" : "Play Store URL"}
-            </Label>
-            <Input
-              data-testid="input-mwallet-url"
-              placeholder={mwalletType === "apk" ? "https://example.com/mwallet.apk" : "https://play.google.com/store/apps/details?id=..."}
-              value={mwalletUrl}
-              onChange={e => setMwalletUrl(e.target.value)}
-              className="font-mono text-xs bg-white/[0.03] border-white/[0.08]"
-            />
-          </div>
+          {mwalletType === "apk" ? (
+            <div className="space-y-3">
+              {/* Hidden file input */}
+              <input
+                ref={apkFileRef}
+                type="file"
+                accept=".apk,application/vnd.android.package-archive"
+                className="hidden"
+                onChange={e => { const f = e.target.files?.[0]; if (f) handleUploadApk(f); e.target.value = ""; }}
+              />
+
+              {/* Upload button */}
+              <button
+                onClick={() => apkFileRef.current?.click()}
+                disabled={uploadProgress !== null}
+                data-testid="button-upload-apk"
+                className="w-full flex items-center justify-center gap-2.5 rounded-xl border-2 border-dashed border-amber-500/30 bg-amber-500/5 hover:border-amber-500/50 hover:bg-amber-500/10 transition-all p-5 disabled:opacity-50"
+              >
+                {uploadProgress !== null ? (
+                  <Loader2 className="w-5 h-5 text-amber-400 animate-spin" />
+                ) : (
+                  <Upload className="w-5 h-5 text-amber-400" />
+                )}
+                <div className="text-left">
+                  <p className="text-sm font-semibold text-amber-300">
+                    {uploadProgress !== null ? `Uploading… ${uploadProgress}%` : "Click to select APK file"}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground">
+                    {uploadedSize ? `Last upload: ${uploadedSize}` : "Supports .apk up to 250 MB"}
+                  </p>
+                </div>
+              </button>
+
+              {/* Progress bar */}
+              {uploadProgress !== null && (
+                <div className="w-full h-2 rounded-full bg-white/[0.06] overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-amber-500 to-amber-400 transition-all duration-300"
+                    style={{ width: `${uploadProgress}%` }}
+                  />
+                </div>
+              )}
+
+              {/* Current URL display if already uploaded */}
+              {mwalletUrl && (
+                <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-emerald-500/8 border border-emerald-500/20">
+                  <Link className="h-3 w-3 text-emerald-400 shrink-0" />
+                  <p className="text-[10px] font-mono text-emerald-400 truncate">{mwalletUrl}</p>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider">Play Store URL</Label>
+              <Input
+                data-testid="input-mwallet-url"
+                placeholder="https://play.google.com/store/apps/details?id=..."
+                value={mwalletUrl}
+                onChange={e => setMwalletUrl(e.target.value)}
+                className="font-mono text-xs bg-white/[0.03] border-white/[0.08]"
+              />
+              <Button
+                data-testid="button-save-mwallet-url"
+                onClick={handleSaveMwalletUrl}
+                disabled={savingMwallet || !mwalletUrl.trim()}
+                className="w-full bg-amber-600 hover:bg-amber-500 text-black font-semibold"
+              >
+                {savingMwallet ? (
+                  <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
+                ) : (
+                  <><Save className="w-4 h-4" /> Save Play Store Link</>
+                )}
+              </Button>
+            </div>
+          )}
 
           {mwalletResult && <ResultBanner result={mwalletResult} />}
-
-          <Button
-            data-testid="button-save-mwallet-url"
-            onClick={handleSaveMwalletUrl}
-            disabled={savingMwallet || !mwalletUrl.trim()}
-            className="w-full bg-amber-600 hover:bg-amber-500 text-black font-semibold"
-          >
-            {savingMwallet ? (
-              <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
-            ) : (
-              <><Save className="w-4 h-4" /> Save Download Link</>
-            )}
-          </Button>
         </CardContent>
       </Card>
     </div>

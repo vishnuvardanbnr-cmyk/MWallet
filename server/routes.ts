@@ -6,6 +6,26 @@ import { z } from "zod";
 import { MCHAIN_RPC, MVAULT_CONTRACT, BOARD_HANDLER as BOARD_HANDLER_ADDR, ADMIN_WALLET as ADMIN_WALLET_CFG } from "./config";
 import { db } from "./db";
 import { eq } from "drizzle-orm";
+import multer from "multer";
+import path from "path";
+import fs from "fs";
+
+// ── APK upload setup ──────────────────────────────────────────────────────────
+const UPLOADS_DIR = path.resolve(process.cwd(), "uploads");
+if (!fs.existsSync(UPLOADS_DIR)) fs.mkdirSync(UPLOADS_DIR, { recursive: true });
+
+const apkStorage = multer.diskStorage({
+  destination: (_req, _file, cb) => cb(null, UPLOADS_DIR),
+  filename: (_req, _file, cb) => cb(null, "mwallet.apk"),
+});
+const apkUpload = multer({
+  storage: apkStorage,
+  limits: { fileSize: 250 * 1024 * 1024 }, // 250 MB
+  fileFilter: (_req, file, cb) => {
+    const ok = file.originalname.endsWith(".apk") || file.mimetype === "application/vnd.android.package-archive" || file.mimetype === "application/octet-stream";
+    cb(null, ok);
+  },
+});
 
 // Override rates per level (basis: 1.0 = 100%)
 const OVERRIDE_RATES = [0, 0.01, 0.01, 0.01, 0.01, 0.01, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005];
@@ -1640,6 +1660,27 @@ export async function registerRoutes(
       .onConflictDoUpdate({ target: kvStore.key, set: { value, updatedAt: new Date() } });
     res.json({ ok: true });
   });
+
+  // ── APK file upload ───────────────────────────────────────────────────────
+  app.post("/api/admin/upload/apk",
+    (req, res, next) => {
+      const wallet = req.query.wallet as string || req.headers["x-admin-wallet"] as string;
+      if (!wallet || wallet.toLowerCase() !== ADMIN_WALLET_CFG.toLowerCase()) {
+        return res.status(403).json({ message: "Admin only" });
+      }
+      next();
+    },
+    apkUpload.single("apk"),
+    async (req, res) => {
+      if (!req.file) return res.status(400).json({ message: "No file received" });
+      const apkUrl = "/uploads/mwallet.apk";
+      const value = JSON.stringify({ url: apkUrl, linkType: "apk" });
+      await db.insert(kvStore)
+        .values({ key: "mwallet_download_url", value })
+        .onConflictDoUpdate({ target: kvStore.key, set: { value, updatedAt: new Date() } });
+      res.json({ ok: true, url: apkUrl, size: req.file.size });
+    }
+  );
 
   // ── RPC proxy — forwards JSON-RPC to MChain (avoids browser CORS block) ────
   app.post("/api/rpc/mchain", async (req, res) => {

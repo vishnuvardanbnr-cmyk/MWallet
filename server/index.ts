@@ -2,6 +2,8 @@ import express, { type Request, Response, NextFunction } from "express";
 import { registerRoutes } from "./routes";
 import { serveStatic } from "./static";
 import { createServer } from "http";
+import path from "path";
+import fs from "fs";
 
 const app = express();
 const httpServer = createServer(app);
@@ -81,6 +83,11 @@ setupWebSocket(httpServer);
 
     return res.status(status).json({ message });
   });
+
+  // Serve uploaded files (APK etc.) from persistent uploads/ dir
+  const uploadsDir = path.resolve(process.cwd(), "uploads");
+  if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
+  app.use("/uploads", express.static(uploadsDir));
 
   // importantly only setup vite in development and after
   // setting up all the other routes so the catch-all route
