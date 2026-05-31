@@ -17,6 +17,14 @@ interface WalletDef {
 
 const WALLETS: WalletDef[] = [
   {
+    id: "mwallet",
+    name: "MWallet",
+    emoji: "🟡",
+    cardCls: "border-amber-400/50 bg-amber-500/15",
+    detect: (e) => !!(e?.isMWallet || e?.isMChainWallet),
+    getLink: (t) => `mchain-wallet://dapp?url=${encodeURIComponent(t)}`,
+  },
+  {
     id: "metamask",
     name: "MetaMask",
     emoji: "🦊",
@@ -50,17 +58,6 @@ const WALLETS: WalletDef[] = [
     androidStore: "https://play.google.com/store/apps/details?id=vip.mytokenpocket",
   },
   {
-    id: "okx",
-    name: "OKX Wallet",
-    emoji: "⬛",
-    cardCls: "border-zinc-400/40 bg-zinc-500/10",
-    detect: (e) => !!(e?.isOKExWallet || e?.isOKX),
-    getLink: (t) =>
-      `okex://main/discover/dapp/open?dapp_url=${encodeURIComponent(t)}`,
-    iosStore:     "https://apps.apple.com/app/okx-buy-bitcoin-eth-crypto/id1327268470",
-    androidStore: "https://play.google.com/store/apps/details?id=com.okinc.okex.gp",
-  },
-  {
     id: "safepal",
     name: "SafePal",
     emoji: "🔷",
@@ -70,39 +67,6 @@ const WALLETS: WalletDef[] = [
       `safepalwallet://safepal.io/dapp?url=${encodeURIComponent(t)}`,
     iosStore:     "https://apps.apple.com/app/safepal-crypto-defi-wallet/id1548297139",
     androidStore: "https://play.google.com/store/apps/details?id=io.safepal.wallet",
-  },
-  {
-    id: "imtoken",
-    name: "imToken",
-    emoji: "💙",
-    cardCls: "border-indigo-500/40 bg-indigo-500/10",
-    detect: (e) => !!e?.isImToken,
-    getLink: (t) =>
-      `imtokenv2://navigate/dapp?url=${encodeURIComponent(t)}`,
-    iosStore:     "https://apps.apple.com/app/imtoken-crypto-wallet/id1384798940",
-    androidStore: "https://play.google.com/store/apps/details?id=im.token.app",
-  },
-  {
-    id: "bitget",
-    name: "Bitget",
-    emoji: "🟡",
-    cardCls: "border-yellow-500/40 bg-yellow-500/10",
-    detect: (e) => !!(e?.isBitKeep || e?.isBitget),
-    getLink: (t) =>
-      `bitkeep://api.bitkeep.com/api/redirect/dapp?url=${encodeURIComponent(t)}`,
-    iosStore:     "https://apps.apple.com/app/bitget-wallet-crypto-defi/id1395301630",
-    androidStore: "https://play.google.com/store/apps/details?id=com.bitkeep.wallet",
-  },
-  {
-    id: "coin98",
-    name: "Coin98",
-    emoji: "🟠",
-    cardCls: "border-amber-500/40 bg-amber-500/10",
-    detect: (e) => !!e?.isCoin98,
-    getLink: (t) =>
-      `coin98://dapp?url=${encodeURIComponent(t)}`,
-    iosStore:     "https://apps.apple.com/app/coin98-super-wallet/id1561969966",
-    androidStore: "https://play.google.com/store/apps/details?id=coin98.crypto.finance.media",
   },
 ];
 
