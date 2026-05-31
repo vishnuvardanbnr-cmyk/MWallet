@@ -399,32 +399,6 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
           </div>
         )}
 
-        {/* Distribution breakdown — only when a package is selected */}
-        {pkg && (
-          <div className="glass-card rounded-2xl p-5 space-y-4">
-            <p className="text-[11px] font-semibold text-muted-foreground uppercase tracking-wider">
-              How ${pkg.price} Activation is Split
-            </p>
-            <div className="flex h-2.5 rounded-full overflow-hidden gap-0.5">
-              {pkg.distribution.map(d => (
-                <div key={d.label} className={`${d.bar} opacity-75`} style={{ width: `${d.pct}%` }} />
-              ))}
-            </div>
-            <div className="space-y-2.5">
-              {pkg.distribution.map(d => (
-                <div key={d.label} className={`flex items-center gap-3 p-2.5 rounded-xl ${d.bg} border ${d.border}`}>
-                  <div className="flex-1 min-w-0">
-                    <p className="text-xs font-semibold">{d.label}</p>
-                  </div>
-                  <div className="text-right shrink-0">
-                    <p className={`text-sm font-bold ${d.color}`} style={{ fontFamily: "var(--font-display)" }}>{d.pct}%</p>
-                    <p className="text-[10px] text-muted-foreground">${pkg.price * d.pct / 100}</p>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
 
       </div>
     </div>
