@@ -27,7 +27,6 @@ import BoardPage from "@/pages/board";
 import BinaryDetailsPage from "@/pages/binary-details";
 import DeepPlacementPage from "@/pages/deep-placement";
 import StorePage from "@/pages/store";
-import SwapPage from "@/pages/swap";
 import PaidStakingPage from "@/pages/paid-staking";
 import RegisterForPage from "@/pages/register-for";
 import RebirthAccountPage from "@/pages/rebirth-account";
@@ -321,14 +320,6 @@ function App() {
                         formatAmount={web3.formatAmount}
                         enterBoardPool={web3.enterBoardPool}
                         account={web3.account!}
-                        fetchUserData={web3.fetchUserData}
-                      />
-                    </Route>
-                    <Route path="/swap">
-                      <SwapPage
-                        account={web3.account!}
-                        formatAmount={web3.formatAmount}
-                        tokenDecimals={web3.tokenDecimals}
                         fetchUserData={web3.fetchUserData}
                       />
                     </Route>

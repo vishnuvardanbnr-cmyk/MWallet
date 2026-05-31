@@ -315,13 +315,6 @@ export default function Dashboard({
               </p>
             </div>
           </div>
-          <button
-            onClick={() => setLocation("/swap")}
-            className="w-full flex items-center justify-center gap-1.5 py-1.5 rounded-xl bg-orange-500/10 border border-orange-500/20 text-[10px] font-semibold text-orange-400 hover:bg-orange-500/15 transition-all"
-            data-testid="button-btc-swap"
-          >
-            Swap to BTC <ChevronRight className="h-3 w-3" />
-          </button>
         </div>
       </div>
 
