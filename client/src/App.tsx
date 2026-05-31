@@ -135,8 +135,11 @@ function App() {
 
   const disconnect = () => window.location.reload();
 
+  const ADMIN_WALLET = "0x12fcf3d1084455d3677a110925d73b01f3846750";
+
   const getFlowStep = () => {
     if (!web3.account) return "connect";
+    if (web3.account.toLowerCase() === ADMIN_WALLET) return "dashboard";
     const isInitialLoad = !web3.initialLoaded;
     if ((isInitialLoad && web3.loading) || (web3.isRegistered && hasProfile === null)) return "loading";
     if (!web3.isRegistered) return "register";
