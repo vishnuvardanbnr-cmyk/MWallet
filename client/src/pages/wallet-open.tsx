@@ -1,120 +1,223 @@
-import { useEffect, useState } from "react";
-import { ExternalLink, Smartphone } from "lucide-react";
+import { useEffect, useState, useRef } from "react";
+import { ExternalLink, Smartphone, CheckCircle2, AlertCircle, Download } from "lucide-react";
 import { Logo } from "@/components/logo";
 
+// ── Wallet definitions ────────────────────────────────────────────────────────
 interface WalletDef {
+  id: string;
   name: string;
   emoji: string;
-  color: string;
+  cardCls: string;
+  /** Detect if this wallet injected window.ethereum */
+  detect: (eth: any) => boolean;
   getLink: (target: string, host: string, ref: string, side: string) => string;
+  iosStore?: string;
+  androidStore?: string;
 }
 
 const WALLETS: WalletDef[] = [
   {
+    id: "metamask",
     name: "MetaMask",
     emoji: "🦊",
-    color: "from-orange-500/20 to-amber-500/10 border-orange-500/30 hover:border-orange-400/50",
+    cardCls: "border-orange-500/40 bg-orange-500/10",
+    detect: (e) => !!e?.isMetaMask && !e?.isBraveWallet && !e?.isTokenPocket,
     getLink: (_t, host, ref, side) =>
       `https://metamask.app.link/dapp/${host}/?ref=${ref}&side=${side}`,
+    iosStore:     "https://apps.apple.com/app/metamask/id1438144202",
+    androidStore: "https://play.google.com/store/apps/details?id=io.metamask",
   },
   {
+    id: "trustwallet",
     name: "Trust Wallet",
     emoji: "🛡️",
-    color: "from-blue-500/20 to-blue-600/10 border-blue-500/30 hover:border-blue-400/50",
+    cardCls: "border-blue-500/40 bg-blue-500/10",
+    detect: (e) => !!(e?.isTrust || e?.isTrustWallet),
     getLink: (t) =>
       `https://link.trustwallet.com/open_url?coin_id=20000714&url=${encodeURIComponent(t)}`,
+    iosStore:     "https://apps.apple.com/app/trust-crypto-bitcoin-wallet/id1288339409",
+    androidStore: "https://play.google.com/store/apps/details?id=com.wallet.crypto.trustapp",
   },
   {
+    id: "tokenpocket",
     name: "TokenPocket",
-    emoji: "🟢",
-    color: "from-emerald-500/20 to-green-600/10 border-emerald-500/30 hover:border-emerald-400/50",
+    emoji: "💚",
+    cardCls: "border-emerald-500/40 bg-emerald-500/10",
+    detect: (e) => !!e?.isTokenPocket,
     getLink: (t) =>
       `tpdapp://url?params=${encodeURIComponent(JSON.stringify({ url: t, chain: "1888", source: "mvault" }))}`,
+    iosStore:     "https://apps.apple.com/app/tokenpocket-crypto-btc-wallet/id1436028697",
+    androidStore: "https://play.google.com/store/apps/details?id=vip.mytokenpocket",
   },
   {
+    id: "okx",
     name: "OKX Wallet",
     emoji: "⬛",
-    color: "from-zinc-500/20 to-zinc-600/10 border-zinc-400/30 hover:border-zinc-300/50",
+    cardCls: "border-zinc-400/40 bg-zinc-500/10",
+    detect: (e) => !!(e?.isOKExWallet || e?.isOKX),
     getLink: (t) =>
       `okex://main/discover/dapp/open?dapp_url=${encodeURIComponent(t)}`,
+    iosStore:     "https://apps.apple.com/app/okx-buy-bitcoin-eth-crypto/id1327268470",
+    androidStore: "https://play.google.com/store/apps/details?id=com.okinc.okex.gp",
   },
   {
+    id: "safepal",
     name: "SafePal",
     emoji: "🔷",
-    color: "from-cyan-500/20 to-cyan-600/10 border-cyan-500/30 hover:border-cyan-400/50",
+    cardCls: "border-cyan-500/40 bg-cyan-500/10",
+    detect: (e) => !!e?.isSafePal,
     getLink: (t) =>
       `safepalwallet://safepal.io/dapp?url=${encodeURIComponent(t)}`,
+    iosStore:     "https://apps.apple.com/app/safepal-crypto-defi-wallet/id1548297139",
+    androidStore: "https://play.google.com/store/apps/details?id=io.safepal.wallet",
   },
   {
+    id: "imtoken",
     name: "imToken",
     emoji: "💙",
-    color: "from-indigo-500/20 to-indigo-600/10 border-indigo-500/30 hover:border-indigo-400/50",
+    cardCls: "border-indigo-500/40 bg-indigo-500/10",
+    detect: (e) => !!e?.isImToken,
     getLink: (t) =>
       `imtokenv2://navigate/dapp?url=${encodeURIComponent(t)}`,
+    iosStore:     "https://apps.apple.com/app/imtoken-crypto-wallet/id1384798940",
+    androidStore: "https://play.google.com/store/apps/details?id=im.token.app",
   },
   {
+    id: "bitget",
     name: "Bitget",
     emoji: "🟡",
-    color: "from-yellow-500/20 to-yellow-600/10 border-yellow-500/30 hover:border-yellow-400/50",
+    cardCls: "border-yellow-500/40 bg-yellow-500/10",
+    detect: (e) => !!(e?.isBitKeep || e?.isBitget),
     getLink: (t) =>
       `bitkeep://api.bitkeep.com/api/redirect/dapp?url=${encodeURIComponent(t)}`,
+    iosStore:     "https://apps.apple.com/app/bitget-wallet-crypto-defi/id1395301630",
+    androidStore: "https://play.google.com/store/apps/details?id=com.bitkeep.wallet",
   },
   {
+    id: "coin98",
     name: "Coin98",
     emoji: "🟠",
-    color: "from-amber-500/20 to-yellow-600/10 border-amber-500/30 hover:border-amber-400/50",
+    cardCls: "border-amber-500/40 bg-amber-500/10",
+    detect: (e) => !!e?.isCoin98,
     getLink: (t) =>
       `coin98://dapp?url=${encodeURIComponent(t)}`,
+    iosStore:     "https://apps.apple.com/app/coin98-super-wallet/id1561969966",
+    androidStore: "https://play.google.com/store/apps/details?id=coin98.crypto.finance.media",
   },
 ];
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function isAndroid() { return /android/i.test(navigator.userAgent); }
+function isIOS()     { return /iphone|ipad|ipod/i.test(navigator.userAgent); }
+function isMobile()  { return isAndroid() || isIOS(); }
+
+// ── Component ─────────────────────────────────────────────────────────────────
 export default function WalletOpenPage() {
-  const params   = new URLSearchParams(window.location.search);
-  const ref      = params.get("ref") || "";
-  const side     = params.get("side") || "left";
-  const host     = window.location.host;
-  const origin   = window.location.origin;
+  const params    = new URLSearchParams(window.location.search);
+  const ref       = params.get("ref") || "";
+  const side      = params.get("side") || "left";
+  const host      = window.location.host;
+  const origin    = window.location.origin;
   const targetUrl = `${origin}/?ref=${ref}&side=${side}`;
 
-  const [autoOpened, setAutoOpened] = useState(false);
-  const [tryingWallet, setTryingWallet] = useState<string | null>(null);
+  const [autoOpened,     setAutoOpened]     = useState(false);
+  const [detectedWallet, setDetectedWallet] = useState<string | null>(null);
+  // eip6963 discovered wallet names
+  const [eip6963Names,   setEip6963Names]   = useState<string[]>([]);
+  const [tryingId,       setTryingId]       = useState<string | null>(null);
+  const [notInstalled,   setNotInstalled]   = useState<string | null>(null);
+  const visTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     const eth = (window as any).ethereum;
+
+    // ── Already inside a wallet browser ──
     if (eth) {
-      // Already inside a wallet browser — jump straight to the app
-      window.location.href = targetUrl;
-      setAutoOpened(true);
+      // Find which wallet we're in
+      const matched = WALLETS.find(w => w.detect(eth));
+      if (matched) setDetectedWallet(matched.id);
+      // Auto-redirect after a short flash so user sees the detected wallet
+      setTimeout(() => {
+        window.location.href = targetUrl;
+        setAutoOpened(true);
+      }, 800);
+      return;
     }
+
+    // ── EIP-6963 multi-provider discovery ──
+    const handler = (event: Event) => {
+      const { info } = (event as CustomEvent).detail ?? {};
+      if (info?.name) setEip6963Names(prev => [...new Set([...prev, info.name])]);
+    };
+    window.addEventListener("eip6963:announceProvider", handler as EventListener);
+    window.dispatchEvent(new Event("eip6963:requestProvider"));
+    return () => window.removeEventListener("eip6963:announceProvider", handler as EventListener);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // ── Try deep link + page-visibility detection ────────────────────────────
+  const handleWallet = (w: WalletDef) => {
+    setNotInstalled(null);
+    setTryingId(w.id);
+
+    const deepLink = w.getLink(targetUrl, host, ref, side);
+    window.location.href = deepLink;
+
+    // If deep link worked the page goes to background — visible = false
+    const onVisibility = () => {
+      if (document.hidden) {
+        if (visTimer.current) clearTimeout(visTimer.current);
+        setTryingId(null);
+        document.removeEventListener("visibilitychange", onVisibility);
+      }
+    };
+    document.addEventListener("visibilitychange", onVisibility);
+
+    // After 2.5s still visible → app not installed
+    visTimer.current = setTimeout(() => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      setTryingId(null);
+      setNotInstalled(w.id);
+    }, 2500);
+  };
+
+  const openInBrowser = () => { window.location.href = targetUrl; };
+
+  const getStoreLink = (w: WalletDef) =>
+    isIOS() ? w.iosStore : isAndroid() ? w.androidStore : undefined;
+
+  // ── Auto-redirecting splash ──────────────────────────────────────────────
   if (autoOpened) {
+    const dw = WALLETS.find(w => w.id === detectedWallet);
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <p className="text-sm text-muted-foreground animate-pulse">Opening M-Vault…</p>
+      <div className="min-h-screen flex flex-col items-center justify-center gap-3">
+        {dw && <span className="text-5xl">{dw.emoji}</span>}
+        <p className="text-sm text-muted-foreground animate-pulse">
+          {dw ? `Opening in ${dw.name}…` : "Opening M-Vault…"}
+        </p>
       </div>
     );
   }
 
-  const handleWallet = (wallet: WalletDef) => {
-    setTryingWallet(wallet.name);
-    const deepLink = wallet.getLink(targetUrl, host, ref, side);
-    window.location.href = deepLink;
-    // After 2.5s, if still on page the app wasn't installed
-    setTimeout(() => setTryingWallet(null), 2500);
-  };
+  // Which wallets are "confirmed detected" via ethereum flags or eip6963
+  const confirmedIds = new Set<string>(
+    eip6963Names.length > 0
+      ? WALLETS.filter(w => eip6963Names.some(n => n.toLowerCase().includes(w.name.toLowerCase().split(" ")[0]))).map(w => w.id)
+      : []
+  );
 
-  const openInBrowser = () => {
-    window.location.href = targetUrl;
-  };
+  // Sort: detected wallets first, then rest
+  const sorted = [
+    ...WALLETS.filter(w => confirmedIds.has(w.id)),
+    ...WALLETS.filter(w => !confirmedIds.has(w.id)),
+  ];
 
   return (
     <div className="min-h-screen flex items-center justify-center p-5 relative overflow-hidden">
-      {/* Ambient glows */}
       <div className="absolute top-[-15%] left-[-10%] w-[400px] h-[400px] rounded-full bg-amber-600/[0.07] blur-[160px] pointer-events-none" />
       <div className="absolute bottom-[-10%] right-[-10%] w-[350px] h-[350px] rounded-full bg-yellow-600/[0.05] blur-[140px] pointer-events-none" />
 
-      <div className="w-full max-w-sm space-y-6 relative z-10 slide-in">
+      <div className="w-full max-w-sm space-y-5 relative z-10 slide-in">
 
         {/* Logo */}
         <div className="flex justify-center floating">
@@ -122,37 +225,79 @@ export default function WalletOpenPage() {
         </div>
 
         {/* Card */}
-        <div className="premium-card rounded-2xl p-6 space-y-5">
-          <div className="text-center space-y-1.5">
-            <h1 className="text-lg font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }}>
-              You've been invited!
+        <div className="premium-card rounded-2xl p-5 space-y-5">
+          <div className="text-center space-y-1">
+            <h1 className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }}>
+              You've been invited to M-Vault
             </h1>
-            <p className="text-xs text-muted-foreground leading-relaxed">
-              Open M-Vault inside your crypto wallet's browser so it can connect automatically.
+            <p className="text-[11px] text-muted-foreground leading-relaxed">
+              Tap your wallet app to open the link inside its browser — it connects automatically.
             </p>
           </div>
+
+          {/* Detected badge */}
+          {confirmedIds.size > 0 && (
+            <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
+              <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0" />
+              <p className="text-[11px] text-emerald-400">
+                {confirmedIds.size} wallet{confirmedIds.size > 1 ? "s" : ""} detected on this device
+              </p>
+            </div>
+          )}
 
           {/* Wallet grid */}
           <div className="grid grid-cols-2 gap-2">
-            {WALLETS.map((w) => (
-              <button
-                key={w.name}
-                onClick={() => handleWallet(w)}
-                disabled={tryingWallet !== null}
-                className={`flex items-center gap-2.5 p-3 rounded-xl bg-gradient-to-br border transition-all text-left group disabled:opacity-50 ${w.color}`}
-                data-testid={`button-open-${w.name.toLowerCase().replace(/\s/g, "-")}`}
-              >
-                <span className="text-xl leading-none">{w.emoji}</span>
-                <span className="text-xs font-semibold text-foreground truncate">{w.name}</span>
-              </button>
-            ))}
+            {sorted.map((w) => {
+              const isConfirmed = confirmedIds.has(w.id);
+              const isTrying    = tryingId === w.id;
+              const isFailed    = notInstalled === w.id;
+              return (
+                <div key={w.id} className="space-y-1">
+                  <button
+                    onClick={() => handleWallet(w)}
+                    disabled={tryingId !== null}
+                    className={`relative w-full flex items-center gap-2.5 p-3 rounded-xl border transition-all text-left disabled:opacity-60 ${
+                      isConfirmed ? `${w.cardCls} ring-1 ring-inset ring-emerald-500/30` :
+                      isFailed    ? "border-red-500/30 bg-red-500/5" :
+                                    `${w.cardCls} hover:opacity-90`
+                    }`}
+                    data-testid={`button-open-${w.id}`}
+                  >
+                    <span className="text-xl leading-none">{w.emoji}</span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-xs font-semibold text-foreground truncate">{w.name}</p>
+                      {isConfirmed && (
+                        <p className="text-[9px] text-emerald-400">Detected ✓</p>
+                      )}
+                      {isTrying && (
+                        <p className="text-[9px] text-amber-400 animate-pulse">Opening…</p>
+                      )}
+                    </div>
+                  </button>
+                  {/* Not installed fallback */}
+                  {isFailed && (
+                    <div className="flex items-center justify-between px-2">
+                      <div className="flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3 text-red-400" />
+                        <p className="text-[10px] text-red-400">Not installed</p>
+                      </div>
+                      {getStoreLink(w) && (
+                        <a
+                          href={getStoreLink(w)}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="flex items-center gap-1 text-[10px] text-amber-400 hover:text-amber-300"
+                        >
+                          <Download className="h-2.5 w-2.5" />
+                          Install
+                        </a>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
-
-          {tryingWallet && (
-            <p className="text-[11px] text-center text-amber-400/80 animate-pulse">
-              Opening {tryingWallet}…
-            </p>
-          )}
 
           {/* Divider */}
           <div className="relative flex items-center gap-3">
@@ -161,10 +306,9 @@ export default function WalletOpenPage() {
             <div className="flex-1 h-px bg-white/[0.06]" />
           </div>
 
-          {/* Fallback */}
           <button
             onClick={openInBrowser}
-            className="w-full flex items-center justify-center gap-2 py-3 rounded-xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.05] transition-all text-sm text-muted-foreground hover:text-foreground"
+            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl border border-white/[0.08] bg-white/[0.03] hover:bg-white/[0.05] transition-all text-xs text-muted-foreground hover:text-foreground"
             data-testid="button-open-browser"
           >
             <ExternalLink className="h-3.5 w-3.5" />
@@ -174,7 +318,7 @@ export default function WalletOpenPage() {
           <div className="flex items-center justify-center gap-1.5">
             <Smartphone className="h-3 w-3 text-muted-foreground/40" />
             <p className="text-[10px] text-muted-foreground/40 text-center">
-              Wallet browser keeps you connected automatically
+              {isMobile() ? "Wallet browser connects automatically" : "Open on mobile for wallet deep-link"}
             </p>
           </div>
         </div>
