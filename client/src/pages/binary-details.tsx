@@ -160,43 +160,6 @@ export default function BinaryDetails({ userInfo }: BinaryDetailsProps) {
         </div>
       </div>
 
-      {/* Binary Structure */}
-      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.07s" }} data-testid="card-binary-structure">
-        <div className="flex items-center gap-2.5 mb-4">
-          <div className="h-9 w-9 rounded-xl bg-violet-500/15 flex items-center justify-center">
-            <Network className="h-4 w-4 text-violet-400" />
-          </div>
-          <div>
-            <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Binary Structure</h2>
-            <p className="text-[10px] text-muted-foreground">Your position in the placement tree</p>
-          </div>
-        </div>
-
-        <div className="space-y-2">
-          <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]" data-testid="row-binary-parent">
-            <span className="text-[11px] text-muted-foreground">Binary Parent</span>
-            <span className="text-[11px] font-mono text-foreground">{shortenAddr(userInfo.binaryParent)}</span>
-          </div>
-          <div className="flex items-center justify-between p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]" data-testid="row-placed-side">
-            <span className="text-[11px] text-muted-foreground">Placed Side</span>
-            <Badge variant="outline" className={`text-[9px] ${userInfo.placedLeft ? "border-blue-500/30 text-blue-400" : "border-purple-500/30 text-purple-400"}`}>
-              {userInfo.placedLeft ? "Left Leg" : "Right Leg"}
-            </Badge>
-          </div>
-          <div className="grid grid-cols-2 gap-2">
-            <div className="flex flex-col p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]" data-testid="row-left-child">
-              <span className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Left Child</span>
-              <span className={`text-[11px] font-mono ${hasLeft ? "text-blue-400" : "text-muted-foreground/40"}`}>{hasLeft ? shortenAddr(userInfo.leftChild) : "Empty"}</span>
-              {leftVol > 0n && <span className="text-[9px] text-muted-foreground mt-1">{fmtMvt(leftVol)} vol</span>}
-            </div>
-            <div className="flex flex-col p-3 rounded-xl bg-white/[0.02] border border-white/[0.04]" data-testid="row-right-child">
-              <span className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Right Child</span>
-              <span className={`text-[11px] font-mono ${hasRight ? "text-purple-400" : "text-muted-foreground/40"}`}>{hasRight ? shortenAddr(userInfo.rightChild) : "Empty"}</span>
-              {rightVol > 0n && <span className="text-[9px] text-muted-foreground mt-1">{fmtMvt(rightVol)} vol</span>}
-            </div>
-          </div>
-        </div>
-      </div>
 
       {/* How Placement Income Works */}
       <div className="premium-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.08s" }}>

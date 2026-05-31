@@ -19,7 +19,7 @@ const menuItems = [
 
   { title: "USDT Pool", url: "/board", icon: Grid2X2 },
   { title: "Sell MVT", url: "/sell-tokens", icon: TrendingDown },
-  { title: "Rebirth", url: "/rebirth", icon: RotateCcw },
+
   { title: "Paid Staking", url: "/paid-staking", icon: Coins },
   { title: "Register For", url: "/register-for", icon: UserPlus },
   { title: "Store", url: "/store", icon: ShoppingBag },
