@@ -157,24 +157,53 @@ export function useWeb3() {
   ): Promise<string> => {
     const direct = getDirectProvider();
     const addr = await signer.getAddress();
-    // Use raw eth_gasPrice instead of getFeeData() — getFeeData() fetches the
-    // latest block which on MChain has a Bech32 miner address that ethers v6
-    // cannot parse, throwing INVALID_ARGUMENT.
+    // Raw eth_gasPrice avoids getFeeData() which fetches a block — MChain blocks
+    // have a Bech32 miner address that ethers v6 cannot parse (INVALID_ARGUMENT).
     const [nonce, gasPriceHex] = await Promise.all([
       direct.getTransactionCount(addr, "pending"),
       direct.send("eth_gasPrice", []),
     ]);
-    const gasPrice = gasPriceHex ? BigInt(gasPriceHex) : 1_000_000_000n; // 1 gwei fallback
-    const tx = await signer.sendTransaction({
-      to,
-      data,
-      gasLimit: BigInt(gasLimit),
-      gasPrice,
-      nonce,
-      chainId: parseInt(NETWORK.chainId, 16),
-      type: 0, // legacy — avoids EIP-1559 failures on Token Pocket / SafePal
+    const gasPriceBn = (gasPriceHex !== null && gasPriceHex !== undefined)
+      ? BigInt(gasPriceHex) : 1_000_000_000n;
+
+    const toHex = (n: number | bigint) => "0x" + BigInt(n).toString(16);
+    const chainId = parseInt(NETWORK.chainId, 16);
+    const txParams = {
+      from: addr, to, data,
+      gas:      toHex(gasLimit),
+      gasPrice: toHex(gasPriceBn),
+      nonce:    toHex(nonce),
+      value:    "0x0",
+      chainId:  toHex(chainId),
+    };
+
+    const ethereum = (window as any).ethereum;
+
+    // Primary: eth_signTransaction — wallet signs only, we broadcast via direct RPC.
+    // This prevents Token Pocket / SafePal from running their own broken MChain
+    // simulation inside eth_sendTransaction.
+    try {
+      const signed: string = await ethereum.request({
+        method: "eth_signTransaction",
+        params: [txParams],
+      });
+      return await direct.send("eth_sendRawTransaction", [signed]);
+    } catch (signErr: any) {
+      const code = signErr?.code;
+      const msg  = (signErr?.message ?? "").toLowerCase();
+      const notSupported = code === 4200
+        || msg.includes("not supported")
+        || msg.includes("does not support")
+        || msg.includes("unsupported method");
+      if (!notSupported) throw signErr; // user rejected or real error — bubble up
+      // eth_signTransaction not available → fall through to eth_sendTransaction
+    }
+
+    // Fallback: raw eth_sendTransaction (wallet handles broadcast itself)
+    return await ethereum.request({
+      method: "eth_sendTransaction",
+      params: [txParams],
     });
-    return tx.hash;
   }, []);
 
   // Ensures the wallet is on the correct chain before sending a tx.
