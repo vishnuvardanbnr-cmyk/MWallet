@@ -1,9 +1,11 @@
 import type { Express } from "express";
 import { createServer, type Server } from "http";
 import { storage } from "./storage";
-import { insertProfileSchema } from "@shared/schema";
+import { insertProfileSchema, kvStore } from "@shared/schema";
 import { z } from "zod";
 import { MCHAIN_RPC, MVAULT_CONTRACT, BOARD_HANDLER as BOARD_HANDLER_ADDR, ADMIN_WALLET as ADMIN_WALLET_CFG } from "./config";
+import { db } from "./db";
+import { eq } from "drizzle-orm";
 
 // Override rates per level (basis: 1.0 = 100%)
 const OVERRIDE_RATES = [0, 0.01, 0.01, 0.01, 0.01, 0.01, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005];
@@ -1610,6 +1612,33 @@ export async function registerRoutes(
     } catch (err: any) {
       res.status(500).json({ message: err.message });
     }
+  });
+
+  // ── MWallet download URL (public read, admin write) ──────────────────────────
+  app.get("/api/settings/mwallet-url", async (_req, res) => {
+    try {
+      const [row] = await db.select().from(kvStore).where(eq(kvStore.key, "mwallet_download_url"));
+      if (!row) return res.json({ url: null, linkType: "apk" });
+      const parsed = JSON.parse(row.value);
+      res.json(parsed);
+    } catch {
+      res.json({ url: null, linkType: "apk" });
+    }
+  });
+
+  app.post("/api/admin/settings/mwallet-url", async (req, res) => {
+    const { wallet, url, linkType } = req.body;
+    if (!wallet || wallet.toLowerCase() !== ADMIN_WALLET_CFG.toLowerCase()) {
+      return res.status(403).json({ message: "Admin only" });
+    }
+    if (!url || typeof url !== "string") {
+      return res.status(400).json({ message: "url required" });
+    }
+    const value = JSON.stringify({ url: url.trim(), linkType: linkType || "apk" });
+    await db.insert(kvStore)
+      .values({ key: "mwallet_download_url", value })
+      .onConflictDoUpdate({ target: kvStore.key, set: { value, updatedAt: new Date() } });
+    res.json({ ok: true });
   });
 
   // ── RPC proxy — forwards JSON-RPC to MChain (avoids browser CORS block) ────

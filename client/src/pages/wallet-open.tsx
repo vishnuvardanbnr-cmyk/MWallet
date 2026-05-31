@@ -86,11 +86,19 @@ export default function WalletOpenPage() {
 
   const [autoOpened,     setAutoOpened]     = useState(false);
   const [detectedWallet, setDetectedWallet] = useState<string | null>(null);
-  // eip6963 discovered wallet names
   const [eip6963Names,   setEip6963Names]   = useState<string[]>([]);
   const [tryingId,       setTryingId]       = useState<string | null>(null);
   const [notInstalled,   setNotInstalled]   = useState<string | null>(null);
+  const [mwalletInstall, setMwalletInstall] = useState<{ url: string; linkType: string } | null>(null);
   const visTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Fetch admin-configured MWallet download URL
+  useEffect(() => {
+    fetch("/api/settings/mwallet-url")
+      .then(r => r.json())
+      .then(data => { if (data.url) setMwalletInstall(data); })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     const eth = (window as any).ethereum;
@@ -147,8 +155,10 @@ export default function WalletOpenPage() {
 
   const openInBrowser = () => { window.location.href = targetUrl; };
 
-  const getStoreLink = (w: WalletDef) =>
-    isIOS() ? w.iosStore : isAndroid() ? w.androidStore : undefined;
+  const getStoreLink = (w: WalletDef) => {
+    if (w.id === "mwallet") return mwalletInstall?.url ?? undefined;
+    return isIOS() ? w.iosStore : isAndroid() ? w.androidStore : undefined;
+  };
 
   // ── Auto-redirecting splash ──────────────────────────────────────────────
   if (autoOpened) {

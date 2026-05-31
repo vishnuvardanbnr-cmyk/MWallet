@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { ethers } from "ethers";
-import { ShieldCheck, UserCheck, Loader2, CheckCircle, AlertCircle, Settings } from "lucide-react";
+import { ShieldCheck, UserCheck, Loader2, CheckCircle, AlertCircle, Settings, Smartphone, Save } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,12 @@ export default function AdminPage({ account }: AdminPageProps) {
   const [managerAddress, setManagerAddress] = useState("");
   const [settingManager, setSettingManager] = useState(false);
   const [managerResult, setManagerResult] = useState<{ success: boolean; msg: string } | null>(null);
+
+  // MWallet download URL
+  const [mwalletUrl, setMwalletUrl]           = useState("");
+  const [mwalletType, setMwalletType]         = useState<"apk" | "playstore">("apk");
+  const [savingMwallet, setSavingMwallet]     = useState(false);
+  const [mwalletResult, setMwalletResult]     = useState<{ success: boolean; msg: string } | null>(null);
 
   const isAdmin = account?.toLowerCase() === ADMIN_WALLET;
 
@@ -61,6 +67,30 @@ export default function AdminPage({ account }: AdminPageProps) {
       toast({ title: "Activation Failed", description: msg, variant: "destructive" });
     } finally {
       setActivating(false);
+    }
+  };
+
+  const handleSaveMwalletUrl = async () => {
+    if (!mwalletUrl.trim()) {
+      toast({ title: "URL required", description: "Paste the APK or Play Store URL.", variant: "destructive" });
+      return;
+    }
+    setSavingMwallet(true);
+    setMwalletResult(null);
+    try {
+      const res = await fetch("/api/admin/settings/mwallet-url", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ wallet: account, url: mwalletUrl.trim(), linkType: mwalletType }),
+      });
+      if (!res.ok) throw new Error((await res.json()).message);
+      setMwalletResult({ success: true, msg: "MWallet download URL saved." });
+      toast({ title: "Saved!", description: "Users will now see the Install button with your link." });
+    } catch (e: any) {
+      setMwalletResult({ success: false, msg: e.message });
+      toast({ title: "Save failed", description: e.message, variant: "destructive" });
+    } finally {
+      setSavingMwallet(false);
     }
   };
 
@@ -233,6 +263,64 @@ export default function AdminPage({ account }: AdminPageProps) {
               <><Loader2 className="w-4 h-4 animate-spin" /> Setting Manager…</>
             ) : (
               <><Settings className="w-4 h-4" /> Set Manager</>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+      {/* MWallet Download URL */}
+      <Card className="border-white/[0.08] bg-white/[0.02]">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Smartphone className="w-4 h-4 text-amber-400" />
+            MWallet Download Link
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Set the URL users see when MWallet is not installed on their device. Can be an APK file link or a Play Store page.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Type toggle */}
+          <div className="grid grid-cols-2 gap-2">
+            {(["apk", "playstore"] as const).map((t) => (
+              <button
+                key={t}
+                onClick={() => setMwalletType(t)}
+                className={`rounded-lg border p-2.5 text-xs font-semibold transition-all ${
+                  mwalletType === t
+                    ? "border-amber-500/60 bg-amber-500/10 text-amber-300"
+                    : "border-white/[0.08] bg-white/[0.02] text-muted-foreground hover:border-white/20"
+                }`}
+              >
+                {t === "apk" ? "📦 APK Download" : "🟢 Play Store"}
+              </button>
+            ))}
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">
+              {mwalletType === "apk" ? "APK Download URL" : "Play Store URL"}
+            </Label>
+            <Input
+              data-testid="input-mwallet-url"
+              placeholder={mwalletType === "apk" ? "https://example.com/mwallet.apk" : "https://play.google.com/store/apps/details?id=..."}
+              value={mwalletUrl}
+              onChange={e => setMwalletUrl(e.target.value)}
+              className="font-mono text-xs bg-white/[0.03] border-white/[0.08]"
+            />
+          </div>
+
+          {mwalletResult && <ResultBanner result={mwalletResult} />}
+
+          <Button
+            data-testid="button-save-mwallet-url"
+            onClick={handleSaveMwalletUrl}
+            disabled={savingMwallet || !mwalletUrl.trim()}
+            className="w-full bg-amber-600 hover:bg-amber-500 text-black font-semibold"
+          >
+            {savingMwallet ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Saving…</>
+            ) : (
+              <><Save className="w-4 h-4" /> Save Download Link</>
             )}
           </Button>
         </CardContent>
