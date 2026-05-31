@@ -72,7 +72,7 @@ export default function Settings({ account, userInfo, profileOnChain, saveProfil
     setSavingRate(true);
     try {
       await setBtcPoolRate(btcRateInput);
-      toast({ title: "BTC Pool Rate Updated", description: `${btcRateInput}% of your sell proceeds will go to your BTC pool.` });
+      toast({ title: "USDT Pool Rate Updated", description: `${btcRateInput}% of your sell proceeds will go to your USDT pool.` });
     } catch (err: any) {
       toast({ title: "Failed", description: err?.reason || err?.message || "Transaction failed", variant: "destructive" });
     } finally { setSavingRate(false); }
@@ -194,8 +194,8 @@ export default function Settings({ account, userInfo, profileOnChain, saveProfil
             <Zap className="h-4 w-4 text-orange-400" />
           </div>
           <div>
-            <h3 className="text-sm font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }}>BTC Pool Allocation</h3>
-            <p className="text-xs text-muted-foreground">How much of your sell proceeds go to your BTC board pool</p>
+            <h3 className="text-sm font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }}>USDT Pool Allocation</h3>
+            <p className="text-xs text-muted-foreground">How much of your sell proceeds go to your USDT board pool</p>
           </div>
         </div>
 
@@ -223,7 +223,7 @@ export default function Settings({ account, userInfo, profileOnChain, saveProfil
 
           <div className="rounded-xl bg-orange-500/5 border border-orange-500/10 px-4 py-2.5 text-xs text-orange-200/70 leading-relaxed">
             At <span className="text-orange-400 font-semibold">{btcRateInput}%</span>: for every 100 USDT of MVT sold,{" "}
-            <span className="text-orange-400 font-semibold">{btcRateInput} USDT</span> goes to your BTC pool and{" "}
+            <span className="text-orange-400 font-semibold">{btcRateInput} USDT</span> goes to your USDT pool and{" "}
             <span className="text-yellow-400 font-semibold">{100 - btcRateInput} USDT</span> goes to your income wallet.
           </div>
 

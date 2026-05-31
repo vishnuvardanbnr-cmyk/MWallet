@@ -309,7 +309,7 @@ export default function Dashboard({
               <Bitcoin className="h-4 w-4 text-orange-400" />
             </div>
             <div>
-              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">BTC Pool</p>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider">USDT Pool</p>
               <p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }} data-testid="text-btc-pool">
                 ${btcPoolNum.toFixed(2)}
               </p>

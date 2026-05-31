@@ -32,8 +32,8 @@ const TX_META: Record<string, { icon: any; color: string; bg: string; border: st
   "Reactivation":          { icon: Package,       color: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/20",   label: "Reactivation",           tag: "activity" },
   "Sell MVT":              { icon: TrendingDown,  color: "text-rose-400",    bg: "bg-rose-500/10",    border: "border-rose-500/20",    label: "Sell MVT",               tag: "activity" },
   "Withdrawal":            { icon: ArrowDownToLine,color:"text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", label: "USDT Withdrawal",        tag: "withdrawal" },
-  "BTC Pool Withdraw":     { icon: ArrowDownToLine,color:"text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", label: "BTC Pool Withdrawal",    tag: "withdrawal" },
-  "BTC Pool Credited":     { icon: Coins,         color: "text-orange-400",  bg: "bg-orange-500/10",  border: "border-orange-500/20",  label: "BTC Pool Credited",      tag: "income" },
+  "BTC Pool Withdraw":     { icon: ArrowDownToLine,color:"text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", label: "USDT Pool Withdrawal",   tag: "withdrawal" },
+  "BTC Pool Credited":     { icon: Coins,         color: "text-orange-400",  bg: "bg-orange-500/10",  border: "border-orange-500/20",  label: "USDT Pool Credited",     tag: "income" },
   "Level Income":          { icon: Users,         color: "text-yellow-300",  bg: "bg-yellow-600/10",  border: "border-yellow-600/20",  label: "Level Income",           tag: "income" },
   "Staking Level Income":  { icon: ShieldCheck,   color: "text-sky-300",     bg: "bg-sky-500/10",     border: "border-sky-500/20",     label: "Staking Level Income",   tag: "income" },
   "Level Income Missed":   { icon: Ban,           color: "text-orange-400",  bg: "bg-orange-500/10",  border: "border-orange-500/20",  label: "Level Income Missed",    tag: "activity" },
@@ -274,7 +274,7 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
                               <p className="font-semibold text-emerald-400">${fmt2(tx.amount)}</p>
                             </div>
                             <div className="bg-white/[0.03] rounded-lg p-2.5">
-                              <p className="text-muted-foreground/60 mb-1">BTC Pool (10%)</p>
+                              <p className="text-muted-foreground/60 mb-1">USDT Pool (10%)</p>
                               <p className="font-semibold text-orange-400">~${(parseFloat(fmt2(tx.amount)) / 9).toFixed(2)}</p>
                             </div>
                           </div>

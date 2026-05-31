@@ -154,7 +154,7 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
             </div>
             <Badge variant="outline" className="text-[9px] border-orange-500/30 text-orange-400">Board Entry</Badge>
           </div>
-          <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">BTC Pool Balance</p>
+          <p className="text-[11px] text-muted-foreground uppercase tracking-wider mb-1">USDT Pool Balance</p>
           <p className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }} data-testid="text-btc-pool-balance">
             <span className="text-orange-400">${btcPoolBalance.toFixed(2)}</span>
           </p>
@@ -368,7 +368,7 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
                             <p className="font-semibold text-emerald-400">${fmt2(tx.amount)}</p>
                           </div>
                           <div className="bg-white/[0.02] rounded-lg p-2 col-span-2">
-                            <p className="text-muted-foreground/60 mb-0.5">BTC Pool Contribution (10%)</p>
+                            <p className="text-muted-foreground/60 mb-0.5">USDT Pool Contribution (10%)</p>
                             <p className="font-semibold text-orange-400">${(parseFloat(fmt2(tx.amount)) / 9).toFixed(2)}</p>
                           </div>
                         </div>

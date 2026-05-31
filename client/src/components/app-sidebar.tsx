@@ -17,7 +17,7 @@ const menuItems = [
   { title: "Team", url: "/team", icon: Users },
   { title: "Rank", url: "/rank", icon: Award },
   { title: "Deep Placement", url: "/deep-placement", icon: GitBranch },
-  { title: "BTC Pool", url: "/board", icon: Grid2X2 },
+  { title: "USDT Pool", url: "/board", icon: Grid2X2 },
   { title: "Sell MVT", url: "/sell-tokens", icon: TrendingDown },
   { title: "Rebirth", url: "/rebirth", icon: RotateCcw },
   { title: "Paid Staking", url: "/paid-staking", icon: Coins },

@@ -134,7 +134,7 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
 
   const handleEnterPool = async () => {
     if (!canEnter) {
-      toast({ title: "Insufficient balance", description: "You need at least $50 in your BTC pool to enter.", variant: "destructive" });
+      toast({ title: "Insufficient balance", description: "You need at least $50 in your USDT pool to enter.", variant: "destructive" });
       return;
     }
     setEntering(true);
@@ -258,9 +258,9 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
 
           <div className="flex-1 text-center sm:text-left">
             <h2 className="text-lg font-bold mb-1" style={{ fontFamily: 'var(--font-display)' }}>
-              <span className="gradient-text">Your BTC Pool Balance</span>
+              <span className="gradient-text">Your USDT Pool Balance</span>
             </h2>
-            <p className="text-xs text-muted-foreground mb-4">10% of every MVT sell is added to your BTC pool. Once you reach $50, you can enter Pool 1.</p>
+            <p className="text-xs text-muted-foreground mb-4">10% of every MVT sell is added to your USDT pool. Once you reach $50, you can enter Pool 1.</p>
             <button
               onClick={handleEnterPool}
               disabled={!canEnter || entering}
@@ -480,13 +480,13 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
             <div className="h-5 w-5 rounded-md bg-amber-500/10 flex items-center justify-center shrink-0 mt-0.5">
               <span className="text-[10px] font-bold text-amber-400">1</span>
             </div>
-            <p className="text-xs text-muted-foreground">10% of every MVT sell is added to your BTC pool balance</p>
+            <p className="text-xs text-muted-foreground">10% of every MVT sell is added to your USDT pool balance</p>
           </div>
           <div className="flex items-start gap-2.5">
             <div className="h-5 w-5 rounded-md bg-yellow-600/10 flex items-center justify-center shrink-0 mt-0.5">
               <span className="text-[10px] font-bold text-yellow-300">2</span>
             </div>
-            <p className="text-xs text-muted-foreground">Once your BTC pool reaches $50, you can enter Pool 1</p>
+            <p className="text-xs text-muted-foreground">Once your USDT pool reaches $50, you can enter Pool 1</p>
           </div>
           <div className="flex items-start gap-2.5">
             <div className="h-5 w-5 rounded-md bg-amber-600/10 flex items-center justify-center shrink-0 mt-0.5">

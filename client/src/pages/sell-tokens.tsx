@@ -126,7 +126,7 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
       <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
         <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
         <div className="text-[11px] text-muted-foreground leading-relaxed space-y-1">
-          <p><span className="text-foreground font-medium">Sell routing:</span> 10% of sale value → your BTC pool.</p>
+          <p><span className="text-foreground font-medium">Sell routing:</span> 10% of sale value → your USDT pool.</p>
           <p>Remaining 90% fills your income limit first → any excess goes to rebirth pool.</p>
           <p>Income limit remaining: <span className="text-amber-400 font-medium">${incomeLimit.toFixed(2)}</span></p>
         </div>
@@ -184,7 +184,7 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
               <span className="font-medium">${preview.grossUsdt.toFixed(2)}</span>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span className="flex items-center gap-1 text-orange-400/80"><Bitcoin className="h-3 w-3" /> BTC pool (10%)</span>
+              <span className="flex items-center gap-1 text-orange-400/80"><Bitcoin className="h-3 w-3" /> USDT pool (10%)</span>
               <span className="font-bold text-orange-400">−${preview.btcDeduction.toFixed(2)}</span>
             </div>
             <div className="h-px bg-white/[0.06]" />
@@ -222,7 +222,7 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
         <div className="space-y-3">
           {[
             { step: "1", title: "Burn MVT Tokens", desc: "Your virtual MVT balance is burned via the bonding curve using the contract's real token pool." },
-            { step: "2", title: "10% to BTC Pool", desc: "10% of USDT proceeds go to your personal BTC pool — used exclusively to fund your board pool entries." },
+            { step: "2", title: "10% to USDT Pool", desc: "10% of USDT proceeds go to your personal USDT pool — used exclusively to fund your board pool entries." },
             { step: "3", title: "90% to Your USDT Balance", desc: "Net USDT fills your $390 income limit → credited to USDT balance. Excess goes to rebirth pool." },
             { step: "4", title: "Withdraw Anytime", desc: "Pull your USDT balance to your wallet from the Wallet page whenever you're ready." },
           ].map((item) => (

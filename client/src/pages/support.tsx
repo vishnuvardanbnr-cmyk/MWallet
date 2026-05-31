@@ -24,8 +24,8 @@ const faqs = [
     answer: "Binary matching income is calculated by matching the business volume on your left and right legs. The system pairs the lesser leg volume against the greater and calculates your binary commission based on the matched amount. Unmatched volume carries forward to the next cycle.",
   },
   {
-    question: "What is the BTC Reward Pool?",
-    answer: "The BTC Pool accumulates 10% from every MVT sell. This balance is used exclusively to enter Board Pool Level 1 — it cannot be directly withdrawn. Once you enter the board and the matrix fills, you earn rewards (40% of the pool) credited directly to your withdrawable USDT balance.",
+    question: "What is the USDT Pool?",
+    answer: "The USDT Pool accumulates 10% from every MVT sell. This balance is used exclusively to enter Board Pool Level 1 — it cannot be directly withdrawn. Once you enter the board and the matrix fills, you earn rewards (40% of the pool) credited directly to your withdrawable USDT balance.",
   },
   {
     question: "How do withdrawals work?",
