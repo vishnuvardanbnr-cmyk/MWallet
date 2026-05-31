@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" rx="28" fill="#11AA77"/>
+  <rect x="24" y="34" width="80" height="60" rx="8" fill="white" opacity="0.15"/>
+  <path d="M24 50h80" stroke="white" stroke-width="3" opacity="0.4"/>
+  <rect x="38" y="44" width="22" height="8" rx="4" fill="white" opacity="0.6"/>
+  <text x="50%" y="54%" dominant-baseline="middle" text-anchor="middle" font-family="Arial Black, sans-serif" font-weight="900" font-size="36" fill="white">TP</text>
+</svg>

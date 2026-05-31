@@ -7,6 +7,7 @@ interface WalletDef {
   id: string;
   name: string;
   emoji: string;
+  logo?: string;
   cardCls: string;
   /** Detect if this wallet injected window.ethereum */
   detect: (eth: any) => boolean;
@@ -39,6 +40,7 @@ const WALLETS: WalletDef[] = [
     id: "trustwallet",
     name: "Trust Wallet",
     emoji: "🛡️",
+    logo: "/trustwallet-logo.svg",
     cardCls: "border-blue-500/40 bg-blue-500/10",
     detect: (e) => !!(e?.isTrust || e?.isTrustWallet),
     getLink: (t) =>
@@ -50,6 +52,7 @@ const WALLETS: WalletDef[] = [
     id: "tokenpocket",
     name: "TokenPocket",
     emoji: "💚",
+    logo: "/tokenpocket-logo.svg",
     cardCls: "border-emerald-500/40 bg-emerald-500/10",
     detect: (e) => !!e?.isTokenPocket,
     getLink: (t) =>
@@ -61,6 +64,7 @@ const WALLETS: WalletDef[] = [
     id: "safepal",
     name: "SafePal",
     emoji: "🔷",
+    logo: "/safepal-logo.svg",
     cardCls: "border-cyan-500/40 bg-cyan-500/10",
     detect: (e) => !!e?.isSafePal,
     getLink: (t) =>
@@ -282,7 +286,10 @@ export default function WalletOpenPage() {
                     }`}
                     data-testid={`button-open-${w.id}`}
                   >
-                    <span className="text-xl leading-none">{w.emoji}</span>
+                    {w.logo
+                      ? <img src={w.logo} alt={w.name} className="w-8 h-8 rounded-lg object-cover shrink-0" />
+                      : <span className="text-xl leading-none">{w.emoji}</span>
+                    }
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-foreground truncate">{w.name}</p>
                       {isConfirmed && <p className="text-[9px] text-emerald-400">Detected ✓</p>}
