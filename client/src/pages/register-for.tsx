@@ -2,7 +2,7 @@ import { useState, useCallback, useEffect } from "react";
 import {
   UserPlus, DollarSign, Loader2, CheckCircle2, AlertCircle,
   ArrowLeft, ArrowRight, Shield, Wallet, ChevronDown, ChevronUp,
-  Users, Zap, Info
+  Users, Info
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -28,12 +28,6 @@ function isAddr(addr: string) {
   try { ethers.getAddress(addr); return true; } catch { return false; }
 }
 
-const DISTRIBUTION = [
-  { label: "Level Income",  sublabel: "Paid to your 10 uplines", pct: 15, color: "bg-emerald-500", text: "text-emerald-400" },
-  { label: "Binary Pool",   sublabel: "Team bonus pool",         pct: 30, color: "bg-blue-500",    text: "text-blue-400"   },
-  { label: "Admin Pool",    sublabel: "Platform operations",     pct: 30, color: "bg-violet-500",  text: "text-violet-400" },
-  { label: "Token Buy",     sublabel: "Buys MVT for new user",   pct: 25, color: "bg-amber-400",   text: "text-amber-300"  },
-];
 
 export default function RegisterForPage({
   account, registerAndActivateFor, virtualUsdtBalance, tokenDecimals = 18,
@@ -280,37 +274,6 @@ export default function RegisterForPage({
             Need at least $130 in your in-app balance — earn income or sell MVT first
           </p>
         )}
-      </div>
-
-      {/* ── Distribution visual ──────────────────────────────────────────── */}
-      <div className="glass-card rounded-2xl p-5 slide-in" style={{ animationDelay: "0.12s" }}>
-        <div className="flex items-center gap-2 mb-4">
-          <Zap className="h-4 w-4 text-amber-400" />
-          <h2 className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>How $130 is Distributed</h2>
-        </div>
-
-        {/* Stacked bar */}
-        <div className="flex h-3 rounded-full overflow-hidden mb-4 gap-0.5">
-          {DISTRIBUTION.map(d => (
-            <div key={d.label} className={`${d.color} opacity-80`} style={{ width: `${d.pct}%` }} />
-          ))}
-        </div>
-
-        <div className="grid grid-cols-2 gap-x-6 gap-y-3">
-          {DISTRIBUTION.map(d => (
-            <div key={d.label} className="flex items-center gap-2.5">
-              <div className={`w-2 h-2 rounded-full ${d.color} shrink-0`} />
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold truncate">{d.label}</p>
-                <p className="text-[10px] text-muted-foreground truncate">{d.sublabel}</p>
-              </div>
-              <div className="text-right shrink-0">
-                <p className={`text-xs font-bold ${d.text}`}>{d.pct}%</p>
-                <p className="text-[10px] text-muted-foreground">${(PACKAGE_PRICE * d.pct / 100).toFixed(2)}</p>
-              </div>
-            </div>
-          ))}
-        </div>
       </div>
 
       {/* ── How it works ─────────────────────────────────────────────────── */}
