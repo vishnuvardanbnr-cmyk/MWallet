@@ -8,6 +8,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useWeb3 } from "@/hooks/use-web3";
+import { ADMIN_WALLET } from "@/lib/contract";
 import { Wallet } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { MobileNav } from "@/components/mobile-nav";
@@ -134,8 +135,6 @@ function App() {
   }, [web3.account, web3.isRegistered, web3.profileOnChain]);
 
   const disconnect = () => window.location.reload();
-
-  const ADMIN_WALLET = "0x12fcf3d1084455d3677a110925d73b01f3846750";
 
   const getFlowStep = () => {
     if (!web3.account) return "connect";

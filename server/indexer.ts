@@ -1,9 +1,7 @@
 import { ethers } from "ethers";
 import { storage } from "./storage";
 import { log } from "./index";
-
-const MCHAIN_RPC    = "https://node.mymchain.com/api/rpc";
-const CONTRACT_ADDR = process.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x60c5bd746f6245ecE5daC006082a7bd13f521aF8";
+import { MCHAIN_RPC, MVAULT_CONTRACT as CONTRACT_ADDR } from "./config";
 const CHUNK_SIZE    = 2000;
 const KV_KEY        = "indexer:lastBlock";
 const CHECKPOINT_INTERVAL = 60_000; // save block checkpoint every 60s

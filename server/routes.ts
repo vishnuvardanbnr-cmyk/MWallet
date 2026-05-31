@@ -3,6 +3,7 @@ import { createServer, type Server } from "http";
 import { storage } from "./storage";
 import { insertProfileSchema } from "@shared/schema";
 import { z } from "zod";
+import { MCHAIN_RPC, MVAULT_CONTRACT, BOARD_HANDLER as BOARD_HANDLER_ADDR, ADMIN_WALLET as ADMIN_WALLET_CFG } from "./config";
 
 // Override rates per level (basis: 1.0 = 100%)
 const OVERRIDE_RATES = [0, 0.01, 0.01, 0.01, 0.01, 0.01, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005, 0.005];
@@ -12,12 +13,11 @@ const OVERRIDE_MAX_LEVELS = [0, 1, 2, 3, 4, 6, 15];
 // Staking invest level reward rates (10 levels, sum = 20% of theoretical tokens)
 const STAKING_INVEST_LEVEL_RATES = [0.10, 0.05, 0.02, 0.01, 0.005, 0.005, 0.003, 0.003, 0.002, 0.002];
 
-const MCHAIN_RPC = "https://node.mymchain.com/api/rpc";
 const MLM_READ_ABI = [
   "function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, string displayName, string email, string phone, string country, bool profileSet)",
 ];
 const ZERO_ADDR = "0x0000000000000000000000000000000000000000";
-const MLM_CONTRACT_ADDR = process.env.VITE_MVAULT_CONTRACT_ADDRESS || process.env.VITE_CONTRACT_ADDRESS || "0x393eDB201A29A2d25673aAB8E57CCC5fd6Fe2866";
+const MLM_CONTRACT_ADDR = MVAULT_CONTRACT;
 
 /**
  * Distributes 20% of theoretical tokens to 10 upline levels on staking invest.
@@ -272,7 +272,7 @@ export async function registerRoutes(
       const wallet = req.query.wallet as string;
       const ticket = await storage.getTicket(ticketId);
       if (!ticket) return res.status(404).json({ message: "Ticket not found" });
-      const isAdmin = wallet?.toLowerCase() === "0x04e8c5b49de683c5b44ef1269bd5ee4f338868c4";
+      const isAdmin = wallet?.toLowerCase() === ADMIN_WALLET_CFG;
       if (!isAdmin && ticket.walletAddress !== wallet?.toLowerCase()) {
         return res.status(403).json({ message: "Not authorized" });
       }
@@ -379,7 +379,7 @@ export async function registerRoutes(
       }
 
       // Verify the Deposited(address indexed user, uint256 amount) event from DepositVault
-      const BOARD_HANDLER = (process.env.VITE_DEPOSIT_VAULT_ADDRESS || "0xD307FB39d7d42B59AC46e28D71ef72019E9D5e38").toLowerCase();
+      const BOARD_HANDLER = BOARD_HANDLER_ADDR.toLowerCase();
       const DEPOSITED_TOPIC = ethers.id("Deposited(address,uint256)").toLowerCase();
 
       let verifiedAmount: string | null = null;
@@ -1081,7 +1081,7 @@ export async function registerRoutes(
   // ── BTC Swap via backend liquidity wallet ──────────────────────────────────
 
   // MvaultContract on MChain — source of truth for board rewards
-  const MVAULT_CONTRACT_MCHAIN = process.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x60c5bd746f6245ecE5daC006082a7bd13f521aF8";
+  const MVAULT_CONTRACT_MCHAIN = MVAULT_CONTRACT;
   const MVAULT_BOARD_REWARD_ABI = [
     "function totalBoardRewardsEarned(address) view returns (uint256)",
   ];
@@ -1279,7 +1279,7 @@ export async function registerRoutes(
   });
 
   // ── Admin: trigger binary + power leg distribution from backend ─────────────
-  const ADMIN_WALLET = (process.env.VITE_ADMIN_WALLET || "0x04E8c5B49dE683c5B44eF1269Bd5ee4f338868C4").toLowerCase();
+  const ADMIN_WALLET = ADMIN_WALLET_CFG;
 
   // Helper — renders a simple HTML status page readable in any browser
   function adminHtml(title: string, lines: string[]) {
@@ -1536,8 +1536,7 @@ export async function registerRoutes(
   app.get("/api/admin/pool-status", async (_req, res) => {
     try {
       const { ethers } = await import("ethers");
-      const MVAULT_CONTRACT_ADDRESS =
-        process.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x164E4c01958c623CeF48C7DF8C66deFbB5eB4f57";
+      const MVAULT_CONTRACT_ADDRESS = MVAULT_CONTRACT;
       const ABI = [
         "function getPoolBalances() view returns (uint256 community, uint256 reserve, uint256 admin)",
         "function getAllUsersCount() view returns (uint256)",

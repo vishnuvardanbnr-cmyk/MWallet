@@ -6,9 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { getMvaultContract, decodeContractError } from "@/lib/contract";
-
-const ADMIN_WALLET = "0x12fcf3d1084455d3677a110925d73b01f3846750";
+import { getMvaultContract, decodeContractError, ADMIN_WALLET } from "@/lib/contract";
 
 interface AdminPageProps {
   account: string;

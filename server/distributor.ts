@@ -7,10 +7,10 @@
 
 import { log } from "./index";
 import { storage } from "./storage";
+import { MCHAIN_RPC, MVAULT_CONTRACT, MVAULT_VIEW, DEPLOYER_PK } from "./config";
 
-const MCHAIN_RPC = "https://node.mymchain.com/api/rpc";
-const SLICE_SIZE  = 50;
-const BATCH_SIZE  = 50;
+const SLICE_SIZE = 50;
+const BATCH_SIZE = 50;
 
 const VIEW_ABI = [
   "function getAllUsersCount() view returns (uint256)",
@@ -44,15 +44,17 @@ export async function runRankCheck(): Promise<void> {
   try {
     const { ethers } = await import("ethers");
 
-    // Read from env vars (set on VPS .env), fall back to latest deployed addresses.
-    const MAIN = process.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x3ac2d262ae50b264eb55872f81941f65cec356e4";
-    const VIEW = process.env.VITE_MVAULT_VIEW_ADDRESS     || "0x3134dd2da7ccbedb395450daaacd6f8e0d38a6d1";
-    const DEPLOYER_PK = process.env.DEPLOYER_PRIVATE_KEY;
-
     if (!DEPLOYER_PK) {
       log("runRankCheck: missing DEPLOYER_PRIVATE_KEY", "rank");
       return;
     }
+    if (!MVAULT_CONTRACT || !MVAULT_VIEW) {
+      log("runRankCheck: missing VITE_MVAULT_CONTRACT_ADDRESS or VITE_MVAULT_VIEW_ADDRESS", "rank");
+      return;
+    }
+
+    const MAIN = MVAULT_CONTRACT;
+    const VIEW = MVAULT_VIEW;
 
     const provider     = new ethers.JsonRpcProvider(MCHAIN_RPC);
     const viewContract = new ethers.Contract(VIEW, VIEW_ABI, provider);

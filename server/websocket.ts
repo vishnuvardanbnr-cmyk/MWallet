@@ -1,8 +1,7 @@
 import { WebSocketServer, WebSocket } from "ws";
 import type { Server } from "http";
 import { storage } from "./storage";
-
-const ADMIN_WALLET = "0x04e8c5b49de683c5b44ef1269bd5ee4f338868c4";
+import { ADMIN_WALLET } from "./config";
 
 interface WSClient {
   ws: WebSocket;
