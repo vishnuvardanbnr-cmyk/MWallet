@@ -63,7 +63,7 @@ function ConnectScreen({ onConnect }: { onConnect: () => void }) {
         <div className="premium-card rounded-2xl p-8 space-y-6">
           <div>
             <h2 className="text-xl font-bold text-foreground mb-2" style={{ fontFamily: 'var(--font-display)' }}>
-              <span className="gradient-text">Welcome to M-Vault</span>
+              <span className="gradient-text">Welcome to M-Wallet</span>
             </h2>
             <p className="text-muted-foreground text-sm leading-relaxed">
               Connect your MetaMask wallet to start earning on BNB Smart Chain.

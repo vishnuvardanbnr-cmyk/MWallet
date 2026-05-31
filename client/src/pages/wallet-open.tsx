@@ -171,7 +171,7 @@ export default function WalletOpenPage() {
       <div className="min-h-screen flex flex-col items-center justify-center gap-3">
         {dw && <span className="text-5xl">{dw.emoji}</span>}
         <p className="text-sm text-muted-foreground animate-pulse">
-          {dw ? `Opening in ${dw.name}…` : "Opening M-Vault…"}
+          {dw ? `Opening in ${dw.name}…` : "Opening M-Wallet…"}
         </p>
       </div>
     );
@@ -206,7 +206,7 @@ export default function WalletOpenPage() {
         <div className="premium-card rounded-2xl p-5 space-y-5">
           <div className="text-center space-y-1">
             <h1 className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }}>
-              You've been invited to M-Vault
+              You've been invited to M-Wallet
             </h1>
             <p className="text-[11px] text-muted-foreground leading-relaxed">
               Tap your wallet app to open the link inside its browser — it connects automatically.

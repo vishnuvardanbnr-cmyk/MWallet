@@ -237,7 +237,7 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
               </div>
               <div>
                 <h1 className="text-xl font-bold" style={{ fontFamily: "var(--font-display)" }}>
-                  <span className="gradient-text">Join M-Vault</span>
+                  <span className="gradient-text">Join M-Wallet</span>
                 </h1>
                 <p className="text-xs text-muted-foreground mt-0.5">Register your wallet to get started</p>
               </div>
@@ -309,7 +309,7 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
                   {sponsorAddress && isValidAddress(sponsorAddress) && !sponsorInfo && !validating && (
                     <div className="flex items-center gap-2 px-3 py-2 rounded-lg bg-red-500/8 border border-red-500/20">
                       <AlertCircle className="h-3.5 w-3.5 text-red-400 shrink-0" />
-                      <p className="text-xs text-red-400">Address not registered in M-Vault</p>
+                      <p className="text-xs text-red-400">Address not registered in M-Wallet</p>
                     </div>
                   )}
                 </div>

@@ -118,7 +118,7 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
     setActivating(true);
     try {
       await activatePackage(selectedPkg);
-      toast({ title: "Account Activated!", description: `${pkg.label} package activated. Welcome to M-Vault!` });
+      toast({ title: "Account Activated!", description: `${pkg.label} package activated. Welcome to M-Wallet!` });
       await fetchUserData();
     } catch (err: any) {
       toast({ title: "Activation Failed", description: parseContractError(err), variant: "destructive" });

@@ -238,7 +238,7 @@ export default function PaidStakingPage({
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 slide-in" style={{ animationDelay: "0.05s" }}>
         {[
           { icon: <DollarSign className="h-3.5 w-3.5 text-emerald-400" />, label: "Wallet USDT",    value: `$${fmt(walletBal)}`,       color: "text-emerald-400",  testid: "text-wallet-usdt" },
-          { icon: <Shield      className="h-3.5 w-3.5 text-cyan-400"    />, label: "M-Vault Balance", value: `$${fmt(contractBal)}`,   color: "text-cyan-400",     testid: "text-contract-usdt" },
+          { icon: <Shield      className="h-3.5 w-3.5 text-cyan-400"    />, label: "M-Wallet Balance", value: `$${fmt(contractBal)}`,   color: "text-cyan-400",     testid: "text-contract-usdt" },
           { icon: <Coins       className="h-3.5 w-3.5 text-yellow-300"  />, label: "Staked MWT",    value: `${fmt(totStakedMvt)} M`,   color: "text-yellow-300",   testid: "text-staked-mvt" },
           { icon: <TrendingUp  className="h-3.5 w-3.5 text-amber-400"   />, label: "Positions",     value: `${positions.length}`,      color: "text-amber-400",    testid: "text-position-count" },
         ].map((s, i) => (
@@ -354,7 +354,7 @@ export default function PaidStakingPage({
                 }`}
                 data-testid="tab-source-balance">
                 <Shield className="h-3.5 w-3.5" />
-                <span>M-Vault Balance</span>
+                <span>M-Wallet Balance</span>
                 <span className="text-[10px] opacity-60">${fmt(contractBal)}</span>
               </button>
             </div>

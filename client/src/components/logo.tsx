@@ -75,7 +75,7 @@ export function Logo({ size = "md", showText = true }: LogoProps) {
             className="font-bold tracking-widest gradient-text uppercase"
             style={{ fontSize: textSize[size], fontFamily: 'var(--font-display)', letterSpacing: '0.12em' }}
           >
-            M-Vault
+            M-Wallet
           </span>
           {size === "lg" && (
             <span
