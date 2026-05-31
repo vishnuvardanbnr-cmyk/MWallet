@@ -222,7 +222,7 @@ export default function Settings({ account, userInfo, profileOnChain, saveProfil
           </div>
 
           <div className="rounded-xl bg-orange-500/5 border border-orange-500/10 px-4 py-2.5 text-xs text-orange-200/70 leading-relaxed">
-            At <span className="text-orange-400 font-semibold">{btcRateInput}%</span>: for every 100 USDT of MVT sold,{" "}
+            At <span className="text-orange-400 font-semibold">{btcRateInput}%</span>: for every 100 USDT of MWT sold,{" "}
             <span className="text-orange-400 font-semibold">{btcRateInput} USDT</span> goes to your USDT pool and{" "}
             <span className="text-yellow-400 font-semibold">{100 - btcRateInput} USDT</span> goes to your income wallet.
           </div>

@@ -18,7 +18,7 @@ const menuItems = [
   { title: "Rank", url: "/rank", icon: Award },
 
   { title: "USDT Pool", url: "/board", icon: Grid2X2 },
-  { title: "Sell MVT", url: "/sell-tokens", icon: TrendingDown },
+  { title: "Sell MWT", url: "/sell-tokens", icon: TrendingDown },
 
   { title: "Paid Staking", url: "/paid-staking", icon: Coins },
   { title: "Register For", url: "/register-for", icon: UserPlus },

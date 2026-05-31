@@ -10,7 +10,7 @@ interface ContractTx {
   detail: string;
   timestamp: number;
   isIncome: boolean;
-  currency: "USDT" | "MVT";
+  currency: "USDT" | "MWT";
   mvtMinted?: bigint;
   mvtReturned?: bigint;
 }
@@ -30,7 +30,7 @@ function normalizeTxType(type: string): string {
 const TX_META: Record<string, { icon: any; color: string; bg: string; border: string; label: string; tag?: string }> = {
   "Activation":            { icon: Package,       color: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/20",   label: "Activation",             tag: "activity" },
   "Reactivation":          { icon: Package,       color: "text-amber-400",   bg: "bg-amber-500/10",   border: "border-amber-500/20",   label: "Reactivation",           tag: "activity" },
-  "Sell MVT":              { icon: TrendingDown,  color: "text-rose-400",    bg: "bg-rose-500/10",    border: "border-rose-500/20",    label: "Sell MVT",               tag: "activity" },
+  "Sell MWT":              { icon: TrendingDown,  color: "text-rose-400",    bg: "bg-rose-500/10",    border: "border-rose-500/20",    label: "Sell MWT",               tag: "activity" },
   "Withdrawal":            { icon: ArrowDownToLine,color:"text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", label: "USDT Withdrawal",        tag: "withdrawal" },
   "BTC Pool Withdraw":     { icon: ArrowDownToLine,color:"text-emerald-400", bg: "bg-emerald-500/10", border: "border-emerald-500/20", label: "USDT Pool Withdrawal",   tag: "withdrawal" },
   "BTC Pool Credited":     { icon: Coins,         color: "text-orange-400",  bg: "bg-orange-500/10",  border: "border-orange-500/20",  label: "USDT Pool Credited",     tag: "income" },
@@ -79,11 +79,11 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
 
   const fmt2 = (val: bigint) => parseFloat(ethers.formatUnits(val, 18)).toFixed(2);
 
-  const formatAmt = (amount: bigint, currency: "USDT" | "MVT") => {
+  const formatAmt = (amount: bigint, currency: "USDT" | "MWT") => {
     const raw = parseFloat(ethers.formatUnits(amount, 18));
     return currency === "USDT"
       ? { prefix: "$", value: raw.toFixed(2), suffix: "" }
-      : { prefix: "", value: raw.toFixed(2), suffix: " MVT" };
+      : { prefix: "", value: raw.toFixed(2), suffix: " MWT" };
   };
 
   const formatTimestamp = (ts: number) => {
@@ -109,7 +109,7 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
   ];
 
   const isMissed    = (type: string) => type === "Level Income Missed" || type === "Placement Missed";
-  const canExpand   = (type: string) => type === "Sell MVT" || type === "Staked" || type === "Unstaked";
+  const canExpand   = (type: string) => type === "Sell MWT" || type === "Staked" || type === "Unstaked";
 
   return (
     <div className="p-4 sm:p-6 space-y-5 relative z-10">
@@ -263,7 +263,7 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
                           <p className="text-[10px] font-semibold text-muted-foreground/50 uppercase tracking-wider">Breakdown</p>
                         </div>
 
-                        {tx.type === "Sell MVT" && (
+                        {tx.type === "Sell MWT" && (
                           <div className="grid grid-cols-3 gap-2 text-[11px]">
                             <div className="bg-white/[0.03] rounded-lg p-2.5">
                               <p className="text-muted-foreground/60 mb-1">Gross USDT</p>
@@ -288,8 +288,8 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
                             </div>
                             {tx.mvtMinted && tx.mvtMinted > 0n && (
                               <div className="bg-white/[0.03] rounded-lg p-2.5">
-                                <p className="text-muted-foreground/60 mb-1">MVT Received</p>
-                                <p className="font-semibold text-amber-400">{fmt2(tx.mvtMinted)} MVT</p>
+                                <p className="text-muted-foreground/60 mb-1">MWT Received</p>
+                                <p className="font-semibold text-amber-400">{fmt2(tx.mvtMinted)} MWT</p>
                               </div>
                             )}
                             <div className="bg-white/[0.03] rounded-lg p-2.5 col-span-2 text-[10px] text-muted-foreground/60">
@@ -308,8 +308,8 @@ export default function TransactionsPage({ formatAmount, getTransactionsFromCont
                             </div>
                             {tx.mvtReturned && tx.mvtReturned > 0n && (
                               <div className="bg-white/[0.03] rounded-lg p-2.5">
-                                <p className="text-muted-foreground/60 mb-1">MVT Burned</p>
-                                <p className="font-semibold text-rose-400">{fmt2(tx.mvtReturned)} MVT</p>
+                                <p className="text-muted-foreground/60 mb-1">MWT Burned</p>
+                                <p className="font-semibold text-rose-400">{fmt2(tx.mvtReturned)} MWT</p>
                               </div>
                             )}
                           </div>

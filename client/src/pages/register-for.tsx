@@ -271,7 +271,7 @@ export default function RegisterForPage({
 
         {!hasFunds && (
           <p className="text-[11px] text-center text-red-400 -mt-2">
-            Need at least $130 in your in-app balance — earn income or sell MVT first
+            Need at least $130 in your in-app balance — earn income or sell MWT first
           </p>
         )}
       </div>

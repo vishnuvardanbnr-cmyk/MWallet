@@ -87,14 +87,14 @@ const CONTRACT_ERROR_MESSAGES_EXPORT: Record<string, string> = {
   AlreadyActive:              "Your account is already activated.",
   InvalidSponsor:             "Invalid sponsor address — they must be a registered member.",
   PositionTaken:              "That binary tree position is already taken. Try the other side.",
-  InsufficientVirtualBalance: "Insufficient MVT balance.",
+  InsufficientVirtualBalance: "Insufficient MWT balance.",
   InsufficientUsdtBalance:    "Insufficient USDT balance.",
   InsufficientBtcPool:        "Insufficient BTC pool balance.",
   InsufficientRebirthPool:    "Insufficient rebirth pool balance — need $130 in rebirth pool first.",
   NotEligibleForRebirth:      "Rebirth requires the PRO package ($130). STARTER accounts cannot rebirth.",
   SubAccountAlreadyRegistered:"That wallet is already registered — use a fresh, unregistered address.",
   UseRebirthInstead:          "Your rebirth pool has $130+ — use the Create Sub-Account button, not Claim.",
-  NoRebirthBalance:           "Your rebirth pool is empty — sell MVT after your income limit is exhausted to fill it.",
+  NoRebirthBalance:           "Your rebirth pool is empty — sell MWT after your income limit is exhausted to fill it.",
   NoOpenBinarySlot:           "No open slot found in the binary tree.",
   ZeroAddress:                "Invalid address provided.",
   ZeroAmount:                 "Amount must be greater than zero.",
@@ -105,14 +105,14 @@ const CONTRACT_ERROR_MESSAGES_EXPORT: Record<string, string> = {
   InsufficientBtcPoolForBoard:"Insufficient BTC pool balance to enter the board.",
   NotActive:                  "Your account is not yet activated. Please activate ($130 USDT) before staking.",
   BelowMinStake:              "Minimum stake is $50 USDT.",
-  NoMvtMinted:                "MVT minting failed — bonding curve issue, please contact support.",
+  NoMvtMinted:                "MWT minting failed — bonding curve issue, please contact support.",
   AlreadyUnstaked:            "This position has already been unstaked.",
   AlreadyLocked:              "This position is already locked.",
   StillLocked:                "This position is still in the lock period.",
   InvalidIndex:               "Invalid stake position index.",
   NotMvaultContract:          "Call not allowed from this address.",
-  OnlyMvault:                 "Caller not authorized in MVT token (staking module address mismatch).",
-  InsufficientLiquidity:      "MVT pool has insufficient liquidity for this operation.",
+  OnlyMvault:                 "Caller not authorized in MWT token (staking module address mismatch).",
+  InsufficientLiquidity:      "MWT pool has insufficient liquidity for this operation.",
   NotStakingModule:           "Caller is not the staking module.",
 };
 
@@ -220,7 +220,7 @@ export const NETWORK = _net === "mainnet" ? BSC_MAINNET : _net === "mchain" ? MC
 // ── New MvaultContract + MvaultToken ──────────────────────────────────────────
 export const MVAULT_CONTRACT_ADDRESS =
   import.meta.env.VITE_MVAULT_CONTRACT_ADDRESS || "";
-export const MVT_TOKEN_ADDRESS =
+export const MWT_TOKEN_ADDRESS =
   import.meta.env.VITE_MVT_TOKEN_ADDRESS || "";
 export const TOKEN_ADDRESS =
   import.meta.env.VITE_PAYMENT_TOKEN_ADDRESS || "";
@@ -273,7 +273,7 @@ export const MVAULT_ABI = [
   "function registerAndActivateFor(address newUser, address binaryParent, bool placeLeft, uint8 pkg) external",
   "function reactivate(uint8 pkg) external",
   "function reactivateFromBalance(uint8 pkg) external",
-  // Virtual MVT operations
+  // Virtual MWT operations
   "function sellMvt(uint256 amount) external",
   "function withdrawUsdt(uint256 amount) external",
   "function withdrawBtcPool(uint256 amount) external",
@@ -341,7 +341,7 @@ export const MVAULT_ABI = [
 ];
 
 // ── MvaultToken ABI ───────────────────────────────────────────────────────────
-export const MVT_ABI = [
+export const MWT_ABI = [
   "function getBuyPrice() view returns (uint256)",
   "function getSellPrice() view returns (uint256)",
   "function totalSupply() view returns (uint256)",
@@ -498,7 +498,7 @@ export function getStakingModuleContract(signerOrProvider: ethers.Signer | ether
 }
 
 export function getMvtTokenContract(signerOrProvider: ethers.Signer | ethers.Provider) {
-  return new ethers.Contract(MVT_TOKEN_ADDRESS, MVT_ABI, signerOrProvider);
+  return new ethers.Contract(MWT_TOKEN_ADDRESS, MWT_ABI, signerOrProvider);
 }
 
 export function getTokenContract(signerOrProvider: ethers.Signer | ethers.Provider) {
@@ -594,7 +594,7 @@ export const BOARD_PRICES_USD = [0, 50, 180, 648, 2333, 8398, 30233, 108839, 391
 
 export const TX_TYPE_NAMES = [
   "Activation", "Level Income", "Level Missed", "Placement Income",
-  "Withdraw USDT", "Sell MVT", "BTC Pool", "Rebirth",
+  "Withdraw USDT", "Sell MWT", "BTC Pool", "Rebirth",
   "Board Entry", "Board Reward", "Rank Income", "Staking Level",
 ];
 export const TX_TYPE_INCOME = [false, true, false, true, false, false, false, false, false, true, true, true];

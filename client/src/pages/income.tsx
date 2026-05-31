@@ -73,7 +73,7 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
           <Coins className="h-4 w-4 text-yellow-300 mb-2" />
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Total Earned</p>
           <p className="text-lg font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-total-received">
-            {mvtFmt(userInfo.totalReceived)} MVT
+            {mvtFmt(userInfo.totalReceived)} MWT
           </p>
           {mvtPrice.sellPrice > 0n && (
             <p className="text-[10px] text-muted-foreground">≈ {usdFmt(userInfo.totalReceived, mvtPrice.sellPrice)}</p>
@@ -81,9 +81,9 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
         </div>
         <div className="glass-card rounded-2xl p-4" data-testid="card-mvt-balance">
           <TrendingUp className="h-4 w-4 text-amber-400 mb-2" />
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">MVT Balance</p>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">MWT Balance</p>
           <p className="text-lg font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-mvt-balance">
-            {mvtFmt(userInfo.mvtBalance)} MVT
+            {mvtFmt(userInfo.mvtBalance)} MWT
           </p>
           <button onClick={() => setLocation("/sell-tokens")} className="text-[10px] text-amber-400 hover:text-amber-300 mt-1">
             Sell →
@@ -129,7 +129,7 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
         </div>
         <div className="mt-3 flex items-start gap-2 p-2.5 rounded-xl bg-amber-500/[0.06] border border-amber-500/10">
           <Info className="h-3.5 w-3.5 text-amber-400/70 shrink-0 mt-0.5" />
-          <p className="text-[10px] text-muted-foreground">When your income limit reaches $0, all MVT sell proceeds go to your rebirth pool. Trigger rebirth to reset your limit to ${incomeCap.toFixed(2)}.</p>
+          <p className="text-[10px] text-muted-foreground">When your income limit reaches $0, all MWT sell proceeds go to your rebirth pool. Trigger rebirth to reset your limit to ${incomeCap.toFixed(2)}.</p>
         </div>
       </div>
 
@@ -172,7 +172,7 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
         <div className="flex items-start gap-2 p-2.5 rounded-xl bg-emerald-500/[0.05] border border-emerald-500/10">
           <Info className="h-3.5 w-3.5 text-emerald-400/70 shrink-0 mt-0.5" />
           <p className="text-[10px] text-muted-foreground">
-            20% of each activation's gross MVT is split across 30 binary placement levels — paid instantly to each qualified upline.
+            20% of each activation's gross MWT is split across 30 binary placement levels — paid instantly to each qualified upline.
           </p>
         </div>
         <button onClick={() => setLocation("/binary")} className="mt-3 text-[10px] text-amber-400 hover:text-amber-300">
@@ -216,7 +216,7 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
                     <span className={`text-[11px] font-bold ${qualified ? "text-emerald-400" : "text-muted-foreground"}`}>L{level}</span>
                   </div>
                   <div>
-                    <p className="text-xs font-semibold">{pct} of gross MVT</p>
+                    <p className="text-xs font-semibold">{pct} of gross MWT</p>
                     <p className="text-[10px] text-muted-foreground">
                       Refer {dirReq} direct{dirReq !== 1 ? "s" : ""} to unlock
                     </p>

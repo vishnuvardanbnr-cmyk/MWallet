@@ -289,7 +289,7 @@ export function useWeb3() {
       setBtcPoolBalance(ui.btcPoolBalance);
 
       if (ui.isRegistered) {
-        // MVT price — call token contract directly (getMvtPrice removed from main contract)
+        // MWT price — call token contract directly (getMvtPrice removed from main contract)
         try {
           const mvtToken = getMvtTokenContract(getDirectProvider());
           const bp = await mvtToken.getBuyPrice();
@@ -306,7 +306,7 @@ export function useWeb3() {
           });
         } catch { }
 
-        // MVT ERC20 tokens held by the contract (from mvaultToken address)
+        // MWT ERC20 tokens held by the contract (from mvaultToken address)
         try {
           const mvtAddr = await contract.mvaultToken();
           const { ethers: e } = await import("ethers");
@@ -454,7 +454,7 @@ export function useWeb3() {
     if (account) notifyActivation(account);
   }, [getSigner, refreshAfterTx, account, notifyActivation]);
 
-  // ── Sell virtual MVT → USDT (stays in contract) ────────────────────────────
+  // ── Sell virtual MWT → USDT (stays in contract) ────────────────────────────
 
   const sellMvt = useCallback(async (amount: string) => {
     const signer = await getSigner();
@@ -563,23 +563,23 @@ export function useWeb3() {
       const contract = getMvaultContract(getDirectProvider());
 
       // TX_META: type 0-11 from on-chain _recordTx
-      const TX_META: Record<number, { type: string; isIncome: boolean; currency: "USDT" | "MVT"; detail: (r: any) => string }> = {
+      const TX_META: Record<number, { type: string; isIncome: boolean; currency: "USDT" | "MWT"; detail: (r: any) => string }> = {
         0:  { type: "Activation",          isIncome: false, currency: "USDT", detail: ()  => "$130 package activated" },
-        1:  { type: "Level Income",         isIncome: true,  currency: "MVT",  detail: (r) => {
+        1:  { type: "Level Income",         isIncome: true,  currency: "MWT",  detail: (r) => {
                const lvl = Number(r.level);
                const addr = r.addr as string;
                const short = addr && addr !== "0x0000000000000000000000000000000000000000" ? `${addr.slice(0,6)}...${addr.slice(-4)}` : "";
                return `Level ${lvl}${short ? ` from ${short}` : ""}`;
              }},
-        2:  { type: "Level Income Missed",  isIncome: false, currency: "MVT",  detail: (r) => `Level ${Number(r.level)} — need more directs` },
-        3:  { type: "Placement Income",        isIncome: true,  currency: "MVT",  detail: (r) => {
+        2:  { type: "Level Income Missed",  isIncome: false, currency: "MWT",  detail: (r) => `Level ${Number(r.level)} — need more directs` },
+        3:  { type: "Placement Income",        isIncome: true,  currency: "MWT",  detail: (r) => {
                const lvl = Number(r.level);
                const addr = r.addr as string;
                const short = addr && addr !== "0x0000000000000000000000000000000000000000" ? `${addr.slice(0,6)}...${addr.slice(-4)}` : "";
                return `Level ${lvl} placement${short ? ` from ${short}` : ""}`;
              }},
-        4:  { type: "Placement Missed",      isIncome: false, currency: "MVT",  detail: (r) => `Level ${Number(r.level)} — need more directs` },
-        5:  { type: "Sell MVT",             isIncome: false, currency: "USDT", detail: ()  => "MVT sold for USDT" },
+        4:  { type: "Placement Missed",      isIncome: false, currency: "MWT",  detail: (r) => `Level ${Number(r.level)} — need more directs` },
+        5:  { type: "Sell MWT",             isIncome: false, currency: "USDT", detail: ()  => "MWT sold for USDT" },
         6:  { type: "BTC Pool Credited",    isIncome: true,  currency: "USDT", detail: ()  => "10% of sell → BTC pool" },
         7:  { type: "Withdrawal",           isIncome: false, currency: "USDT", detail: ()  => "USDT withdrawn to wallet" },
         8:  { type: "BTC Pool Withdraw",    isIncome: false, currency: "USDT", detail: ()  => "BTC pool withdrawn" },
@@ -589,11 +589,11 @@ export function useWeb3() {
              }},
         10: { type: "Board Entry",          isIncome: false, currency: "USDT", detail: (r) => `Entered Pool ${Number(r.level)}` },
         11: { type: "Board Reward",         isIncome: true,  currency: "USDT", detail: (r) => `Pool ${Number(r.level)} completed` },
-        12: { type: "Staked",               isIncome: false, currency: "USDT", detail: ()  => "USDT staked for MVT" },
+        12: { type: "Staked",               isIncome: false, currency: "USDT", detail: ()  => "USDT staked for MWT" },
         13: { type: "Unstaked",             isIncome: true,  currency: "USDT", detail: ()  => "USDT credited from unstake" },
         14: { type: "Rebirth Claim",        isIncome: true,  currency: "USDT", detail: ()  => "Partial rebirth pool claimed to wallet" },
         15: { type: "Reactivation",         isIncome: false, currency: "USDT", detail: ()  => "Account reactivated" },
-        16: { type: "Rank Income",          isIncome: true,  currency: "MVT",  detail: (r) => `Rank M${Number(r.level)} income` },
+        16: { type: "Rank Income",          isIncome: true,  currency: "MWT",  detail: (r) => `Rank M${Number(r.level)} income` },
       };
 
       // Fetch stored TX records (includes Stake/Unstake since contract now records them)
@@ -611,7 +611,7 @@ export function useWeb3() {
           isIncome:  meta.isIncome,
           currency:  meta.currency,
         };
-        // For sell transactions, try to extract MVT amount from r.level if stored
+        // For sell transactions, try to extract MWT amount from r.level if stored
         if (txType === 5) {
           const lvlBn = r.level ? BigInt(r.level) : 0n;
           if (lvlBn > 0n) base.mvtAmount = lvlBn;

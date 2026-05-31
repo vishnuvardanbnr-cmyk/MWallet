@@ -148,17 +148,17 @@ export default function RebirthAccountPage({
             </p>
             {limitExhausted ? (
               <p className="text-xs text-amber-300/80">
-                Your income limit is fully exhausted ($0 remaining) — every MVT you sell now goes directly into your rebirth pool.
-                Keep selling MVT to reach $130.
+                Your income limit is fully exhausted ($0 remaining) — every MWT you sell now goes directly into your rebirth pool.
+                Keep selling MWT to reach $130.
               </p>
             ) : limitFull ? (
               <p className="text-xs text-amber-300/80">
                 Your income limit is still open (${limitLeft >= 0 ? limitLeft.toFixed(0) : '—'} / ${limitCap.toFixed(0)} remaining).
-                Sell MVT to earn USDT — once your limit hits $0, any further MVT sells automatically fill the rebirth pool.
+                Sell MWT to earn USDT — once your limit hits $0, any further MWT sells automatically fill the rebirth pool.
               </p>
             ) : (
               <p className="text-xs text-amber-300/80">
-                Your income limit is nearly exhausted (${limitLeft.toFixed(0)} left) — keep selling MVT and the excess will flow
+                Your income limit is nearly exhausted (${limitLeft.toFixed(0)} left) — keep selling MWT and the excess will flow
                 into this rebirth pool automatically.
               </p>
             )}
@@ -284,7 +284,7 @@ export default function RebirthAccountPage({
 
         {!hasFunds && (
           <p className="text-[11px] text-center text-red-400 -mt-2">
-            Need at least $130 in your rebirth pool — keep selling MVT to fill it
+            Need at least $130 in your rebirth pool — keep selling MWT to fill it
           </p>
         )}
       </div>

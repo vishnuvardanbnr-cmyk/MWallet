@@ -22,9 +22,9 @@ function requiredDirects(level: number): number {
 
 function fmtMvt(wei: bigint): string {
   const val = parseFloat(ethers.formatUnits(wei, 18));
-  if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(2)}M MVT`;
-  if (val >= 1_000)     return `${(val / 1_000).toFixed(1)}K MVT`;
-  return `${val.toFixed(2)} MVT`;
+  if (val >= 1_000_000) return `${(val / 1_000_000).toFixed(2)}M MWT`;
+  if (val >= 1_000)     return `${(val / 1_000).toFixed(1)}K MWT`;
+  return `${val.toFixed(2)} MWT`;
 }
 
 function shortenAddr(addr: string): string {
@@ -137,7 +137,7 @@ export default function BinaryDetails({ userInfo }: BinaryDetailsProps) {
                 <span className={`text-[10px] font-mono w-6 shrink-0 ${qualified ? "text-cyan-400" : "text-muted-foreground"}`}>L{lvl}</span>
                 <div className="flex-1 flex items-center gap-1.5">
                   <span className={`text-[11px] font-bold ${qualified ? "text-cyan-300" : "text-muted-foreground"}`}>{rate}%</span>
-                  <span className="text-[9px] text-muted-foreground">of grossMVT</span>
+                  <span className="text-[9px] text-muted-foreground">of grossMWT</span>
                 </div>
                 <span className="text-[9px] text-muted-foreground mr-1">{need} direct{need !== 1 ? "s" : ""}</span>
                 {qualified
@@ -168,9 +168,9 @@ export default function BinaryDetails({ userInfo }: BinaryDetailsProps) {
         </h2>
         <div className="space-y-3">
           {[
-            { icon: Users,        title: "20% of Each Activation",      desc: "When anyone activates anywhere below you in the binary tree, 20% of their gross MVT is split across their 30 binary uplines — you included.",                        color: "text-amber-400 bg-amber-500/10" },
+            { icon: Users,        title: "20% of Each Activation",      desc: "When anyone activates anywhere below you in the binary tree, 20% of their gross MWT is split across their 30 binary uplines — you included.",                        color: "text-amber-400 bg-amber-500/10" },
             { icon: GitBranch,    title: "30 Levels Deep",               desc: "Earn from 30 levels below you. Top levels pay more (L1 = 5%), deeper levels pay less — all the way down to level 30.",                                    color: "text-cyan-400 bg-cyan-500/10" },
-            { icon: TrendingUp,   title: "Instant & On-Chain",           desc: "Income is credited directly to your MVT balance inside the same activation transaction. No claim button, no off-chain step — it just arrives.",                       color: "text-violet-400 bg-violet-500/10" },
+            { icon: TrendingUp,   title: "Instant & On-Chain",           desc: "Income is credited directly to your MWT balance inside the same activation transaction. No claim button, no off-chain step — it just arrives.",                       color: "text-violet-400 bg-violet-500/10" },
           ].map(({ icon: Icon, title, desc, color }) => (
             <div key={title} className="flex items-start gap-3">
               <div className={`w-8 h-8 rounded-lg ${color} flex items-center justify-center shrink-0`}>

@@ -25,7 +25,7 @@ const faqs = [
   },
   {
     question: "What is the USDT Pool?",
-    answer: "The USDT Pool accumulates 10% from every MVT sell. This balance is used exclusively to enter Board Pool Level 1 — it cannot be directly withdrawn. Once you enter the board and the matrix fills, you earn rewards (40% of the pool) credited directly to your withdrawable USDT balance.",
+    answer: "The USDT Pool accumulates 10% from every MWT sell. This balance is used exclusively to enter Board Pool Level 1 — it cannot be directly withdrawn. Once you enter the board and the matrix fills, you earn rewards (40% of the pool) credited directly to your withdrawable USDT balance.",
   },
   {
     question: "How do withdrawals work?",
@@ -442,15 +442,15 @@ function AdminPoolBalances({ getAdminPoolBalances }: {
       <div className="grid grid-cols-2 gap-2">
         <div className="p-3 rounded-xl bg-amber-500/5 border border-amber-500/15 text-center">
           <p className="text-[10px] text-amber-300/70 uppercase tracking-wider mb-1">Community Pool</p>
-          <p className="text-sm font-bold text-amber-300" data-testid="text-community-pool">{pools ? fmt(pools.communityPool) : "—"} MVT</p>
+          <p className="text-sm font-bold text-amber-300" data-testid="text-community-pool">{pools ? fmt(pools.communityPool) : "—"} MWT</p>
         </div>
         <div className="p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/15 text-center">
           <p className="text-[10px] text-emerald-300/70 uppercase tracking-wider mb-1">Admin Pool</p>
-          <p className="text-sm font-bold text-emerald-300" data-testid="text-admin-pool">{pools ? fmt(pools.adminPool) : "—"} MVT</p>
+          <p className="text-sm font-bold text-emerald-300" data-testid="text-admin-pool">{pools ? fmt(pools.adminPool) : "—"} MWT</p>
         </div>
         <div className="p-3 rounded-xl bg-violet-500/5 border border-violet-500/15 text-center">
           <p className="text-[10px] text-violet-300/70 uppercase tracking-wider mb-1">Reserve Pool</p>
-          <p className="text-sm font-bold text-violet-300" data-testid="text-reserve-pool">{pools ? fmt(pools.reservePool) : "—"} MVT</p>
+          <p className="text-sm font-bold text-violet-300" data-testid="text-reserve-pool">{pools ? fmt(pools.reservePool) : "—"} MWT</p>
         </div>
         <div className="p-3 rounded-xl bg-blue-500/5 border border-blue-500/15 text-center">
           <p className="text-[10px] text-blue-300/70 uppercase tracking-wider mb-1">Total Users</p>

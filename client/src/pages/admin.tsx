@@ -53,7 +53,7 @@ export default function AdminPage({ account }: AdminPageProps) {
       await tx.wait();
       const pkgLabel = pkg === 1 ? "Starter ($55)" : "Pro ($130)";
       setActivateResult({ success: true, msg: `Ghost activated ${addr} as ${pkgLabel}` });
-      toast({ title: "Ghost Activation Success", description: `${addr} is now active (${pkgLabel}, no USDT/MVT used).` });
+      toast({ title: "Ghost Activation Success", description: `${addr} is now active (${pkgLabel}, no USDT/MWT used).` });
       setTargetAddress("");
     } catch (e: any) {
       const msg = decodeContractError(e);
@@ -121,7 +121,7 @@ export default function AdminPage({ account }: AdminPageProps) {
             Ghost Activation
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Activates a registered user with no USDT deducted, no MVT minted, and no income paid to uplines.
+            Activates a registered user with no USDT deducted, no MWT minted, and no income paid to uplines.
             The user gets full earning capabilities going forward.
           </p>
         </CardHeader>
@@ -172,7 +172,7 @@ export default function AdminPage({ account }: AdminPageProps) {
 
           <div className="rounded-lg border border-amber-500/20 bg-amber-500/5 px-3 py-2 text-xs text-amber-300/80 space-y-0.5">
             <div>✓ No USDT deducted from anyone</div>
-            <div>✓ No MVT minted</div>
+            <div>✓ No MWT minted</div>
             <div>✓ No level/placement/rank income paid to uplines</div>
             <div>✓ User can earn from their own downline immediately</div>
           </div>

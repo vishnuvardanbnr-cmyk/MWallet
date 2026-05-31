@@ -181,7 +181,7 @@ export default function PaidStakingPage({
     setStaking(true);
     try {
       await stakeUsdt(usdtInput, activeTab === "locked", useContractBalance);
-      toast({ title: "Staked!", description: `$${fmt(usdtAmt)} USDT → ~${fmt(estMvt)} MVT (${activeTab})` });
+      toast({ title: "Staked!", description: `$${fmt(usdtAmt)} USDT → ~${fmt(estMvt)} MWT (${activeTab})` });
       setUsdtInput("");
       await loadPositions();
       await loadWalletData();
@@ -229,8 +229,8 @@ export default function PaidStakingPage({
         </div>
         <div>
           <h1 className="text-xl font-bold gradient-text leading-tight" style={{ fontFamily: "var(--font-display)" }}
-            data-testid="text-staking-title">MVT Staking</h1>
-          <p className="text-xs text-muted-foreground mt-0.5">Invest USDT · Buy MVT · Earn sponsor income</p>
+            data-testid="text-staking-title">MWT Staking</h1>
+          <p className="text-xs text-muted-foreground mt-0.5">Invest USDT · Buy MWT · Earn sponsor income</p>
         </div>
       </div>
 
@@ -239,7 +239,7 @@ export default function PaidStakingPage({
         {[
           { icon: <DollarSign className="h-3.5 w-3.5 text-emerald-400" />, label: "Wallet USDT",    value: `$${fmt(walletBal)}`,       color: "text-emerald-400",  testid: "text-wallet-usdt" },
           { icon: <Shield      className="h-3.5 w-3.5 text-cyan-400"    />, label: "M-Vault Balance", value: `$${fmt(contractBal)}`,   color: "text-cyan-400",     testid: "text-contract-usdt" },
-          { icon: <Coins       className="h-3.5 w-3.5 text-yellow-300"  />, label: "Staked MVT",    value: `${fmt(totStakedMvt)} M`,   color: "text-yellow-300",   testid: "text-staked-mvt" },
+          { icon: <Coins       className="h-3.5 w-3.5 text-yellow-300"  />, label: "Staked MWT",    value: `${fmt(totStakedMvt)} M`,   color: "text-yellow-300",   testid: "text-staked-mvt" },
           { icon: <TrendingUp  className="h-3.5 w-3.5 text-amber-400"   />, label: "Positions",     value: `${positions.length}`,      color: "text-amber-400",    testid: "text-position-count" },
         ].map((s, i) => (
           <div key={i} className="glass-card rounded-xl p-3.5">
@@ -315,14 +315,14 @@ export default function PaidStakingPage({
             {activeTab === "flexible" ? (
               <>
                 <p><strong className="text-amber-300">Flexible Staking:</strong> Unstake anytime, no lock.</p>
-                <p>• On unstake: 5% MVT → direct sponsor; 95% sold for USDT.</p>
+                <p>• On unstake: 5% MWT → direct sponsor; 95% sold for USDT.</p>
                 <p className="font-semibold text-amber-400">• 2× sell cap: max USDT = 2× your invested amount. Excess → admin.</p>
                 <p className="text-emerald-400/80">• USDT proceeds credited to your Wallet balance — withdraw from the Wallet page.</p>
               </>
             ) : (
               <>
                 <p><strong className="text-violet-300">Locked Staking:</strong> 10-month lock. Unstake after 300 days.</p>
-                <p>• On unstake: 5%/2%/1%/1%/1% MVT → 5 sponsor levels; 90% sold for USDT.</p>
+                <p>• On unstake: 5%/2%/1%/1%/1% MWT → 5 sponsor levels; 90% sold for USDT.</p>
                 <p className="font-semibold text-violet-400">• No sell cap: receive full sell value of your tokens.</p>
                 <p className="text-emerald-400/80">• USDT proceeds credited to your Wallet balance — withdraw from the Wallet page.</p>
               </>
@@ -397,29 +397,29 @@ export default function PaidStakingPage({
             <div className="rounded-xl bg-white/[0.02] border border-white/[0.06] overflow-hidden"
               data-testid="card-stake-preview">
               <div className="px-4 py-2.5 border-b border-white/[0.05] bg-white/[0.01]">
-                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">MVT Distribution Breakdown</p>
+                <p className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">MWT Distribution Breakdown</p>
               </div>
               <div className="px-4 py-3 space-y-2">
                 <p className="text-[10px] text-muted-foreground uppercase tracking-wide mb-1">Level Income → 10 Uplines</p>
                 {STAKE_LEVEL_RATES.map((rate, i) => (
                   <div key={i} className="flex items-center justify-between">
                     <span className="text-[11px] text-muted-foreground">Level {i + 1} <span className="opacity-60">({rate}%)</span></span>
-                    <span className="text-[11px] font-semibold text-emerald-400">~{fmt(levelIncomes[i], 4)} MVT</span>
+                    <span className="text-[11px] font-semibold text-emerald-400">~{fmt(levelIncomes[i], 4)} MWT</span>
                   </div>
                 ))}
                 <div className="flex items-center justify-between pt-1 border-t border-white/[0.05]">
                   <span className="text-[11px] text-muted-foreground">Level total <span className="opacity-60">({totalLevPct}%)</span></span>
-                  <span className="text-[11px] font-bold text-emerald-400">~{fmt(grossMvt * totalLevPct / 100, 4)} MVT</span>
+                  <span className="text-[11px] font-bold text-emerald-400">~{fmt(grossMvt * totalLevPct / 100, 4)} MWT</span>
                 </div>
               </div>
               <div className="px-4 py-3 space-y-2 border-t border-white/[0.05] bg-white/[0.01]">
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] text-muted-foreground">Admin pool <span className="opacity-60">(10%)</span></span>
-                  <span className="text-[11px] font-semibold text-red-400/70">~{fmt(adminMvt, 4)} MVT</span>
+                  <span className="text-[11px] font-semibold text-red-400/70">~{fmt(adminMvt, 4)} MWT</span>
                 </div>
                 <div className="flex items-center justify-between">
                   <span className="text-[11px] font-bold text-yellow-300">You receive <span className="font-normal opacity-70">(70%)</span></span>
-                  <span className="text-[11px] font-bold text-yellow-300">~{fmt(estMvt, 4)} MVT</span>
+                  <span className="text-[11px] font-bold text-yellow-300">~{fmt(estMvt, 4)} MWT</span>
                 </div>
                 {activeTab === "flexible" && (
                   <div className="flex items-center justify-between pt-1 border-t border-white/[0.05]">
@@ -522,7 +522,7 @@ export default function PaidStakingPage({
                       <div className="min-w-0">
                         <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}
-                            data-testid={`text-mvt-${pos.index}`}>{fmt(mvtAmt, 2)} MVT</span>
+                            data-testid={`text-mvt-${pos.index}`}>{fmt(mvtAmt, 2)} MWT</span>
                           <Badge className={`text-[10px] px-1.5 ${flex
                             ? "bg-amber-500/10 text-amber-300 border-amber-500/20"
                             : "bg-violet-500/10 text-violet-300 border-violet-500/20"}`}>
@@ -627,11 +627,11 @@ export default function PaidStakingPage({
                           <>
                             <div className="flex items-center justify-between">
                               <span className="text-[11px] text-muted-foreground">Direct sponsor (5%)</span>
-                              <span className="text-[11px] font-semibold text-amber-300">{fmt(preview.sponsorMvt, 2)} MVT</span>
+                              <span className="text-[11px] font-semibold text-amber-300">{fmt(preview.sponsorMvt, 2)} MWT</span>
                             </div>
                             <div className="flex items-center justify-between">
                               <span className="text-[11px] text-muted-foreground">Your tokens sold (95%)</span>
-                              <span className="text-[11px] font-semibold">{fmt(preview.toSell, 2)} MVT</span>
+                              <span className="text-[11px] font-semibold">{fmt(preview.toSell, 2)} MWT</span>
                             </div>
                             <div className="flex items-center justify-between">
                               <span className="text-[11px] text-muted-foreground">Gross USDT from sell</span>
@@ -654,12 +654,12 @@ export default function PaidStakingPage({
                             {LOCKED_FEE_RATES.map((r, i) => (
                               <div key={i} className="flex items-center justify-between">
                                 <span className="text-[11px] text-muted-foreground">L{i + 1} upline ({r}%)</span>
-                                <span className="text-[11px] font-semibold text-violet-300">{fmt(preview.distrib[i], 2)} MVT</span>
+                                <span className="text-[11px] font-semibold text-violet-300">{fmt(preview.distrib[i], 2)} MWT</span>
                               </div>
                             ))}
                             <div className="flex items-center justify-between">
                               <span className="text-[11px] text-muted-foreground">Your tokens sold (90%)</span>
-                              <span className="text-[11px] font-semibold">{fmt(preview.toSell, 2)} MVT</span>
+                              <span className="text-[11px] font-semibold">{fmt(preview.toSell, 2)} MWT</span>
                             </div>
                           </>
                         )}
@@ -741,7 +741,7 @@ export default function PaidStakingPage({
               ))}
               <div className="flex items-center justify-between pt-2 border-t border-white/[0.04]">
                 <span className="text-[11px] font-semibold">Remaining (85%)</span>
-                <span className="text-[11px] font-semibold text-yellow-300">buys MVT tokens</span>
+                <span className="text-[11px] font-semibold text-yellow-300">buys MWT tokens</span>
               </div>
             </div>
           </div>
@@ -753,7 +753,7 @@ export default function PaidStakingPage({
                 <p className="text-[11px] font-semibold text-amber-300">Flexible Unstake</p>
               </div>
               <div className="px-3.5 py-3 space-y-1.5 text-[11px] text-muted-foreground">
-                <p>5% MVT → sponsor</p>
+                <p>5% MWT → sponsor</p>
                 <p>95% sold for USDT</p>
                 <p className="text-amber-400 font-semibold">2× cap on proceeds</p>
               </div>

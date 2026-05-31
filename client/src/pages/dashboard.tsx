@@ -180,16 +180,16 @@ export default function Dashboard({
         )}
       </div>
 
-      {/* MVT Price Banner */}
+      {/* MWT Price Banner */}
       <div className="grid grid-cols-3 gap-3 slide-in" style={{ animationDelay: "0.02s" }}>
         <div className="glass-card rounded-xl p-3 text-center" data-testid="card-buy-price">
-          <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">MVT Buy Price</p>
+          <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">MWT Buy Price</p>
           <p className="text-sm font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-buy-price">
             ${buyPriceNum > 0 ? buyPriceNum.toFixed(6) : "—"}
           </p>
         </div>
         <div className="glass-card rounded-xl p-3 text-center" data-testid="card-sell-price">
-          <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">MVT Sell Price</p>
+          <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">MWT Sell Price</p>
           <p className="text-sm font-bold text-emerald-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-sell-price">
             ${sellPriceNum > 0 ? sellPriceNum.toFixed(6) : "—"}
           </p>
@@ -197,22 +197,22 @@ export default function Dashboard({
         <div className="glass-card rounded-xl p-3 text-center" data-testid="card-total-received">
           <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Total Earned</p>
           <p className="text-sm font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-total-received">
-            {mvtFmt(userInfo.totalReceived)} MVT
+            {mvtFmt(userInfo.totalReceived)} MWT
           </p>
         </div>
       </div>
 
       {/* Main Balances */}
       <div className="grid grid-cols-2 gap-4 slide-in" style={{ animationDelay: "0.04s" }}>
-        {/* MVT Balance */}
+        {/* MWT Balance */}
         <div className="stat-card rounded-2xl p-5 col-span-2 sm:col-span-1" data-testid="card-stat-mvt-balance">
           <div className="flex items-start justify-between mb-3">
             <div className="h-10 w-10 rounded-xl bg-amber-500/15 flex items-center justify-center">
               <Coins className="h-5 w-5 text-yellow-300" />
             </div>
-            <Badge variant="outline" className="text-[9px] border-amber-500/30 text-amber-400">Virtual MVT</Badge>
+            <Badge variant="outline" className="text-[9px] border-amber-500/30 text-amber-400">Virtual MWT</Badge>
           </div>
-          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">MVT Balance</p>
+          <p className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-1">MWT Balance</p>
           <p className="text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }} data-testid="text-mvt-balance">
             <span className="gradient-text">{mvtFmt(userInfo.mvtBalance)}</span>
           </p>
@@ -222,7 +222,7 @@ export default function Dashboard({
             className="mt-3 w-full flex items-center justify-center gap-1.5 py-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs font-semibold text-amber-400 hover:bg-amber-500/15 transition-all"
             data-testid="button-sell-mvt"
           >
-            <TrendingDown className="h-3.5 w-3.5" /> Sell MVT
+            <TrendingDown className="h-3.5 w-3.5" /> Sell MWT
           </button>
         </div>
 
@@ -412,7 +412,7 @@ export default function Dashboard({
 
                 <div className="grid grid-cols-3 gap-2">
                   <div className="text-center rounded-lg bg-white/[0.02] p-2">
-                    <p className="text-[9px] text-muted-foreground mb-0.5">MVT</p>
+                    <p className="text-[9px] text-muted-foreground mb-0.5">MWT</p>
                     <p className="text-[11px] font-bold text-amber-300" style={{ fontFamily: "var(--font-display)" }}>
                       {parseFloat(formatTokenAmount(sub.mvtBalance, 18)).toFixed(1)}
                     </p>

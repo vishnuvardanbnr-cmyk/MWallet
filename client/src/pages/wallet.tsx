@@ -16,7 +16,7 @@ interface ContractTx {
   detail: string;
   timestamp: number;
   isIncome: boolean;
-  currency?: "USDT" | "MVT";
+  currency?: "USDT" | "MWT";
   mvtAmount?: bigint;
   sellPrice?: bigint;
 }
@@ -135,7 +135,7 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
           <p className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }} data-testid="text-usdt-balance">
             <span className="gradient-text">${usdtBalance.toFixed(2)}</span>
           </p>
-          <p className="text-xs text-muted-foreground mt-1">From MVT sells &amp; unstake proceeds — withdraw to your wallet anytime</p>
+          <p className="text-xs text-muted-foreground mt-1">From MWT sells &amp; unstake proceeds — withdraw to your wallet anytime</p>
           <button
             onClick={() => setShowWithdrawDialog(true)}
             disabled={usdtBalance <= 0}
@@ -158,7 +158,7 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
           <p className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }} data-testid="text-btc-pool-balance">
             <span className="text-orange-400">${btcPoolBalance.toFixed(2)}</span>
           </p>
-          <p className="text-xs text-muted-foreground mt-1">10% from every MVT sell — used exclusively to enter board pools</p>
+          <p className="text-xs text-muted-foreground mt-1">10% from every MWT sell — used exclusively to enter board pools</p>
           <div className="mt-4 w-full flex items-center gap-2 py-2.5 px-3 rounded-xl bg-orange-500/5 border border-orange-500/15">
             <Info className="h-3.5 w-3.5 text-orange-400/70 shrink-0" />
             <p className="text-[11px] text-orange-300/70">Auto-funds your board pool entries only — not withdrawable</p>
@@ -224,7 +224,7 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
           ) : (
             <div className="space-y-2">
               <p className="text-[11px] text-muted-foreground">
-                Keep selling MVT to fill this wallet. Once it hits $130, you can create a sub-account — income limit resets to $390, and <span className="text-violet-300 font-medium">remaining funds credit to your new income limit</span>.
+                Keep selling MWT to fill this wallet. Once it hits $130, you can create a sub-account — income limit resets to $390, and <span className="text-violet-300 font-medium">remaining funds credit to your new income limit</span>.
               </p>
               <button
                 onClick={handleClaimRebirth}
@@ -244,7 +244,7 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
       <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 slide-in" style={{ animationDelay: "0.07s" }}>
         <Info className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
         <div className="text-[11px] text-muted-foreground leading-relaxed space-y-1">
-          <p><span className="text-amber-400 font-medium">Income Limit ($390): </span>MVT sells → 90% goes to USDT balance (subject to $390 cap). Excess beyond the cap flows to your Rebirth Wallet.</p>
+          <p><span className="text-amber-400 font-medium">Income Limit ($390): </span>MWT sells → 90% goes to USDT balance (subject to $390 cap). Excess beyond the cap flows to your Rebirth Wallet.</p>
           <p><span className="text-emerald-400 font-medium">Staking/Unstaking — No limit: </span>USDT received on unstake is credited directly to your USDT balance and is NOT subject to the income limit.</p>
           <p><span className="text-orange-400 font-medium">Board rewards: </span>40% of board pool completions credited directly to your USDT balance — also NOT subject to income limit.</p>
         </div>
@@ -253,15 +253,15 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
       {/* Summary row */}
       <div className="grid grid-cols-2 gap-3 slide-in" style={{ animationDelay: "0.08s" }}>
         <div className="glass-card rounded-xl p-3 text-center" data-testid="card-total-earned">
-          <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Total MVT Earned</p>
+          <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Total MWT Earned</p>
           <p className="text-base font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-total-received">
-            {parseFloat(formatTokenAmount(userInfo.totalReceived, 18)).toFixed(2)} MVT
+            {parseFloat(formatTokenAmount(userInfo.totalReceived, 18)).toFixed(2)} MWT
           </p>
         </div>
         <div className="glass-card rounded-xl p-3 text-center" data-testid="card-total-sold">
-          <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Total MVT Sold</p>
+          <p className="text-[9px] text-muted-foreground uppercase tracking-wider mb-1">Total MWT Sold</p>
           <p className="text-base font-bold text-orange-400" style={{ fontFamily: "var(--font-display)" }} data-testid="text-total-sold">
-            {parseFloat(formatTokenAmount(userInfo.totalSold, 18)).toFixed(2)} MVT
+            {parseFloat(formatTokenAmount(userInfo.totalSold, 18)).toFixed(2)} MWT
           </p>
         </div>
       </div>
@@ -300,7 +300,7 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
             {recentTxs.map((tx, idx) => {
               const date = new Date(tx.timestamp * 1000);
               const amtNum = parseFloat(formatTokenAmount(tx.amount, 18));
-              const isSell = tx.type === "Sell MVT";
+              const isSell = tx.type === "Sell MWT";
               const isExpanded = expandedIdx === idx;
               return (
                 <div key={idx} data-testid={`row-tx-${idx}`}>
@@ -349,14 +349,14 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
                         <div className="grid grid-cols-2 gap-2 text-[11px]">
                           {tx.mvtAmount && tx.mvtAmount > 0n && (
                             <div className="bg-white/[0.02] rounded-lg p-2">
-                              <p className="text-muted-foreground/60 mb-0.5">MVT Tokens Sold</p>
-                              <p className="font-semibold text-amber-400">{fmt2(tx.mvtAmount)} MVT</p>
+                              <p className="text-muted-foreground/60 mb-0.5">MWT Tokens Sold</p>
+                              <p className="font-semibold text-amber-400">{fmt2(tx.mvtAmount)} MWT</p>
                             </div>
                           )}
                           {tx.sellPrice && tx.sellPrice > 0n && (
                             <div className="bg-white/[0.02] rounded-lg p-2">
                               <p className="text-muted-foreground/60 mb-0.5">Sell Price</p>
-                              <p className="font-semibold text-white">${parseFloat(ethers.formatUnits(tx.sellPrice, 18)).toFixed(6)}/MVT</p>
+                              <p className="font-semibold text-white">${parseFloat(ethers.formatUnits(tx.sellPrice, 18)).toFixed(6)}/MWT</p>
                             </div>
                           )}
                           <div className="bg-white/[0.02] rounded-lg p-2">

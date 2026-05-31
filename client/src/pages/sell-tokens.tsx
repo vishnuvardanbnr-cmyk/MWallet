@@ -46,19 +46,19 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
   const handleSell = async () => {
     if (!sellAmount || sellAmt <= 0) return;
     if (sellAmt > mvtBalance) {
-      toast({ title: "Exceeds balance", description: `You only have ${mvtBalance.toFixed(2)} MVT`, variant: "destructive" });
+      toast({ title: "Exceeds balance", description: `You only have ${mvtBalance.toFixed(2)} MWT`, variant: "destructive" });
       return;
     }
     if (sellAmt > contractMvt && contractMvt > 0) {
-      toast({ title: "Exceeds sellable amount", description: `Only ${sellableMvt.toFixed(2)} MVT is currently backed and sellable`, variant: "destructive" });
+      toast({ title: "Exceeds sellable amount", description: `Only ${sellableMvt.toFixed(2)} MWT is currently backed and sellable`, variant: "destructive" });
       return;
     }
     setSelling(true);
     try {
       await sellMvt(sellAmount);
       toast({
-        title: "MVT Sold!",
-        description: `${sellAmt.toFixed(2)} MVT sold. USDT credited to your balance.`,
+        title: "MWT Sold!",
+        description: `${sellAmt.toFixed(2)} MWT sold. USDT credited to your balance.`,
       });
       setSellAmount("");
       await fetchUserData();
@@ -74,9 +74,9 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
     <div className="p-4 md:p-6 max-w-2xl mx-auto space-y-6">
       <div className="text-center space-y-1.5">
         <h1 className="text-2xl font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-sell-title">
-          Sell MVT Tokens
+          Sell MWT Tokens
         </h1>
-        <p className="text-sm text-muted-foreground">Convert your virtual MVT balance to USDT</p>
+        <p className="text-sm text-muted-foreground">Convert your virtual MWT balance to USDT</p>
       </div>
 
       {/* Price & Balance Stats */}
@@ -97,7 +97,7 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
         </div>
         <div className="premium-card rounded-xl p-3 text-center" data-testid="card-mvt-balance">
           <Coins className="w-4 h-4 mx-auto text-yellow-300 mb-1" />
-          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">MVT Balance</p>
+          <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-0.5">MWT Balance</p>
           <p className="text-sm font-bold gradient-text" style={{ fontFamily: "var(--font-display)" }} data-testid="text-mvt-balance">
             {mvtBalance.toFixed(2)}
           </p>
@@ -111,13 +111,13 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
         </div>
       </div>
 
-      {/* Pending MVT warning */}
+      {/* Pending MWT warning */}
       {hasPendingMvt && (
         <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-orange-500/10 border border-orange-500/20">
           <AlertTriangle className="w-4 h-4 text-orange-400 shrink-0 mt-0.5" />
           <div className="text-[11px] text-muted-foreground leading-relaxed space-y-1">
-            <p><span className="text-orange-400 font-medium">Some MVT is pending:</span> {(mvtBalance - contractMvt).toFixed(2)} MVT from level/binary income is credited virtually but not yet backed by contract tokens.</p>
-            <p>You can sell up to <span className="text-foreground font-medium">{sellableMvt.toFixed(2)} MVT</span> right now. Pending MVT becomes sellable as more users activate.</p>
+            <p><span className="text-orange-400 font-medium">Some MWT is pending:</span> {(mvtBalance - contractMvt).toFixed(2)} MWT from level/binary income is credited virtually but not yet backed by contract tokens.</p>
+            <p>You can sell up to <span className="text-foreground font-medium">{sellableMvt.toFixed(2)} MWT</span> right now. Pending MWT becomes sellable as more users activate.</p>
           </div>
         </div>
       )}
@@ -139,16 +139,16 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
             <Flame className="h-4 w-4 text-yellow-300" />
           </div>
           <div>
-            <p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Burn MVT → USDT</p>
-            <p className="text-[10px] text-muted-foreground">Virtual MVT → USDT balance in contract → withdraw anytime</p>
+            <p className="text-sm font-bold" style={{ fontFamily: "var(--font-display)" }}>Burn MWT → USDT</p>
+            <p className="text-[10px] text-muted-foreground">Virtual MWT → USDT balance in contract → withdraw anytime</p>
           </div>
           <Badge className="ml-auto bg-yellow-600/10 text-yellow-300 border-yellow-600/20 text-[10px]">
-            {sellableMvt.toFixed(2)} MVT available
+            {sellableMvt.toFixed(2)} MWT available
           </Badge>
         </div>
 
         <div className="rounded-xl bg-white/[0.03] border border-white/[0.06] px-3 py-2.5">
-          <p className="text-[10px] text-muted-foreground mb-1">Amount to Sell (MVT)</p>
+          <p className="text-[10px] text-muted-foreground mb-1">Amount to Sell (MWT)</p>
           <div className="flex items-center gap-2">
             <input
               type="number"
@@ -171,7 +171,7 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
             </button>
             <div className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-yellow-600/10 border border-yellow-600/20 shrink-0">
               <Coins className="w-3.5 h-3.5 text-yellow-300" />
-              <span className="text-xs font-bold text-yellow-300">MVT</span>
+              <span className="text-xs font-bold text-yellow-300">MWT</span>
             </div>
           </div>
         </div>
@@ -204,14 +204,14 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
           data-testid="button-sell-mvt"
         >
           {selling ? <Loader2 className="w-4 h-4 animate-spin" /> : <TrendingDown className="w-4 h-4" />}
-          {selling ? "Processing..." : "Sell MVT → USDT"}
+          {selling ? "Processing..." : "Sell MWT → USDT"}
         </button>
 
         {sellableMvt === 0 && (
           <p className="text-[10px] text-center text-muted-foreground">
             {mvtBalance > 0
-              ? "Your MVT is pending — no backed tokens available to sell yet."
-              : "No MVT balance. Earn MVT by referring users (level income) or from binary distribution."}
+              ? "Your MWT is pending — no backed tokens available to sell yet."
+              : "No MWT balance. Earn MWT by referring users (level income) or from binary distribution."}
           </p>
         )}
       </div>
@@ -221,7 +221,7 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
         <h2 className="text-sm font-semibold" style={{ fontFamily: "var(--font-display)" }}>How Selling Works</h2>
         <div className="space-y-3">
           {[
-            { step: "1", title: "Burn MVT Tokens", desc: "Your virtual MVT balance is burned via the bonding curve using the contract's real token pool." },
+            { step: "1", title: "Burn MWT Tokens", desc: "Your virtual MWT balance is burned via the bonding curve using the contract's real token pool." },
             { step: "2", title: "10% to USDT Pool", desc: "10% of USDT proceeds go to your personal USDT pool — used exclusively to fund your board pool entries." },
             { step: "3", title: "90% to Your USDT Balance", desc: "Net USDT fills your $390 income limit → credited to USDT balance. Excess goes to rebirth pool." },
             { step: "4", title: "Withdraw Anytime", desc: "Pull your USDT balance to your wallet from the Wallet page whenever you're ready." },

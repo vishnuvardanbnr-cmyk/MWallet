@@ -80,7 +80,7 @@ function ConnectScreen({ onConnect }: { onConnect: () => void }) {
               <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Max Earn</div>
             </div>
             <div className="text-center" data-testid="text-stat-rewards">
-              <div className="text-lg font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }}>MVT+mUSDT</div>
+              <div className="text-lg font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }}>MWT+mUSDT</div>
               <div className="text-[10px] text-muted-foreground uppercase tracking-wider">Rewards</div>
             </div>
           </div>
