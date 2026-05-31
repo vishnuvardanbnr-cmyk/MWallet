@@ -149,9 +149,7 @@ export async function runRankCheck(): Promise<void> {
       if (cur === 0) {
         if (
           entry.directCount   >= M1_MIN_DIRECTS  &&
-          entry.teamSalesUsdt >= M1_MIN_TEAM_USDT &&
-          entry.leftSubVolume  > 0n              &&
-          entry.rightSubVolume > 0n
+          entry.teamSalesUsdt >= M1_MIN_TEAM_USDT
         ) target = 1;
       } else if (cur === 1 && counts.m1 >= MIN_DOWNLINES[2]) { target = 2; }
       else if   (cur === 2 && counts.m2 >= MIN_DOWNLINES[3]) { target = 3; }

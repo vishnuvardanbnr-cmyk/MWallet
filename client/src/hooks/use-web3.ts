@@ -110,6 +110,16 @@ export function useWeb3() {
     return await provider.getSigner();
   }, [getProvider]);
 
+  // Returns true if the wallet's current chainId matches our target network.
+  const isOnCorrectChain = useCallback(async (): Promise<boolean> => {
+    const ethereum = (window as any).ethereum;
+    if (!ethereum) return false;
+    try {
+      const chainHex: string = await ethereum.request({ method: "eth_chainId" });
+      return chainHex.toLowerCase() === NETWORK.chainId.toLowerCase();
+    } catch { return false; }
+  }, []);
+
   const switchNetwork = useCallback(async () => {
     const ethereum = (window as any).ethereum;
     if (!ethereum) return;
@@ -122,15 +132,32 @@ export function useWeb3() {
       });
     } catch (switchErr: any) {
       if (switchErr?.code === 4902) {
-        // Chain not in MetaMask yet — add it
+        // Chain not in wallet yet — add it
         try {
           await ethereum.request({ method: "wallet_addEthereumChain", params: [NETWORK] });
         } catch { /* user rejected add */ }
       }
-      // code 4001 (user rejected switch) or any other error — proceed anyway;
-      // all contract reads use getDirectProvider() and don't need MetaMask's network.
+      // Other wallets (Token Pocket, SafePal) may reject switch/add — try add anyway
+      try {
+        await ethereum.request({ method: "wallet_addEthereumChain", params: [NETWORK] });
+      } catch { /* ignore */ }
     }
   }, []);
+
+  // Ensures the wallet is on the correct chain before sending a tx.
+  // Throws a user-friendly error if the chain can't be switched.
+  const ensureCorrectChain = useCallback(async () => {
+    if (await isOnCorrectChain()) return;
+    await switchNetwork();
+    // Give wallet up to 3 s to reflect the chain switch
+    for (let i = 0; i < 6; i++) {
+      await new Promise(r => setTimeout(r, 500));
+      if (await isOnCorrectChain()) return;
+    }
+    throw new Error(
+      `Please switch your wallet to ${NETWORK.chainName} (Chain ID ${parseInt(NETWORK.chainId, 16)}) manually and try again.`
+    );
+  }, [isOnCorrectChain, switchNetwork]);
 
   const fetchUserData = useCallback(async (addr?: string) => {
     const address = addr || account;
@@ -279,21 +306,37 @@ export function useWeb3() {
   const ZERO_ADDRESS = "0x0000000000000000000000000000000000000000";
 
   const register = useCallback(async (sponsor: string, _binaryParent: string, placeLeft: boolean) => {
+    // Ensure wallet is on MChain before signing — Token Pocket / SafePal may not
+    // auto-switch, causing the tx to go to the wrong chain and revert.
+    await ensureCorrectChain();
     const signer = await getSigner();
-    // The contract now handles placement on-chain via _findSlotOnSide.
-    // Always pass ZERO_ADDRESS as binaryParent → contract defaults to sponsor and
-    // walks the tree to find the deepest open slot on the requested side.
-    // Step 1 — simulate via direct RPC to catch any revert reason before sending
-    const directProvider = getDirectProvider();
     const signerAddress = await signer.getAddress();
-    const simContract = getMvaultContract(directProvider);
-    await simContract.register.staticCall(sponsor, ZERO_ADDRESS, placeLeft, { from: signerAddress });
-    // Step 2 — send through MetaMask with fixed gasLimit (bypasses eth_estimateGas)
+    // Step 1 — simulate via direct RPC to catch contract revert reasons early.
+    // If the simulation itself has a network error (not a contract revert), skip
+    // it and let the wallet tx surface the real error.
+    try {
+      const directProvider = getDirectProvider();
+      const simContract = getMvaultContract(directProvider);
+      await simContract.register.staticCall(sponsor, ZERO_ADDRESS, placeLeft, { from: signerAddress });
+    } catch (simErr: any) {
+      const simMsg = simErr?.reason || simErr?.shortMessage || simErr?.message || "";
+      // Only block on known contract reverts — not on network/parse errors
+      const isContractRevert =
+        simErr?.errorName ||
+        simMsg.includes("AlreadyRegistered") ||
+        simMsg.includes("SponsorNotRegistered") ||
+        simMsg.includes("revert") ||
+        (simErr?.code === "CALL_EXCEPTION" && simErr?.data && simErr.data !== "0x");
+      if (isContractRevert) throw simErr;
+      // Network/proxy error — proceed anyway and let the wallet tx fail with a real reason
+      console.warn("staticCall simulation failed (network error), proceeding with tx:", simMsg);
+    }
+    // Step 2 — send through wallet with fixed gasLimit (bypasses eth_estimateGas)
     const sendContract = getMvaultContract(signer);
     const tx = await sendContract.register(sponsor, ZERO_ADDRESS, placeLeft, { gasLimit: 600_000n });
     await waitForTx(tx.hash);
     await refreshAfterTx();
-  }, [getSigner, refreshAfterTx]);
+  }, [getSigner, ensureCorrectChain, refreshAfterTx]);
 
   // ── USDT approval for MvaultContract ───────────────────────────────────────
 

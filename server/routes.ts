@@ -1488,9 +1488,7 @@ export async function registerRoutes(
         if (oldRank === 0) {
           cachedEligible =
             userBefore.directCount   >= M1_MIN_DIRECTS   &&
-            userBefore.teamSalesUsdt >= M1_MIN_TEAM_USDT &&
-            userBefore.leftSubVolume  > 0n               &&
-            userBefore.rightSubVolume > 0n;
+            userBefore.teamSalesUsdt >= M1_MIN_TEAM_USDT;
         } else {
           cachedEligible = counts[oldRank + 1] >= MIN_COUNTS[oldRank + 1];
         }
