@@ -25,7 +25,7 @@ import SettingsPage from "@/pages/settings";
 import SupportPage from "@/pages/support";
 import BoardPage from "@/pages/board";
 import BinaryDetailsPage from "@/pages/binary-details";
-import DeepPlacementPage from "@/pages/deep-placement";
+
 import StorePage from "@/pages/store";
 import PaidStakingPage from "@/pages/paid-staking";
 import RegisterForPage from "@/pages/register-for";
@@ -323,12 +323,7 @@ function App() {
                         fetchUserData={web3.fetchUserData}
                       />
                     </Route>
-                    <Route path="/deep-placement">
-                      <DeepPlacementPage
-                        userInfo={web3.userInfo!}
-                        account={web3.account!}
-                      />
-                    </Route>
+
                     <Route path="/paid-staking">
                       <PaidStakingPage
                         account={web3.account!}

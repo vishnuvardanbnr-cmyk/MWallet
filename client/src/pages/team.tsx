@@ -333,27 +333,15 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
       </div>
 
       {/* Quick Actions */}
-      <div className="grid grid-cols-2 gap-3 slide-in" style={{ animationDelay: "0.045s" }}>
-        <button
-          onClick={() => setLocation("/deep-placement")}
-          className="glass-card rounded-xl p-4 text-left hover:bg-white/[0.04] transition-all group"
-          data-testid="button-quick-deep-placement"
-        >
-          <UserPlus className="h-5 w-5 text-amber-400 mb-2 group-hover:scale-110 transition-transform" />
-          <p className="text-sm font-semibold">Deep Placement</p>
-          <p className="text-[10px] text-muted-foreground">Place a member in a specific tree position</p>
-          <div className="flex items-center gap-1 mt-2 text-[10px] text-amber-400/70">
-            <span>Open</span><ChevronRight className="h-3 w-3" />
-          </div>
-        </button>
+      <div className="slide-in" style={{ animationDelay: "0.045s" }}>
         <button
           onClick={() => setLocation("/binary")}
-          className="glass-card rounded-xl p-4 text-left hover:bg-white/[0.04] transition-all group"
-          data-testid="button-quick-binary-details"
+          className="w-full glass-card rounded-xl p-4 text-left hover:bg-white/[0.04] transition-all group"
+          data-testid="button-quick-placement-details"
         >
           <BarChart2 className="h-5 w-5 text-blue-400 mb-2 group-hover:scale-110 transition-transform" />
-          <p className="text-sm font-semibold">Binary Income</p>
-          <p className="text-[10px] text-muted-foreground">View your binary pool & pair details</p>
+          <p className="text-sm font-semibold">Placement Income</p>
+          <p className="text-[10px] text-muted-foreground">View your placement details</p>
           <div className="flex items-center gap-1 mt-2 text-[10px] text-blue-400/70">
             <span>Open</span><ChevronRight className="h-3 w-3" />
           </div>

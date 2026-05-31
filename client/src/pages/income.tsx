@@ -64,7 +64,7 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
         <h1 className="text-2xl font-bold" style={{ fontFamily: "var(--font-display)" }}>
           <span className="gradient-text">Income</span>
         </h1>
-        <p className="text-sm text-muted-foreground">Level income, binary pairs, and rebirth pool</p>
+        <p className="text-sm text-muted-foreground">Your earnings overview</p>
       </div>
 
       {/* Overview Cards */}
@@ -172,7 +172,7 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
         <div className="flex items-start gap-2 p-2.5 rounded-xl bg-emerald-500/[0.05] border border-emerald-500/10">
           <Info className="h-3.5 w-3.5 text-emerald-400/70 shrink-0 mt-0.5" />
           <p className="text-[10px] text-muted-foreground">
-            20% of each activation's gross MVT is split across 30 binary placement levels — paid instantly to each qualified upline. No distribution cycle needed.
+            20% of each activation's gross MVT is split across 30 binary placement levels — paid instantly to each qualified upline.
           </p>
         </div>
         <button onClick={() => setLocation("/binary")} className="mt-3 text-[10px] text-amber-400 hover:text-amber-300">
@@ -218,7 +218,7 @@ export default function IncomePage({ userInfo, mvtPrice, binaryPairs, formatAmou
                   <div>
                     <p className="text-xs font-semibold">{pct} of gross MVT</p>
                     <p className="text-[10px] text-muted-foreground">
-                      {dirReq} direct referral{dirReq !== 1 ? "s" : ""} required
+                      Refer {dirReq} direct{dirReq !== 1 ? "s" : ""} to unlock
                     </p>
                   </div>
                 </div>

@@ -559,8 +559,8 @@ export function useWeb3() {
   const getTransactionsFromContract = useCallback(async (offset: number, limit: number) => {
     if (!account) return { transactions: [], total: 0 };
     try {
-      const provider = getProvider();
-      const contract = getMvaultContract(provider);
+      // Use direct provider — wallet's eth_call / eth_getLogs on MChain returns 0x
+      const contract = getMvaultContract(getDirectProvider());
 
       // TX_META: type 0-11 from on-chain _recordTx
       const TX_META: Record<number, { type: string; isIncome: boolean; currency: "USDT" | "MVT"; detail: (r: any) => string }> = {

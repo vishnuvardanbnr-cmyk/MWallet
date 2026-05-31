@@ -135,7 +135,7 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
           <p className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }} data-testid="text-usdt-balance">
             <span className="gradient-text">${usdtBalance.toFixed(2)}</span>
           </p>
-          <p className="text-xs text-muted-foreground mt-1">From MVT sells &amp; unstake proceeds — withdraw to MetaMask anytime</p>
+          <p className="text-xs text-muted-foreground mt-1">From MVT sells &amp; unstake proceeds — withdraw to your wallet anytime</p>
           <button
             onClick={() => setShowWithdrawDialog(true)}
             disabled={usdtBalance <= 0}
