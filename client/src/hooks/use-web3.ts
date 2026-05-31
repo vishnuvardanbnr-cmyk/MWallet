@@ -157,11 +157,14 @@ export function useWeb3() {
   ): Promise<string> => {
     const direct = getDirectProvider();
     const addr = await signer.getAddress();
-    const [nonce, feeData] = await Promise.all([
+    // Use raw eth_gasPrice instead of getFeeData() — getFeeData() fetches the
+    // latest block which on MChain has a Bech32 miner address that ethers v6
+    // cannot parse, throwing INVALID_ARGUMENT.
+    const [nonce, gasPriceHex] = await Promise.all([
       direct.getTransactionCount(addr, "pending"),
-      direct.getFeeData(),
+      direct.send("eth_gasPrice", []),
     ]);
-    const gasPrice = feeData.gasPrice ?? 1_000_000_000n; // 1 gwei fallback
+    const gasPrice = gasPriceHex ? BigInt(gasPriceHex) : 1_000_000_000n; // 1 gwei fallback
     const tx = await signer.sendTransaction({
       to,
       data,
