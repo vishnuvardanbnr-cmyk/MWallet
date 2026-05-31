@@ -33,6 +33,7 @@ import RebirthAccountPage from "@/pages/rebirth-account";
 import SellTokensPage from "@/pages/sell-tokens";
 import RankPage from "@/pages/rank";
 import ReactivatePage from "@/pages/reactivate";
+import AdminPage from "@/pages/admin";
 
 function ScrollToTop() {
   const [location, setLocation] = useLocation();
@@ -392,6 +393,9 @@ function App() {
                         reactivateFromIncomeWallet={web3.reactivateFromIncomeWallet}
                         fetchUserData={web3.fetchUserData}
                       />
+                    </Route>
+                    <Route path="/admin">
+                      <AdminPage account={web3.account!} />
                     </Route>
                     <Route path="/store">
                       <StorePage />

@@ -4,7 +4,7 @@ import {
   SidebarMenu, SidebarMenuButton, SidebarMenuItem, SidebarHeader, SidebarFooter,
   useSidebar,
 } from "@/components/ui/sidebar";
-import { LayoutDashboard, DollarSign, Wallet, Users, ArrowLeftRight, UserCircle, HelpCircle, LogOut, Copy, GitBranch, ShoppingBag, ArrowDownUp, Coins, TrendingDown, RotateCcw, Grid2X2, UserPlus, Award } from "lucide-react";
+import { LayoutDashboard, DollarSign, Wallet, Users, ArrowLeftRight, UserCircle, HelpCircle, LogOut, Copy, GitBranch, ShoppingBag, ArrowDownUp, Coins, TrendingDown, RotateCcw, Grid2X2, UserPlus, Award, ShieldCheck } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
 import { shortenAddress } from "@/lib/contract";
@@ -29,6 +29,8 @@ const menuItems = [
   { title: "Support", url: "/support", icon: HelpCircle },
 ];
 
+const ADMIN_WALLET = "0x12fcf3d1084455d3677a110925d73b01f3846750";
+
 interface AppSidebarProps {
   account: string;
   userAddress: string;
@@ -39,6 +41,7 @@ export function AppSidebar({ account, userAddress, disconnect }: AppSidebarProps
   const [location, setLocation] = useLocation();
   const { toast } = useToast();
   const { isMobile, setOpenMobile } = useSidebar();
+  const isAdmin = account?.toLowerCase() === ADMIN_WALLET;
 
   const copyReferralLink = (side: "left" | "right") => {
     const link = `${window.location.origin}?ref=${userAddress}&side=${side}`;
@@ -84,6 +87,21 @@ export function AppSidebar({ account, userAddress, disconnect }: AppSidebarProps
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               ))}
+              {isAdmin && (
+                <SidebarMenuItem key="Admin">
+                  <SidebarMenuButton
+                    isActive={location === "/admin"}
+                    data-testid="nav-admin"
+                    onClick={() => {
+                      setLocation("/admin");
+                      if (isMobile) setOpenMobile(false);
+                    }}
+                  >
+                    <ShieldCheck />
+                    <span>Admin Panel</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+              )}
             </SidebarMenu>
           </SidebarGroupContent>
         </SidebarGroup>

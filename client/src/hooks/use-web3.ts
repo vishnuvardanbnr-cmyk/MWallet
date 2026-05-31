@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
 import {
-  getMvaultContract, getTokenContract,
+  getMvaultContract, getTokenContract, getMvtTokenContract, getStakingModuleContract,
   MVAULT_CONTRACT_ADDRESS, TOKEN_ADDRESS,
   NETWORK, formatTokenAmount, getDirectProvider, waitForTx,
 } from "@/lib/contract";
@@ -190,9 +190,11 @@ export function useWeb3() {
       setBtcPoolBalance(ui.btcPoolBalance);
 
       if (ui.isRegistered) {
-        // MVT price
+        // MVT price — call token contract directly (getMvtPrice removed from main contract)
         try {
-          const [bp, sp] = await contract.getMvtPrice();
+          const mvtToken = getMvtTokenContract(getDirectProvider());
+          const bp = await mvtToken.getBuyPrice();
+          const sp = await mvtToken.getSellPrice();
           setMvtPrice({ buyPrice: bp, sellPrice: sp });
         } catch { }
 
@@ -721,8 +723,8 @@ export function useWeb3() {
   }, [getSigner, refreshAfterTx, notifyActivation]);
 
   const getActiveStakesOnChain = useCallback(async (user: string) => {
-    const provider = getProvider();
-    const contract = getMvaultContract(provider);
+    const provider = getDirectProvider();
+    const contract = getStakingModuleContract(provider);
     try {
       const result = await contract.getActiveStakes(user);
       const positions = [];

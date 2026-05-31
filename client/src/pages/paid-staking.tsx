@@ -7,7 +7,7 @@ import {
 import { useLocation } from "wouter";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { getMvaultContract, getTokenContract, MVAULT_CONTRACT_ADDRESS, formatTokenAmount, decodeContractError } from "@/lib/contract";
+import { getMvaultContract, getTokenContract, getMvtTokenContract, getDirectProvider, MVAULT_CONTRACT_ADDRESS, formatTokenAmount, decodeContractError } from "@/lib/contract";
 import { ethers } from "ethers";
 
 interface StakePosition {
@@ -71,9 +71,9 @@ export default function PaidStakingPage({
   useEffect(() => {
     const fetchPrice = async () => {
       try {
-        const provider = new ethers.BrowserProvider((window as any).ethereum);
-        const contract = getMvaultContract(provider);
-        const [bp, sp] = await contract.getMvtPrice();
+        const mvtToken = getMvtTokenContract(getDirectProvider());
+        const bp = await mvtToken.getBuyPrice();
+        const sp = await mvtToken.getSellPrice();
         setBuyPrice(parseFloat(ethers.formatUnits(bp, 18)));
         setSellPrice(parseFloat(ethers.formatUnits(sp, 18)));
       } catch {}

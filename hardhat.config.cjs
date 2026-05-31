@@ -19,7 +19,7 @@ module.exports = {
       chainId: 1888,
       accounts: DEPLOYER_KEY ? [DEPLOYER_KEY] : [],
       gasPrice: 1000000000,
-      gas: 6000000,
+      gas: 30000000,
       timeout: 120000,
     },
     bscTestnet: {

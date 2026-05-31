@@ -1,2 +1,4 @@
 - [VPS PM2 restart pattern](vps-pm2-restart.md) — interactive SSH always times out; use fuser -k + SCP to reload new binary
 - [MvaultView deployment](mvaultview-deploy.md) — current VIEW at 0x1324CE45...; env-var || fallback pattern doesn't bypass a stale set value
+- [Contract size limit](contract-size.md) — EIP-170 (24,576 bytes) IS enforced on MChain 1888; gasUsed=0 + status=0 in receipt = size rejection, not gas issue.
+- [Delegation view removal](delegation-views.md) — getMvtPrice/getActiveStakes/getBtcPoolInfo/getUserBoardStats removed from MvaultContract to save bytespace; frontend calls MVT token and staking module contracts directly.

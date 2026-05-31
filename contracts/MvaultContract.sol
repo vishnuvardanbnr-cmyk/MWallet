@@ -207,6 +207,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     event Unstaked(address indexed user, uint256 stakeIndex, uint256 mvtReturned, uint256 usdtReceived, uint256 adminCapCut);
     event ConvertedToLocked(address indexed user, uint256 stakeIndex, uint256 lockedSince);
     event StakeLevelIncomePaid(address indexed to, address indexed from, uint8 level, uint256 mvtAmount);
+    event AdminActivated(address indexed user, uint8 pkg);
 
     // ── Errors ────────────────────────────────────────────────────────────────
     error NotAuthorized();
@@ -307,6 +308,19 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         communityPool           -= amount;
         users[to].mvtBalance    += amount;
         users[to].totalReceived += amount;
+    }
+
+    // Ghost-activate: sets account active at chosen package with no USDT/MVT/income
+    function adminActivate(address user, uint8 pkg) external onlyOwnerOrManager {
+        User storage u = users[user];
+        if (!u.isRegistered) revert NotRegistered();
+        if (u.isActive) revert AlreadyActive();
+        (uint256 p, uint256 c) = _pkgParams(pkg);
+        u.isActive = true;
+        u.packagePrice = p;
+        u.incomeLimit = c;
+        u.incomeLimitCap = c;
+        emit AdminActivated(user, pkg);
     }
 
     modifier onlyStakingModule() {
@@ -1191,32 +1205,6 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // VIEW FUNCTIONS
     // ─────────────────────────────────────────────────────────────────────────
 
-    function getBtcPoolInfo(address u) external view returns (
-        uint256 btcPoolBalance,
-        uint256 totalBtcEarned
-    ) {
-        return (users[u].btcPoolBalance, users[u].totalBtcEarned);
-    }
-
-    /**
-     * @notice Check whether a user can trigger a rebirth and how much is in their pool.
-     */
-    function canRebirth(address user) external view returns (bool eligible, uint256 poolBalance) {
-        poolBalance = users[user].rebirthPool;
-        eligible    = users[user].packagePrice > 0 && poolBalance >= users[user].packagePrice;
-    }
-
-    function getMvtPrice() external view returns (uint256 buyPrice, uint256 sellPrice) {
-        buyPrice  = mvaultToken.getBuyPrice();
-        sellPrice = mvaultToken.getSellPrice();
-    }
-
-    function getUserBoardStats(address _user) external view returns (
-        uint256 entries,
-        uint256 totalRewards
-    ) {
-        return (boardEntryCount[_user], totalBoardRewardsEarned[_user]);
-    }
 
     // ─────────────────────────────────────────────────────────────────────────
     // TRANSACTION HISTORY
@@ -1274,30 +1262,6 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         users[msg.sender].btcPoolRate = _rate;
     }
 
-    // ─────────────────────────────────────────────────────────────────────────
-    // STAKING VIEW DELEGATES
-    // ─────────────────────────────────────────────────────────────────────────
-
-    function getStakeCount(address user) external view returns (uint256) {
-        return stakingModule.getStakeCount(user);
-    }
-
-    function getStake(address user, uint256 index) external view returns (
-        uint256 mvtAmount, uint256 usdtInvested, uint256 stakedAt, uint256 lockedSince, bool active
-    ) {
-        return stakingModule.getStake(user, index);
-    }
-
-    function getActiveStakes(address user) external view returns (
-        uint256[] memory indices, uint256[] memory mvtAmounts,
-        uint256[] memory usdtInvestedArr, uint256[] memory stakedAts, uint256[] memory lockedSinces
-    ) {
-        return stakingModule.getActiveStakes(user);
-    }
-
-    function MIN_STAKE_USDT()  external pure returns (uint256) { return 50 * 1e18; }
-    function LOCK_DURATION()   external pure returns (uint256) { return 300 days; }
-    function FLEX_CAP_MULT()   external pure returns (uint256) { return 2; }
 
     /**
      * @notice Get direct referrals of a user with pagination (newest first).

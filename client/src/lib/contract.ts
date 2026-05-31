@@ -295,16 +295,12 @@ export const MVAULT_ABI = [
   "function boardHandler() view returns (address)",
   "function stakingModule() view returns (address)",
   // Views
-  "function getBtcPoolInfo(address u) view returns (uint256 btcPoolBalance, uint256 totalBtcEarned)",
-  "function canRebirth(address user) view returns (bool eligible, uint256 poolBalance)",
-  "function getMvtPrice() view returns (uint256 buyPrice, uint256 sellPrice)",
   "function getDirectReferralsPaginated(address _user, uint256 _offset, uint256 _limit) view returns (address[] referrals, uint256 total)",
   "function getTransactions(address user, uint256 offset, uint256 limit) view returns (tuple(uint8 txType, uint32 ts, uint256 amount, uint8 level, address addr)[] records, uint256 total)",
   "function usdtToken() view returns (address)",
   "function mvaultToken() view returns (address)",
   // Board pool
   "function enterBoardPool() external",
-  "function getUserBoardStats(address user) view returns (uint256 entries, uint256 totalRewards)",
   // Admin setters
   "function setCommunityWallet(address _wallet) external",
   "function setPlacementRates(uint256[30] _rates) external",
@@ -314,7 +310,9 @@ export const MVAULT_ABI = [
   "function withdrawReservePool(address to, uint256 amount) external",
   "function drainRankPool() external",
   "function setUserRanks(address[] addrs, uint8[] ranks_) external",
+  "function adminActivate(address user, uint8 pkg) external",
   // Events
+  "event AdminActivated(address indexed user, uint8 pkg)",
   "event Registered(address indexed user, address indexed sponsor, address indexed binaryParent, bool placeLeft)",
   "event Activated(address indexed user, uint256 mvtMinted, uint256 grossMvt, uint256 levelAmt, uint256 placementAmt, uint256 adminAmt)",
   "event LevelIncomePaid(address indexed to, address indexed from, uint8 level, uint256 amount)",
@@ -330,17 +328,11 @@ export const MVAULT_ABI = [
   "event RankIncomeDistributed(uint256 totalPool, uint256 recipientCount)",
   "event BoardEntered(address indexed user, uint256 boardLevel, uint256 usdtDeducted)",
   "event BoardRewardCredited(address indexed user, uint256 usdtAmount, uint256 boardLevel)",
-  // Staking
+  // Staking (write — still via MvaultContract)
   "function stakeFromBalance(uint256 usdtAmount, bool isLocked) external",
   "function stake(uint256 usdtAmount, bool isLocked) external",
   "function unstake(uint256 stakeIndex) external",
   "function convertToLocked(uint256 stakeIndex) external",
-  "function getStakeCount(address user) view returns (uint256)",
-  "function getStake(address user, uint256 index) view returns (uint256 mvtAmount, uint256 usdtInvested, uint256 stakedAt, uint256 lockedSince, bool active)",
-  "function getActiveStakes(address user) view returns (uint256[] indices, uint256[] mvtAmounts, uint256[] usdtInvestedArr, uint256[] stakedAts, uint256[] lockedSinces)",
-  "function MIN_STAKE_USDT() pure returns (uint256)",
-  "function LOCK_DURATION() pure returns (uint256)",
-  "function FLEX_CAP_MULT() pure returns (uint256)",
   "event Staked(address indexed user, uint256 stakeIndex, uint256 usdtAmount, uint256 mvtMinted, bool isLocked)",
   "event Unstaked(address indexed user, uint256 stakeIndex, uint256 mvtReturned, uint256 usdtReceived, uint256 adminCapCut)",
   "event ConvertedToLocked(address indexed user, uint256 stakeIndex, uint256 lockedSince)",
@@ -487,8 +479,21 @@ export const ERC20_ABI = [
 ];
 
 // ── Contract factory helpers ──────────────────────────────────────────────────
+export const MVAULT_STAKING_ADDRESS =
+  import.meta.env.VITE_MVAULT_STAKING_ADDRESS || "";
+
+export const STAKING_MODULE_ABI = [
+  "function getActiveStakes(address user) view returns (uint256[] indices, uint256[] mvtAmounts, uint256[] usdtInvestedArr, uint256[] stakedAts, uint256[] lockedSinces)",
+  "function getStakeCount(address user) view returns (uint256)",
+  "function getStake(address user, uint256 index) view returns (uint256 mvtAmount, uint256 usdtInvested, uint256 stakedAt, uint256 lockedSince, bool active)",
+];
+
 export function getMvaultContract(signerOrProvider: ethers.Signer | ethers.Provider) {
   return new ethers.Contract(MVAULT_CONTRACT_ADDRESS, MVAULT_ABI, signerOrProvider);
+}
+
+export function getStakingModuleContract(signerOrProvider: ethers.Signer | ethers.Provider) {
+  return new ethers.Contract(MVAULT_STAKING_ADDRESS, STAKING_MODULE_ABI, signerOrProvider);
 }
 
 export function getMvtTokenContract(signerOrProvider: ethers.Signer | ethers.Provider) {
@@ -565,8 +570,20 @@ export function decodeContractError(err: any): string {
   if (err?.code === "ACTION_REJECTED" || err?.code === 4001) {
     return "Transaction was rejected in your wallet.";
   }
-  // Fallback chain
-  return err?.reason || err?.shortMessage || err?.message || "Transaction failed. Please try again.";
+  // Ethers v6 internal RPC parsing failures — surface a clean message
+  const raw = err?.reason || err?.shortMessage || err?.message || "";
+  if (
+    raw.includes("could not coalesce") ||
+    raw.includes("could not decode") ||
+    raw.includes("missing revert data") ||
+    raw.includes("CALL_EXCEPTION")
+  ) {
+    // Try to surface the nested cause if available
+    const cause = err?.cause?.message || err?.info?.error?.message || "";
+    if (cause && cause.length < 200 && !cause.includes("could not")) return cause;
+    return "Transaction failed — please check your balance and try again.";
+  }
+  return raw || "Transaction failed. Please try again.";
 }
 
 export const PACKAGE_NAMES = ["None", "Starter", "Basic", "Pro", "Elite", "Stockiest", "Super Stockiest"];
