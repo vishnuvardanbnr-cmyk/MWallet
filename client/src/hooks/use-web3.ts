@@ -178,8 +178,11 @@ export function useWeb3() {
     };
 
     const ethereum = (window as any).ethereum;
+    const rpcUrl = typeof window !== "undefined"
+      ? `${window.location.origin}/api/rpc/mchain`
+      : "https://node.mymchain.com/api/rpc";
 
-    // Primary: eth_signTransaction — wallet signs only, we broadcast via direct RPC.
+    // Primary: eth_signTransaction — wallet signs only, we broadcast via plain fetch.
     // This prevents Token Pocket / SafePal from running their own broken MChain
     // simulation inside eth_sendTransaction.
     try {
@@ -187,16 +190,23 @@ export function useWeb3() {
         method: "eth_signTransaction",
         params: [txParams],
       });
-      return await direct.send("eth_sendRawTransaction", [signed]);
+      // Plain fetch avoids ethers JsonRpcProvider.send() which may trigger
+      // eth_getBlockByNumber internally (Bech32 miner crash on MChain).
+      const resp = await fetch(rpcUrl, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          jsonrpc: "2.0", method: "eth_sendRawTransaction",
+          params: [signed], id: 1,
+        }),
+      });
+      const rpcData = await resp.json();
+      if (rpcData.error) throw new Error(rpcData.error.message || "Broadcast failed");
+      return rpcData.result as string; // tx hash
     } catch (signErr: any) {
-      const code = signErr?.code;
-      const msg  = (signErr?.message ?? "").toLowerCase();
-      const notSupported = code === 4200
-        || msg.includes("not supported")
-        || msg.includes("does not support")
-        || msg.includes("unsupported method");
-      if (!notSupported) throw signErr; // user rejected or real error — bubble up
-      // eth_signTransaction not available → fall through to eth_sendTransaction
+      // Only re-throw on explicit user rejection — anything else (not supported,
+      // network error, wallet quirk) falls through to eth_sendTransaction fallback.
+      if (signErr?.code === 4001 || signErr?.code === "ACTION_REJECTED") throw signErr;
     }
 
     // Fallback: raw eth_sendTransaction (wallet handles broadcast itself)
