@@ -1,39 +1,57 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
-  <rect width="128" height="128" rx="28" fill="#1A1A1A"/>
-  <!-- MetaMask fox - simplified official shape -->
-  <!-- Outer fox head -->
-  <polygon points="64,14 98,20 108,52 64,62 20,52 30,20" fill="#E2761B" stroke="#E2761B" stroke-linejoin="round"/>
-  <!-- Left ear -->
-  <polygon points="30,20 20,52 45,44" fill="#E4761B" stroke="#E4761B" stroke-linejoin="round"/>
-  <!-- Right ear -->
-  <polygon points="98,20 108,52 83,44" fill="#E4761B" stroke="#E4761B" stroke-linejoin="round"/>
-  <!-- Face sides -->
-  <polygon points="45,44 64,62 42,68" fill="#D7C1B3" stroke="#D7C1B3" stroke-linejoin="round"/>
-  <polygon points="83,44 86,68 64,62" fill="#D7C1B3" stroke="#D7C1B3" stroke-linejoin="round"/>
-  <!-- Nose bridge -->
-  <polygon points="64,62 45,44 56,36" fill="#233447" stroke="#233447" stroke-linejoin="round"/>
-  <polygon points="64,62 72,36 83,44" fill="#233447" stroke="#233447" stroke-linejoin="round"/>
-  <!-- Top head fill -->
-  <polygon points="56,36 64,14 52,24" fill="#CD6116" stroke="#CD6116" stroke-linejoin="round"/>
-  <polygon points="72,36 76,24 64,14" fill="#CD6116" stroke="#CD6116" stroke-linejoin="round"/>
-  <polygon points="52,24 30,20 45,44 56,36" fill="#E4761B" stroke="#E4761B" stroke-linejoin="round"/>
-  <polygon points="76,24 72,36 83,44 98,20" fill="#E4761B" stroke="#E4761B" stroke-linejoin="round"/>
-  <!-- Chin -->
-  <polygon points="42,68 64,62 45,44" fill="#CD6116" stroke="#CD6116" stroke-linejoin="round"/>
-  <polygon points="86,68 83,44 64,62" fill="#CD6116" stroke="#CD6116" stroke-linejoin="round"/>
-  <!-- Mouth / lower face -->
-  <polygon points="42,68 46,80 64,76 82,80 86,68 64,62" fill="#E4761B" stroke="#E4761B" stroke-linejoin="round"/>
-  <!-- Neck/body -->
-  <polygon points="46,80 38,96 58,90 64,76" fill="#F6851B" stroke="#F6851B" stroke-linejoin="round"/>
-  <polygon points="82,80 64,76 70,90 90,96" fill="#F6851B" stroke="#F6851B" stroke-linejoin="round"/>
-  <!-- Center body -->
-  <polygon points="58,90 64,76 70,90" fill="#F6851B" stroke="#F6851B" stroke-linejoin="round"/>
-  <polygon points="38,96 58,90 50,104" fill="#C0AD9E" stroke="#C0AD9E" stroke-linejoin="round"/>
-  <polygon points="70,90 90,96 78,104" fill="#C0AD9E" stroke="#C0AD9E" stroke-linejoin="round"/>
-  <polygon points="50,104 58,90 70,90 78,104 64,110" fill="#161616" stroke="#161616" stroke-linejoin="round"/>
-  <!-- Eyes -->
-  <ellipse cx="46" cy="50" rx="4" ry="4" fill="white"/>
-  <ellipse cx="82" cy="50" rx="4" ry="4" fill="white"/>
-  <ellipse cx="47" cy="51" rx="2.5" ry="2.5" fill="#161616"/>
-  <ellipse cx="83" cy="51" rx="2.5" ry="2.5" fill="#161616"/>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200">
+  <rect width="200" height="200" rx="40" fill="#1C1816"/>
+
+  <!-- ── Fox head outline / main shape ── -->
+  <!-- Head: wide trapeziod -->
+  <polygon points="100,28 162,55 155,120 100,145 45,120 38,55" fill="#F6851B"/>
+
+  <!-- Ear left -->
+  <polygon points="38,55 55,22 72,60" fill="#F6851B"/>
+  <!-- Ear right -->
+  <polygon points="162,55 145,22 128,60" fill="#F6851B"/>
+
+  <!-- Ear inner left (darker) -->
+  <polygon points="55,22 48,50 66,56" fill="#CD6116"/>
+  <!-- Ear inner right -->
+  <polygon points="145,22 134,56 152,50" fill="#CD6116"/>
+
+  <!-- Forehead center darker band -->
+  <polygon points="100,28 80,55 120,55" fill="#E4761B"/>
+
+  <!-- Cheek pouches (light tan) -->
+  <polygon points="45,120 60,95 78,108 72,130" fill="#D7C1B3"/>
+  <polygon points="155,120 128,130 122,108 140,95" fill="#D7C1B3"/>
+
+  <!-- Face center (muzzle area) -->
+  <polygon points="78,108 100,125 122,108 110,90 90,90" fill="#E8C9B0"/>
+
+  <!-- Upper face (forehead, darker) -->
+  <polygon points="80,55 90,90 110,90 120,55" fill="#CD6116"/>
+
+  <!-- Left eye area -->
+  <ellipse cx="72" cy="80" rx="14" ry="13" fill="#CD6116"/>
+  <ellipse cx="72" cy="80" rx="10" ry="9" fill="#1C1816"/>
+  <ellipse cx="70" cy="78" rx="4"  ry="4"  fill="white" opacity="0.9"/>
+
+  <!-- Right eye area -->
+  <ellipse cx="128" cy="80" rx="14" ry="13" fill="#CD6116"/>
+  <ellipse cx="128" cy="80" rx="10" ry="9" fill="#1C1816"/>
+  <ellipse cx="126" cy="78" rx="4"  ry="4"  fill="white" opacity="0.9"/>
+
+  <!-- Nose -->
+  <ellipse cx="100" cy="110" rx="8" ry="6" fill="#763D16"/>
+  <!-- Nose highlight -->
+  <ellipse cx="97"  cy="108" rx="2.5" ry="2" fill="white" opacity="0.4"/>
+
+  <!-- Mouth lines -->
+  <path d="M94,116 Q100,122 106,116" stroke="#763D16" stroke-width="2" fill="none" stroke-linecap="round"/>
+
+  <!-- Chin / lower jaw -->
+  <polygon points="72,130 100,145 128,130 100,125" fill="#E4761B"/>
+
+  <!-- Neck / body start -->
+  <polygon points="72,130 60,165 100,155 140,165 128,130 100,145" fill="#F6851B"/>
+
+  <!-- Body chest markings -->
+  <polygon points="84,152 100,160 116,152 100,145" fill="#E2761B"/>
 </svg>
