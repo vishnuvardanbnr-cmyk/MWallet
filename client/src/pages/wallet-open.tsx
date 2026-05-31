@@ -57,7 +57,7 @@ const WALLETS: WalletDef[] = [
     cardCls: "border-emerald-500/40 bg-emerald-500/10",
     detect: (e) => !!e?.isTokenPocket,
     getLink: (t) =>
-      `tpdapp://url?params=${encodeURIComponent(JSON.stringify({ url: t, chain: "1888", source: "mvault" }))}`,
+      `tpdapp://url?params=${encodeURIComponent(JSON.stringify({ url: t, source: "mvault" }))}`,
     iosStore:     "https://apps.apple.com/app/tokenpocket-crypto-btc-wallet/id1436028697",
     androidStore: "https://play.google.com/store/apps/details?id=vip.mytokenpocket",
   },
@@ -150,12 +150,12 @@ export default function WalletOpenPage() {
     };
     document.addEventListener("visibilitychange", onVisibility);
 
-    // After 2.5s still visible → app not installed
+    // After 4s still visible → app not installed
     visTimer.current = setTimeout(() => {
       document.removeEventListener("visibilitychange", onVisibility);
       setTryingId(null);
       setNotInstalled(w.id);
-    }, 2500);
+    }, 4000);
   };
 
   const openInBrowser = () => { window.location.href = targetUrl; };
