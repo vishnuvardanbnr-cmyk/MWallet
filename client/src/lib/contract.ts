@@ -311,6 +311,7 @@ export const MVAULT_ABI = [
   "function drainRankPool() external",
   "function setUserRanks(address[] addrs, uint8[] ranks_) external",
   "function adminActivate(address user, uint8 pkg) external",
+  "function setManager(address _manager) external",
   // Events
   "event AdminActivated(address indexed user, uint8 pkg)",
   "event Registered(address indexed user, address indexed sponsor, address indexed binaryParent, bool placeLeft)",
