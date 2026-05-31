@@ -44,11 +44,9 @@ export async function runRankCheck(): Promise<void> {
   try {
     const { ethers } = await import("ethers");
 
-    // Hardcoded MChain contract addresses — NOT read from env vars.
-    // PM2 may cache a stale VITE_MVAULT_VIEW_ADDRESS pointing at the old VIEW
-    // contract, so we bypass env entirely for these two immutable addresses.
-    const MAIN = "0x60c5bd746f6245ecE5daC006082a7bd13f521aF8";
-    const VIEW = "0x1324CE45d2c043760bEe056c534c94386B1BEFEE";
+    // Read from env vars (set on VPS .env), fall back to latest deployed addresses.
+    const MAIN = process.env.VITE_MVAULT_CONTRACT_ADDRESS || "0x3ac2d262ae50b264eb55872f81941f65cec356e4";
+    const VIEW = process.env.VITE_MVAULT_VIEW_ADDRESS     || "0x3134dd2da7ccbedb395450daaacd6f8e0d38a6d1";
     const DEPLOYER_PK = process.env.DEPLOYER_PRIVATE_KEY;
 
     if (!DEPLOYER_PK) {
