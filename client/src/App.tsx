@@ -403,7 +403,7 @@ function App() {
                     <Route path="/support">
                       <SupportPage
                         account={web3.account!}
-                        isAdmin={web3.account?.toLowerCase() === "0x04e8c5b49de683c5b44ef1269bd5ee4f338868c4"}
+                        isAdmin={web3.account?.toLowerCase() === "0x12fcf3d1084455d3677a110925d73b01f3846750"}
                         getAdminPoolBalances={web3.getAdminPoolBalances}
                       />
                     </Route>
