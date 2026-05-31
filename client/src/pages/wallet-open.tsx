@@ -219,9 +219,54 @@ export default function WalletOpenPage() {
             </div>
           )}
 
-          {/* Wallet grid */}
+          {/* MWallet — full width, preferred */}
+          {(() => {
+            const w = WALLETS.find(x => x.id === "mwallet")!;
+            const isTrying = tryingId === w.id;
+            const isFailed = notInstalled === w.id;
+            return (
+              <div className="space-y-1">
+                <button
+                  onClick={() => handleWallet(w)}
+                  disabled={tryingId !== null}
+                  className="relative w-full flex items-center gap-3 px-4 py-3 rounded-xl border border-cyan-400/40 bg-gradient-to-r from-[#0d1b2e] to-[#0a2233] hover:from-[#0f2035] hover:to-[#0c2840] transition-all disabled:opacity-60"
+                  data-testid="button-open-mwallet"
+                >
+                  <img src="/mwallet-logo.png" alt="MWallet" className="w-9 h-9 rounded-xl object-cover shrink-0" />
+                  <div className="flex-1 min-w-0 text-left">
+                    <div className="flex items-center gap-2">
+                      <p className="text-sm font-bold text-white">MWallet</p>
+                      <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-500/20 border border-amber-400/40 text-amber-300 uppercase tracking-wide">
+                        Preferred
+                      </span>
+                      {isTrying && <span className="text-[9px] text-amber-400 animate-pulse">Opening…</span>}
+                    </div>
+                    <p className="text-[10px] text-cyan-400/70 mt-0.5">MChain native wallet</p>
+                  </div>
+                  <div className="shrink-0 text-cyan-400/50 text-xs">→</div>
+                </button>
+                {isFailed && (
+                  <div className="flex items-center justify-between px-2">
+                    <div className="flex items-center gap-1">
+                      <AlertCircle className="h-3 w-3 text-red-400" />
+                      <p className="text-[10px] text-red-400">Not installed</p>
+                    </div>
+                    {getStoreLink(w) && (
+                      <a href={getStoreLink(w)} target="_blank" rel="noreferrer"
+                        className="flex items-center gap-1 text-[10px] text-amber-400 hover:text-amber-300">
+                        <Download className="h-2.5 w-2.5" />
+                        Install
+                      </a>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Other wallets — 2-col grid */}
           <div className="grid grid-cols-2 gap-2">
-            {sorted.map((w) => {
+            {WALLETS.filter(w => w.id !== "mwallet").map((w) => {
               const isConfirmed = confirmedIds.has(w.id);
               const isTrying    = tryingId === w.id;
               const isFailed    = notInstalled === w.id;
@@ -240,15 +285,10 @@ export default function WalletOpenPage() {
                     <span className="text-xl leading-none">{w.emoji}</span>
                     <div className="flex-1 min-w-0">
                       <p className="text-xs font-semibold text-foreground truncate">{w.name}</p>
-                      {isConfirmed && (
-                        <p className="text-[9px] text-emerald-400">Detected ✓</p>
-                      )}
-                      {isTrying && (
-                        <p className="text-[9px] text-amber-400 animate-pulse">Opening…</p>
-                      )}
+                      {isConfirmed && <p className="text-[9px] text-emerald-400">Detected ✓</p>}
+                      {isTrying   && <p className="text-[9px] text-amber-400 animate-pulse">Opening…</p>}
                     </div>
                   </button>
-                  {/* Not installed fallback */}
                   {isFailed && (
                     <div className="flex items-center justify-between px-2">
                       <div className="flex items-center gap-1">
@@ -256,12 +296,8 @@ export default function WalletOpenPage() {
                         <p className="text-[10px] text-red-400">Not installed</p>
                       </div>
                       {getStoreLink(w) && (
-                        <a
-                          href={getStoreLink(w)}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="flex items-center gap-1 text-[10px] text-amber-400 hover:text-amber-300"
-                        >
+                        <a href={getStoreLink(w)} target="_blank" rel="noreferrer"
+                          className="flex items-center gap-1 text-[10px] text-amber-400 hover:text-amber-300">
                           <Download className="h-2.5 w-2.5" />
                           Install
                         </a>
