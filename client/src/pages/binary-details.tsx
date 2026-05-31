@@ -169,8 +169,7 @@ export default function BinaryDetails({ userInfo }: BinaryDetailsProps) {
         <div className="space-y-3">
           {[
             { icon: Users,        title: "20% of Each Activation",      desc: "When anyone activates anywhere below you in the binary tree, 20% of their gross MVT is split across their 30 binary uplines — you included.",                        color: "text-amber-400 bg-amber-500/10" },
-            { icon: GitBranch,    title: "30 Levels Deep",               desc: "Level 1 earns 5%, levels 2–3 earn 2%, level 4 earns 1%, levels 5–12 earn 0.5%, and rates taper down to 0.2% at levels 29–30.",                                      color: "text-cyan-400 bg-cyan-500/10" },
-            { icon: CheckCircle2, title: "Direct Referral Qualification", desc: "You need ⌈level÷3⌉ direct referrals to earn from that level. No directs = only level 0 qualifies. Each 3 new directs unlock 3 more levels.",                      color: "text-emerald-400 bg-emerald-500/10" },
+            { icon: GitBranch,    title: "30 Levels Deep",               desc: "Earn from 30 levels below you. Top levels pay more (L1 = 5%), deeper levels pay less — all the way down to level 30.",                                    color: "text-cyan-400 bg-cyan-500/10" },
             { icon: TrendingUp,   title: "Instant & On-Chain",           desc: "Income is credited directly to your MVT balance inside the same activation transaction. No claim button, no off-chain step — it just arrives.",                       color: "text-violet-400 bg-violet-500/10" },
           ].map(({ icon: Icon, title, desc, color }) => (
             <div key={title} className="flex items-start gap-3">
