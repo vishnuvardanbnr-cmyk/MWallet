@@ -95,11 +95,11 @@ export default function PaidStakingPage({
   const loadWalletData = useCallback(async () => {
     if (!account) return;
     try {
-      const ethereum = (window as any).ethereum;
-      if (!ethereum) { setPageError(null); return; }
-      const provider = new ethers.BrowserProvider(ethereum);
-      const usdt = getTokenContract(provider);
-      const mvault = getMvaultContract(provider);
+      if (!(window as any).ethereum) { setPageError(null); return; }
+      // Use direct provider — wallet's eth_call returns 0x on MChain
+      const direct = getDirectProvider();
+      const usdt = getTokenContract(direct);
+      const mvault = getMvaultContract(direct);
       const [allow, bal, info] = await Promise.all([
         usdt.allowance(account, MVAULT_CONTRACT_ADDRESS),
         usdt.balanceOf(account),

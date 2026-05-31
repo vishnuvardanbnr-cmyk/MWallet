@@ -5,7 +5,7 @@ import {
   RefreshCw, ArrowRight, Shield, Coins, Star, Wallet,
 } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { shortenAddress, getTokenContract, MVAULT_CONTRACT_ADDRESS, formatTokenAmount } from "@/lib/contract";
+import { shortenAddress, getTokenContract, getDirectProvider, MVAULT_CONTRACT_ADDRESS, formatTokenAmount } from "@/lib/contract";
 import { ethers } from "ethers";
 import type { UserInfo } from "@/hooks/use-web3";
 
@@ -64,8 +64,8 @@ export default function ReactivatePage({
 
   const fetchWalletBalance = async () => {
     try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const token = getTokenContract(provider);
+      // Use direct provider — wallet's eth_call returns 0x on MChain
+      const token = getTokenContract(getDirectProvider());
       const bal = await token.balanceOf(account);
       setWalletUsdtBal(bal);
     } catch {}

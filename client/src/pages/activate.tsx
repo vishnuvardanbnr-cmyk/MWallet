@@ -4,7 +4,7 @@ import {
   Loader2, LogOut, Zap, CheckCircle2, AlertCircle,
   RefreshCw, ArrowRight, Shield, TrendingUp, Users, Wallet, Coins, Star,
 } from "lucide-react";
-import { shortenAddress, getTokenContract, MVAULT_CONTRACT_ADDRESS, formatTokenAmount } from "@/lib/contract";
+import { shortenAddress, getTokenContract, getDirectProvider, MVAULT_CONTRACT_ADDRESS, formatTokenAmount } from "@/lib/contract";
 import { Logo } from "@/components/logo";
 import { ethers } from "ethers";
 
@@ -81,8 +81,8 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
   const fetchBalances = async () => {
     if (!pkg) return;
     try {
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
-      const token = getTokenContract(provider);
+      // Use direct provider — wallet's eth_call returns 0x on MChain
+      const token = getTokenContract(getDirectProvider());
       const [bal, allow] = await Promise.all([
         token.balanceOf(account),
         token.allowance(account, MVAULT_CONTRACT_ADDRESS),
