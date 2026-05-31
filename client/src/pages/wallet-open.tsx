@@ -29,6 +29,7 @@ const WALLETS: WalletDef[] = [
     id: "metamask",
     name: "MetaMask",
     emoji: "🦊",
+    logo: "/metamask-logo.svg",
     cardCls: "border-orange-500/40 bg-orange-500/10",
     detect: (e) => !!e?.isMetaMask && !e?.isBraveWallet && !e?.isTokenPocket,
     getLink: (_t, host, ref, side) =>

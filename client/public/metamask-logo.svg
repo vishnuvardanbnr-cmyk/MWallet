@@ -1,0 +1,39 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" fill="none">
+  <rect width="128" height="128" rx="28" fill="#1A1A1A"/>
+  <!-- MetaMask fox - simplified official shape -->
+  <!-- Outer fox head -->
+  <polygon points="64,14 98,20 108,52 64,62 20,52 30,20" fill="#E2761B" stroke="#E2761B" stroke-linejoin="round"/>
+  <!-- Left ear -->
+  <polygon points="30,20 20,52 45,44" fill="#E4761B" stroke="#E4761B" stroke-linejoin="round"/>
+  <!-- Right ear -->
+  <polygon points="98,20 108,52 83,44" fill="#E4761B" stroke="#E4761B" stroke-linejoin="round"/>
+  <!-- Face sides -->
+  <polygon points="45,44 64,62 42,68" fill="#D7C1B3" stroke="#D7C1B3" stroke-linejoin="round"/>
+  <polygon points="83,44 86,68 64,62" fill="#D7C1B3" stroke="#D7C1B3" stroke-linejoin="round"/>
+  <!-- Nose bridge -->
+  <polygon points="64,62 45,44 56,36" fill="#233447" stroke="#233447" stroke-linejoin="round"/>
+  <polygon points="64,62 72,36 83,44" fill="#233447" stroke="#233447" stroke-linejoin="round"/>
+  <!-- Top head fill -->
+  <polygon points="56,36 64,14 52,24" fill="#CD6116" stroke="#CD6116" stroke-linejoin="round"/>
+  <polygon points="72,36 76,24 64,14" fill="#CD6116" stroke="#CD6116" stroke-linejoin="round"/>
+  <polygon points="52,24 30,20 45,44 56,36" fill="#E4761B" stroke="#E4761B" stroke-linejoin="round"/>
+  <polygon points="76,24 72,36 83,44 98,20" fill="#E4761B" stroke="#E4761B" stroke-linejoin="round"/>
+  <!-- Chin -->
+  <polygon points="42,68 64,62 45,44" fill="#CD6116" stroke="#CD6116" stroke-linejoin="round"/>
+  <polygon points="86,68 83,44 64,62" fill="#CD6116" stroke="#CD6116" stroke-linejoin="round"/>
+  <!-- Mouth / lower face -->
+  <polygon points="42,68 46,80 64,76 82,80 86,68 64,62" fill="#E4761B" stroke="#E4761B" stroke-linejoin="round"/>
+  <!-- Neck/body -->
+  <polygon points="46,80 38,96 58,90 64,76" fill="#F6851B" stroke="#F6851B" stroke-linejoin="round"/>
+  <polygon points="82,80 64,76 70,90 90,96" fill="#F6851B" stroke="#F6851B" stroke-linejoin="round"/>
+  <!-- Center body -->
+  <polygon points="58,90 64,76 70,90" fill="#F6851B" stroke="#F6851B" stroke-linejoin="round"/>
+  <polygon points="38,96 58,90 50,104" fill="#C0AD9E" stroke="#C0AD9E" stroke-linejoin="round"/>
+  <polygon points="70,90 90,96 78,104" fill="#C0AD9E" stroke="#C0AD9E" stroke-linejoin="round"/>
+  <polygon points="50,104 58,90 70,90 78,104 64,110" fill="#161616" stroke="#161616" stroke-linejoin="round"/>
+  <!-- Eyes -->
+  <ellipse cx="46" cy="50" rx="4" ry="4" fill="white"/>
+  <ellipse cx="82" cy="50" rx="4" ry="4" fill="white"/>
+  <ellipse cx="47" cy="51" rx="2.5" ry="2.5" fill="#161616"/>
+  <ellipse cx="83" cy="51" rx="2.5" ry="2.5" fill="#161616"/>
+</svg>
