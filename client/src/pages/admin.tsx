@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { ethers } from "ethers";
-import { ShieldCheck, UserCheck, Loader2, CheckCircle, AlertCircle, Settings, Smartphone, Save, Upload, Link, Bitcoin, Package, Plus, Pencil, Trash2, X, ToggleLeft, ToggleRight } from "lucide-react";
+import { ShieldCheck, UserCheck, Loader2, CheckCircle, AlertCircle, Settings, Smartphone, Save, Upload, Link, Bitcoin, Package, Plus, Pencil, Trash2, X, ToggleLeft, ToggleRight, TrendingDown, RefreshCw } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -46,6 +46,15 @@ export default function AdminPage({ account }: AdminPageProps) {
   const [uploadedSize, setUploadedSize]       = useState<string | null>(null);
   const apkFileRef                            = useRef<HTMLInputElement>(null);
 
+  // Claim admin pools state
+  type PoolKey = "admin" | "community" | "reserve";
+  const [poolBalances, setPoolBalances]         = useState<Record<PoolKey, bigint>>({ admin: 0n, community: 0n, reserve: 0n });
+  const [poolsLoading, setPoolsLoading]         = useState(false);
+  const [selectedPool, setSelectedPool]         = useState<PoolKey>("admin");
+  const [claimAmount, setClaimAmount]           = useState("");
+  const [claiming, setClaiming]                 = useState(false);
+  const [claimResult, setClaimResult]           = useState<{ success: boolean; msg: string } | null>(null);
+
   // Product management state
   const [products, setProducts]               = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
@@ -71,6 +80,54 @@ export default function AdminPage({ account }: AdminPageProps) {
   };
 
   useEffect(() => { loadProducts(); }, []);
+
+  const loadPoolBalances = useCallback(async () => {
+    setPoolsLoading(true);
+    try {
+      const contract = getContract();
+      const [a, c, r] = await Promise.all([
+        contract.adminPool(),
+        contract.communityPool(),
+        contract.reservePool(),
+      ]);
+      setPoolBalances({ admin: a, community: c, reserve: r });
+    } catch { /* ignore */ } finally { setPoolsLoading(false); }
+  }, []);
+
+  useEffect(() => { loadPoolBalances(); }, [loadPoolBalances]);
+
+  const handleClaimPool = async () => {
+    const parsed = parseFloat(claimAmount);
+    if (!parsed || parsed <= 0) {
+      toast({ title: "Invalid amount", description: "Enter a positive MVT amount.", variant: "destructive" });
+      return;
+    }
+    const amountWei = ethers.parseUnits(claimAmount.trim(), 18);
+    setClaiming(true);
+    setClaimResult(null);
+    try {
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const signer = await provider.getSigner();
+      const contract = getMvaultContract(signer);
+      toast({ title: "Claiming Pool", description: "Confirm the transaction in MetaMask…" });
+      let tx;
+      if (selectedPool === "admin")     tx = await contract.withdrawAdminPool(account, amountWei, { gasLimit: 200_000n });
+      else if (selectedPool === "community") tx = await contract.withdrawCommunityPool(account, amountWei, { gasLimit: 200_000n });
+      else                              tx = await contract.withdrawReservePool(account, amountWei, { gasLimit: 200_000n });
+      await tx.wait();
+      const label = selectedPool === "admin" ? "Admin" : selectedPool === "community" ? "Community" : "Reserve";
+      setClaimResult({ success: true, msg: `${parsed.toLocaleString()} MVT from ${label} Pool credited to your account. Go to Wallet → Sell MVT → Withdraw USDT.` });
+      toast({ title: "Pool Claimed", description: `${parsed.toLocaleString()} MVT added to your balance.` });
+      setClaimAmount("");
+      loadPoolBalances();
+    } catch (e: any) {
+      const msg = decodeContractError(e);
+      setClaimResult({ success: false, msg });
+      toast({ title: "Claim Failed", description: msg, variant: "destructive" });
+    } finally {
+      setClaiming(false);
+    }
+  };
 
   const openAddForm = () => {
     setEditingProduct(null);
@@ -666,6 +723,108 @@ export default function AdminPage({ account }: AdminPageProps) {
           )}
 
           {mwalletResult && <ResultBanner result={mwalletResult} />}
+        </CardContent>
+      </Card>
+
+      {/* Claim Admin Pools */}
+      <Card className="border-white/[0.08] bg-white/[0.02]">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <TrendingDown className="w-4 h-4 text-cyan-400" />
+              Claim Admin Pools
+            </CardTitle>
+            <button
+              data-testid="button-refresh-pools"
+              onClick={loadPoolBalances}
+              disabled={poolsLoading}
+              className="text-muted-foreground hover:text-white transition-colors"
+              title="Refresh balances"
+            >
+              <RefreshCw className={`w-4 h-4 ${poolsLoading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Credit MVT from any pool to your own wallet balance, then go to the Wallet page to Sell MVT → Withdraw USDT.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Pool balance display */}
+          <div className="grid grid-cols-3 gap-2">
+            {(["admin", "community", "reserve"] as const).map((key) => {
+              const labels = { admin: "Admin", community: "Community", reserve: "Reserve" };
+              const val = poolBalances[key];
+              const mvt = parseFloat(ethers.formatUnits(val, 18)).toLocaleString(undefined, { maximumFractionDigits: 2 });
+              return (
+                <button
+                  key={key}
+                  data-testid={`button-pool-${key}`}
+                  onClick={() => { setSelectedPool(key); setClaimAmount(""); setClaimResult(null); }}
+                  className={`rounded-lg border p-2.5 text-left transition-all ${
+                    selectedPool === key
+                      ? "border-cyan-500/60 bg-cyan-500/10"
+                      : "border-white/[0.08] bg-white/[0.02] hover:border-white/20"
+                  }`}
+                >
+                  <div className={`text-[10px] font-semibold uppercase tracking-wider mb-1 ${selectedPool === key ? "text-cyan-400" : "text-muted-foreground"}`}>
+                    {labels[key]}
+                  </div>
+                  <div className={`text-sm font-mono font-bold ${selectedPool === key ? "text-cyan-300" : "text-white"}`}>
+                    {poolsLoading ? <Loader2 className="w-3 h-3 animate-spin inline" /> : mvt}
+                  </div>
+                  <div className="text-[10px] text-muted-foreground mt-0.5">MVT</div>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Amount input */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider">Amount (MVT)</Label>
+              <button
+                data-testid="button-pool-max"
+                onClick={() => {
+                  const max = ethers.formatUnits(poolBalances[selectedPool], 18);
+                  setClaimAmount(max);
+                }}
+                className="text-[10px] text-cyan-400 hover:text-cyan-300 font-semibold uppercase tracking-wider"
+              >
+                MAX
+              </button>
+            </div>
+            <Input
+              data-testid="input-claim-amount"
+              type="number"
+              min="0"
+              step="any"
+              placeholder="e.g. 10000"
+              value={claimAmount}
+              onChange={e => setClaimAmount(e.target.value)}
+              className="text-sm bg-white/[0.03] border-white/[0.08]"
+            />
+          </div>
+
+          <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 text-xs text-cyan-300/80 space-y-0.5">
+            <div>① Click Claim → MVT credited to your <span className="text-white font-semibold">mvtBalance</span></div>
+            <div>② Wallet page → <span className="text-white font-semibold">Sell MVT</span> → converts to usdtBalance (90% rate)</div>
+            <div>③ Wallet page → <span className="text-white font-semibold">Withdraw USDT</span> → real USDT to your wallet</div>
+          </div>
+
+          {claimResult && <ResultBanner result={claimResult} />}
+
+          <Button
+            data-testid="button-claim-pool"
+            onClick={handleClaimPool}
+            disabled={claiming || !claimAmount.trim() || poolBalances[selectedPool] === 0n}
+            className="w-full bg-cyan-700 hover:bg-cyan-600 text-white font-semibold"
+          >
+            {claiming ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Claiming…</>
+            ) : (
+              <><TrendingDown className="w-4 h-4" /> Claim {selectedPool === "admin" ? "Admin" : selectedPool === "community" ? "Community" : "Reserve"} Pool</>
+            )}
+          </Button>
         </CardContent>
       </Card>
 
