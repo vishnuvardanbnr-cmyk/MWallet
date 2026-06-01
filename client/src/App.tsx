@@ -133,6 +133,13 @@ function App() {
     }
   }, [web3.account, web3.isRegistered, web3.profileOnChain]);
 
+  // Auto-redirect admin wallet to /admin on connect
+  useEffect(() => {
+    if (web3.account && web3.account.toLowerCase() === ADMIN_WALLET && location !== "/admin") {
+      navigate("/admin");
+    }
+  }, [web3.account]);
+
   const disconnect = () => window.location.reload();
 
   const getFlowStep = () => {
