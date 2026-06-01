@@ -474,6 +474,7 @@ export const PANCAKE_ROUTER_ABI = [
 ];
 
 export const ERC20_ABI = [
+  "function transfer(address to, uint256 amount) external returns (bool)",
   "function approve(address spender, uint256 amount) external returns (bool)",
   "function allowance(address owner, address spender) view returns (uint256)",
   "function balanceOf(address account) view returns (uint256)",
