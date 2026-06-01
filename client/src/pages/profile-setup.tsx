@@ -180,13 +180,6 @@ export default function ProfileSetupPage({ account, saveProfileOnChain, onComple
             </div>
             <span className="text-xs font-semibold text-amber-400">Profile</span>
           </div>
-          <div className="flex-1 h-px bg-white/[0.06]" />
-          <div className="flex items-center gap-2">
-            <div className="h-6 w-6 rounded-full bg-white/[0.04] border border-white/[0.08] flex items-center justify-center">
-              <span className="text-[10px] font-bold text-muted-foreground">3</span>
-            </div>
-            <span className="text-xs text-muted-foreground">Activate</span>
-          </div>
         </div>
 
         {/* Main Card */}
