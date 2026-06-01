@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { getMvaultContract, getContract, MVAULT_CONTRACT_ADDRESS, decodeContractError, ADMIN_WALLET } from "@/lib/contract";
+import { getMvaultContract, getContract, getTokenContract, MVAULT_CONTRACT_ADDRESS, decodeContractError, ADMIN_WALLET } from "@/lib/contract";
 
 interface AdminPageProps {
   account: string;
@@ -227,7 +227,7 @@ export default function AdminPage({ account }: AdminPageProps) {
 
       // Step 1: Approve USDT from admin wallet to the MVault contract
       toast({ title: "Step 1/2: Approve USDT", description: "Approve USDT spend in MetaMask…" });
-      const usdtContract = getContract(signer);
+      const usdtContract = getTokenContract(signer);
       const approveTx = await usdtContract.approve(MVAULT_CONTRACT_ADDRESS, amountWei, { gasLimit: 100_000n });
       await approveTx.wait();
 
