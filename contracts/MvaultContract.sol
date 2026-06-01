@@ -128,6 +128,11 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // Community wallet — receives 10% of grossMvt on every activation
     address public communityWallet;
 
+    // ── Admin split wallets ───────────────────────────────────────────────────
+    address[3] public adminWallets;   // 3 wallets to split adminPool into
+    uint8[3]   public adminSplits;    // percentages; must sum to 100
+    uint256    public adminUsdtPool;  // USDT from flex-stake cap excess (source #7)
+
     // Placement income config (binary tree, 30 levels)
     uint256[30] public placementRates; // basis points out of 10000; sum = 2000 (20%)
     uint256 public refsPerGroup;       // direct referrals required per 3-level group
@@ -296,6 +301,16 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         communityWallet = _wallet;
     }
 
+    /**
+     * @notice Set the 3 admin wallets and their percentage splits (must sum to 100).
+     *         Call distributeAdminPool() / distributeAdminUsdtPool() to flush pools.
+     */
+    function setAdminWallets(address[3] calldata w, uint8[3] calldata s) external onlyOwner {
+        require(uint256(s[0]) + s[1] + s[2] == 100, "splits != 100");
+        adminWallets = w;
+        adminSplits  = s;
+    }
+
     function setPlacementRates(uint256[30] calldata _rates) external onlyOwner {
         for (uint8 i = 0; i < 30; i++) placementRates[i] = _rates[i];
     }
@@ -419,7 +434,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         external onlyStakingModule
     {
         users[user].usdtBalance += usdtToUser;
-        adminPool               += adminCapCut;
+        adminUsdtPool           += adminCapCut;   // USDT kept separate from MVT adminPool
         _recordTx(user, TX_UNSTAKE, usdtToUser, 0, address(0));
     }
 
@@ -1145,6 +1160,45 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         users[to].mvtBalance    += amount;
         users[to].totalReceived += amount;
         emit AdminWithdraw(to, amount);
+    }
+
+    /**
+     * @notice Split `amount` from adminPool to the 3 configured adminWallets.
+     *         Requires setAdminWallets() to be called first.
+     *         Wallet[2] receives the remainder to absorb integer rounding dust.
+     */
+    function distributeAdminPool(uint256 amount) external onlyOwner {
+        if (adminPool < amount) revert ExceedsPool();
+        require(adminWallets[0] != address(0), "wallets not set");
+        adminPool -= amount;
+        uint256 a = amount * adminSplits[0] / 100;
+        uint256 b = amount * adminSplits[1] / 100;
+        uint256 c = amount - a - b;
+        users[adminWallets[0]].mvtBalance += a;
+        users[adminWallets[0]].totalReceived += a;
+        users[adminWallets[1]].mvtBalance += b;
+        users[adminWallets[1]].totalReceived += b;
+        users[adminWallets[2]].mvtBalance += c;
+        users[adminWallets[2]].totalReceived += c;
+        emit AdminWithdraw(adminWallets[0], a);
+        emit AdminWithdraw(adminWallets[1], b);
+        emit AdminWithdraw(adminWallets[2], c);
+    }
+
+    /**
+     * @notice Split `amount` from adminUsdtPool (USDT) to the 3 configured adminWallets.
+     *         Credits their usdtBalance so they can call withdrawUsdt() to receive it.
+     */
+    function distributeAdminUsdtPool(uint256 amount) external onlyOwner {
+        if (adminUsdtPool < amount) revert ExceedsPool();
+        require(adminWallets[0] != address(0), "wallets not set");
+        adminUsdtPool -= amount;
+        uint256 a = amount * adminSplits[0] / 100;
+        uint256 b = amount * adminSplits[1] / 100;
+        uint256 c = amount - a - b;
+        users[adminWallets[0]].usdtBalance += a;
+        users[adminWallets[1]].usdtBalance += b;
+        users[adminWallets[2]].usdtBalance += c;
     }
 
     /**
