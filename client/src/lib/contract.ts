@@ -485,7 +485,7 @@ export const MVAULT_STAKING_ADDRESS =
   import.meta.env.VITE_MVAULT_STAKING_ADDRESS || "";
 
 export const STAKING_MODULE_ABI = [
-  "function getActiveStakes(address user) view returns (uint256[] indices, uint256[] mvtAmounts, uint256[] usdtInvestedArr, uint256[] stakedAts, uint256[] lockedSinces, bool[] isLockedFlags)",
+  "function getActiveStakes(address user) view returns (uint256[] indices, uint256[] mvtAmounts, uint256[] usdtInvestedArr, uint256[] stakedAts, uint256[] lockedSinces)",
   "function getStakeCount(address user) view returns (uint256)",
   "function getStake(address user, uint256 index) view returns (uint256 mvtAmount, uint256 usdtInvested, uint256 stakedAt, uint256 lockedSince, bool active)",
 ];

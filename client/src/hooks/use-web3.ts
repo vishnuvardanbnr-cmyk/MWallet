@@ -859,13 +859,12 @@ export function useWeb3() {
       const result = await contract.getActiveStakes(user);
       const positions = [];
       for (let i = 0; i < result.indices.length; i++) {
-        const isLockedFlag = result.isLockedFlags ? Boolean(result.isLockedFlags[i]) : false;
         positions.push({
           index: Number(result.indices[i]),
           mvtAmount: result.mvtAmounts[i] as bigint,
           usdtInvested: result.usdtInvestedArr[i] as bigint,
           stakedAt: Number(result.stakedAts[i]),
-          lockedSince: isLockedFlag ? (Number(result.lockedSinces[i]) || 1) : 0,
+          lockedSince: Number(result.lockedSinces[i]),
         });
       }
       return positions;

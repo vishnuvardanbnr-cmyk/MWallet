@@ -44,7 +44,6 @@ contract MvaultStaking is Ownable, ReentrancyGuard {
         uint256 stakedAt;
         uint256 lockedSince;
         bool    active;
-        bool    isLockedFlag;   // explicit lock flag — does not rely on block.timestamp
     }
 
     mapping(address => StakePosition[]) private _stakes;
@@ -152,8 +151,7 @@ contract MvaultStaking is Ownable, ReentrancyGuard {
             usdtInvested: amount,
             stakedAt:     block.timestamp,
             lockedSince:  isLocked ? block.timestamp : 0,
-            active:       true,
-            isLockedFlag: isLocked
+            active:       true
         }));
 
         mvaultMain.staking_postStake(user, amount, adminAmt + levelToAdmin);
@@ -170,7 +168,7 @@ contract MvaultStaking is Ownable, ReentrancyGuard {
         StakePosition storage pos = _stakes[user][stakeIndex];
         if (!pos.active) revert AlreadyUnstaked();
 
-        bool isLocked = pos.isLockedFlag;
+        bool isLocked = pos.lockedSince > 0;
         if (isLocked && block.timestamp < pos.lockedSince + LOCK_DURATION) revert StillLocked();
 
         pos.active = false;
@@ -238,10 +236,9 @@ contract MvaultStaking is Ownable, ReentrancyGuard {
         if (stakeIndex >= _stakes[user].length) revert InvalidIndex();
         StakePosition storage pos = _stakes[user][stakeIndex];
         if (!pos.active) revert AlreadyUnstaked();
-        if (pos.isLockedFlag) revert AlreadyLocked();
+        if (pos.lockedSince != 0) revert AlreadyLocked();
 
-        pos.isLockedFlag = true;
-        pos.lockedSince  = block.timestamp;
+        pos.lockedSince = block.timestamp;
         emit ConvertedToLocked(user, stakeIndex, block.timestamp);
     }
 
@@ -269,8 +266,7 @@ contract MvaultStaking is Ownable, ReentrancyGuard {
         uint256[] memory mvtAmounts,
         uint256[] memory usdtInvestedArr,
         uint256[] memory stakedAts,
-        uint256[] memory lockedSinces,
-        bool[]    memory isLockedFlags
+        uint256[] memory lockedSinces
     ) {
         StakePosition[] storage positions = _stakes[user];
         uint256 count = 0;
@@ -282,7 +278,6 @@ contract MvaultStaking is Ownable, ReentrancyGuard {
         usdtInvestedArr = new uint256[](count);
         stakedAts      = new uint256[](count);
         lockedSinces   = new uint256[](count);
-        isLockedFlags  = new bool[](count);
         uint256 j = 0;
         for (uint256 i = 0; i < positions.length; i++) {
             if (!positions[i].active) continue;
@@ -291,7 +286,6 @@ contract MvaultStaking is Ownable, ReentrancyGuard {
             usdtInvestedArr[j] = positions[i].usdtInvested;
             stakedAts[j]       = positions[i].stakedAt;
             lockedSinces[j]    = positions[i].lockedSince;
-            isLockedFlags[j]   = positions[i].isLockedFlag;
             j++;
         }
     }
