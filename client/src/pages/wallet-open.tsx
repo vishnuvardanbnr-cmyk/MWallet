@@ -23,7 +23,13 @@ const WALLETS: WalletDef[] = [
     emoji: "🟡",
     cardCls: "border-amber-400/50 bg-amber-500/15",
     detect: (e) => !!(e?.isMWallet || e?.isMChainWallet),
-    getLink: (t) => `mchain-wallet://dapp?url=${encodeURIComponent(t)}`,
+    getLink: (t, host, ref, side) => {
+      // Use /join/:ref/:side path so the deep link URL contains no & or ? before encoding
+      // This avoids MWallet's URL parser stripping params after the first encoded &
+      const sideParam = new URLSearchParams(new URL(t).search).get("side");
+      const joinPath  = sideParam ? `/join/${ref}/${sideParam}` : `/join/${ref}`;
+      return `mchain-wallet://dapp?url=${encodeURIComponent(`https://${host}${joinPath}`)}`;
+    },
   },
   {
     id: "metamask",

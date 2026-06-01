@@ -166,6 +166,15 @@ export async function registerRoutes(
   app: Express
 ): Promise<Server> {
 
+  // Clean redirect used by MWallet deep link so the URL has no & or ? before encoding
+  // e.g. /join/0xABC/left  →  /?ref=0xABC&side=left
+  //      /join/0xABC        →  /?ref=0xABC  (no side lock)
+  app.get("/join/:ref/:side?", (req, res) => {
+    const { ref, side } = req.params;
+    const dest = side ? `/?ref=${ref}&side=${side}` : `/?ref=${ref}`;
+    res.redirect(302, dest);
+  });
+
   app.get("/api/profiles/:walletAddress", async (req, res) => {
     try {
       const profile = await storage.getProfile(req.params.walletAddress);
