@@ -9,7 +9,7 @@ const path = require("path");
 
 const RPC            = "https://node.mymchain.com/api/rpc";
 const PRIVATE_KEY    = process.env.DEPLOYER_PRIVATE_KEY;
-const MVAULT_ADDR    = "0x3ac2d262ae50b264eb55872f81941f65cec356e4";
+const MVAULT_ADDR    = "0x76a140a0d8d7685b34e98f4663341362224fcbd3";
 const GAS_PRICE      = 1_000_000_000n;
 const CHAIN_ID       = 1888n;
 

@@ -1,6 +1,6 @@
 import { useState, useRef } from "react";
 import { ethers } from "ethers";
-import { ShieldCheck, UserCheck, Loader2, CheckCircle, AlertCircle, Settings, Smartphone, Save, Upload, Link } from "lucide-react";
+import { ShieldCheck, UserCheck, Loader2, CheckCircle, AlertCircle, Settings, Smartphone, Save, Upload, Link, Bitcoin } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -25,6 +25,12 @@ export default function AdminPage({ account }: AdminPageProps) {
   const [managerAddress, setManagerAddress] = useState("");
   const [settingManager, setSettingManager] = useState(false);
   const [managerResult, setManagerResult] = useState<{ success: boolean; msg: string } | null>(null);
+
+  // Credit BTC Pool state
+  const [btcCreditAddr, setBtcCreditAddr]     = useState("");
+  const [btcCreditAmount, setBtcCreditAmount] = useState("");
+  const [creditingBtc, setCreditingBtc]       = useState(false);
+  const [btcCreditResult, setBtcCreditResult] = useState<{ success: boolean; msg: string } | null>(null);
 
   // MWallet download URL
   const [mwalletUrl, setMwalletUrl]           = useState("");
@@ -132,6 +138,39 @@ export default function AdminPage({ account }: AdminPageProps) {
       toast({ title: "Save failed", description: e.message, variant: "destructive" });
     } finally {
       setSavingMwallet(false);
+    }
+  };
+
+  const handleCreditBtcPool = async () => {
+    const addr = btcCreditAddr.trim();
+    if (!ethers.isAddress(addr)) {
+      toast({ title: "Invalid address", description: "Enter a valid wallet address.", variant: "destructive" });
+      return;
+    }
+    const parsed = parseFloat(btcCreditAmount);
+    if (!parsed || parsed <= 0) {
+      toast({ title: "Invalid amount", description: "Enter a positive USDT amount.", variant: "destructive" });
+      return;
+    }
+    const amountWei = ethers.parseUnits(btcCreditAmount.trim(), 18);
+    setCreditingBtc(true);
+    setBtcCreditResult(null);
+    try {
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const signer = await provider.getSigner();
+      const contract = getMvaultContract(signer);
+      const tx = await contract.adminCreditBtcPool(addr, amountWei, { gasLimit: 100_000n });
+      await tx.wait();
+      setBtcCreditResult({ success: true, msg: `Credited $${btcCreditAmount} USDT BTC pool to ${addr}` });
+      toast({ title: "BTC Pool Credited", description: `$${btcCreditAmount} USDT added to ${addr}'s BTC pool.` });
+      setBtcCreditAddr("");
+      setBtcCreditAmount("");
+    } catch (e: any) {
+      const msg = decodeContractError(e);
+      setBtcCreditResult({ success: false, msg });
+      toast({ title: "Credit Failed", description: msg, variant: "destructive" });
+    } finally {
+      setCreditingBtc(false);
     }
   };
 
@@ -308,6 +347,72 @@ export default function AdminPage({ account }: AdminPageProps) {
           </Button>
         </CardContent>
       </Card>
+      {/* Credit BTC Pool */}
+      <Card className="border-white/[0.08] bg-white/[0.02]">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Bitcoin className="w-4 h-4 text-orange-400" />
+            Credit BTC Pool
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Directly add USDT to a user's BTC pool balance. No USDT is transferred — bookkeeping credit only.
+            Use to seed company or marketing accounts.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="btc-credit-address" className="text-xs text-muted-foreground uppercase tracking-wider">
+              User Wallet Address
+            </Label>
+            <Input
+              id="btc-credit-address"
+              data-testid="input-btc-credit-address"
+              placeholder="0x..."
+              value={btcCreditAddr}
+              onChange={e => setBtcCreditAddr(e.target.value)}
+              className="font-mono text-sm bg-white/[0.03] border-white/[0.08]"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="btc-credit-amount" className="text-xs text-muted-foreground uppercase tracking-wider">
+              Amount (USDT)
+            </Label>
+            <Input
+              id="btc-credit-amount"
+              data-testid="input-btc-credit-amount"
+              type="number"
+              min="0"
+              step="any"
+              placeholder="e.g. 50"
+              value={btcCreditAmount}
+              onChange={e => setBtcCreditAmount(e.target.value)}
+              className="text-sm bg-white/[0.03] border-white/[0.08]"
+            />
+          </div>
+
+          <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 px-3 py-2 text-xs text-orange-300/80 space-y-0.5">
+            <div>⚠ No USDT leaves the contract — this is a virtual credit</div>
+            <div>✓ User's btcPoolBalance and totalBtcEarned both increase</div>
+            <div>✓ User can immediately use it for board entry</div>
+          </div>
+
+          {btcCreditResult && <ResultBanner result={btcCreditResult} />}
+
+          <Button
+            data-testid="button-credit-btc-pool"
+            onClick={handleCreditBtcPool}
+            disabled={creditingBtc || !btcCreditAddr.trim() || !btcCreditAmount.trim()}
+            className="w-full bg-orange-700 hover:bg-orange-600 text-white font-semibold"
+          >
+            {creditingBtc ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Crediting…</>
+            ) : (
+              <><Bitcoin className="w-4 h-4" /> Credit BTC Pool</>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* MWallet Download URL */}
       <Card className="border-white/[0.08] bg-white/[0.02]">
         <CardHeader className="pb-3">

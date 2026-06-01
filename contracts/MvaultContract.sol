@@ -1320,6 +1320,20 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         emit RankIncomeDistributed(pool, 0);
     }
 
+    /**
+     * @notice OWNER/MANAGER: Credit a user's btcPoolBalance directly.
+     *         No USDT is transferred — bookkeeping credit only.
+     *         Use to seed company accounts for marketing / board entry.
+     */
+    function adminCreditBtcPool(address user, uint256 amount) external onlyOwnerOrManager {
+        if (user == address(0)) revert ZeroAddress();
+        if (amount == 0) revert ZeroAmount();
+        users[user].btcPoolBalance += amount;
+        users[user].totalBtcEarned += amount;
+        _recordTx(user, TX_BTC_CREDITED, amount, 0, msg.sender);
+        emit BtcPoolCredited(user, amount);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // INTERNAL HELPERS
     // ─────────────────────────────────────────────────────────────────────────

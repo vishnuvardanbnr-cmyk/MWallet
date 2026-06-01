@@ -116,13 +116,14 @@ async function main() {
   const mainArt    = loadArtifact("MvaultContract");
   const boardArt   = loadArtifact("MvaultBoardMatrix");
   const stakingArt = loadArtifact("MvaultStaking");
+  const viewArt    = loadArtifact("MvaultView");
 
   const tokenIface   = new ethers.Interface(tokenArt.abi);
   const mainIface    = new ethers.Interface(mainArt.abi);
   const boardIface   = new ethers.Interface(boardArt.abi);
 
   // Log contract sizes
-  for (const [name, art] of [["MvaultToken", tokenArt], ["MvaultContract", mainArt], ["MvaultBoardMatrix", boardArt], ["MvaultStaking", stakingArt]]) {
+  for (const [name, art] of [["MvaultToken", tokenArt], ["MvaultContract", mainArt], ["MvaultBoardMatrix", boardArt], ["MvaultStaking", stakingArt], ["MvaultView", viewArt]]) {
     const bytes = (art.deployedBytecode.length - 2) / 2;
     console.log(`${name}: ${bytes} bytes (limit: 24,576)`);
   }
@@ -159,11 +160,20 @@ async function main() {
   // MvaultContract → Manager
   await call(wallet, "MvaultContract.setManager",       mainAddr,   mainIface,  "setManager",        [MANAGER]);
 
+  // ── 5. Deploy MvaultView(mainAddr) ───────────────────────────────────────
+  const viewAddr = await deploy(wallet, "MvaultView", viewArt.bytecode, encodeArgs(["address", mainAddr]));
+
   // ── Verify ──────────────────────────────────────────────────────────────────
   console.log("\n── Verifying eth_getCode ───────────────────────────────────────────────\n");
-  for (const [label, addr] of [["MvaultToken", tokenAddr], ["MvaultContract", mainAddr], ["MvaultBoardMatrix", boardAddr], ["MvaultStaking", stakingAddr]]) {
+  for (const [label, addr] of [
+    ["MvaultToken", tokenAddr], ["MvaultContract", mainAddr],
+    ["MvaultBoardMatrix", boardAddr], ["MvaultStaking", stakingAddr],
+    ["MvaultView", viewAddr],
+  ]) {
     const code = await rpc("eth_getCode", [addr, "latest"]);
-    console.log(`  ${label}: ${code.length > 4 ? "✓ bytecode exists" : "✗ EMPTY"} (${addr})`);
+    const bytes = code.length > 4 ? Math.floor((code.length - 2) / 2) : 0;
+    const status = bytes > 0 ? `✓ ${bytes} bytes` : "✗ EMPTY";
+    console.log(`  ${label}: ${status} (${addr})`);
   }
 
   const finalBal = await rpc("eth_getBalance", [wallet.address, "latest"]);
@@ -172,6 +182,7 @@ async function main() {
   console.log(`VITE_MVT_TOKEN_ADDRESS=${tokenAddr}`);
   console.log(`VITE_BOARD_HANDLER_ADDRESS=${boardAddr}`);
   console.log(`VITE_MVAULT_STAKING_ADDRESS=${stakingAddr}`);
+  console.log(`VITE_MVAULT_VIEW_ADDRESS=${viewAddr}`);
   console.log(`VITE_PAYMENT_TOKEN_ADDRESS=${USDT}`);
   console.log(`\nRemaining balance: ${ethers.formatEther(BigInt(finalBal))} MxC`);
 }
