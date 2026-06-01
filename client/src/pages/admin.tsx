@@ -12,6 +12,8 @@ interface AdminPageProps {
   account: string;
 }
 
+type Product = { id: string; name: string; description: string; price: number; image: string; category: string; inStock: boolean };
+
 export default function AdminPage({ account }: AdminPageProps) {
   const { toast } = useToast();
 
@@ -42,7 +44,6 @@ export default function AdminPage({ account }: AdminPageProps) {
   const apkFileRef                            = useRef<HTMLInputElement>(null);
 
   // Product management state
-  type Product = { id: string; name: string; description: string; price: number; image: string; category: string; inStock: boolean };
   const [products, setProducts]               = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
   const [showProductForm, setShowProductForm] = useState(false);
