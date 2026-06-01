@@ -158,10 +158,18 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
           <p className="text-3xl font-bold" style={{ fontFamily: "var(--font-display)" }} data-testid="text-btc-pool-balance">
             <span className="text-orange-400">${btcPoolBalance.toFixed(2)}</span>
           </p>
-          <p className="text-xs text-muted-foreground mt-1">10% from every MWT sell — used exclusively to enter board pools</p>
-          <div className="mt-4 w-full flex items-center gap-2 py-2.5 px-3 rounded-xl bg-orange-500/5 border border-orange-500/15">
+          <p className="text-xs text-muted-foreground mt-1">Used exclusively to enter board pools</p>
+          <button
+            onClick={() => setLocation("/board")}
+            disabled={btcPoolBalance <= 0}
+            className="mt-4 w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-orange-500/10 border border-orange-500/20 text-sm font-semibold text-orange-400 hover:bg-orange-500/15 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            data-testid="button-go-to-board"
+          >
+            <Bitcoin className="h-4 w-4" /> Enter Board Pool →
+          </button>
+          <div className="mt-3 w-full flex items-center gap-2 py-2 px-3 rounded-xl bg-orange-500/5 border border-orange-500/15">
             <Info className="h-3.5 w-3.5 text-orange-400/70 shrink-0" />
-            <p className="text-[11px] text-orange-300/70">Auto-funds your board pool entries only — not withdrawable</p>
+            <p className="text-[11px] text-orange-300/70">Not withdrawable — board entry only</p>
           </div>
         </div>
       </div>
