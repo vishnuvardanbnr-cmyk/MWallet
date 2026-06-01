@@ -587,8 +587,8 @@
       ]
     },
     "/home/runner/workspace/contracts/MvaultContract.sol": {
-      "lastModificationDate": 1780296410177,
-      "contentHash": "7bb00ad831a17a1a24ff6e228e299969",
+      "lastModificationDate": 1780310141893,
+      "contentHash": "7b924a8978d9f300ddeadb38c906c96b",
       "sourceName": "contracts/MvaultContract.sol",
       "solcConfig": {
         "version": "0.8.27",
@@ -631,8 +631,8 @@
       ]
     },
     "/home/runner/workspace/contracts/MvaultStaking.sol": {
-      "lastModificationDate": 1779990399452,
-      "contentHash": "611257a591c4468fc3a5774020c4d79a",
+      "lastModificationDate": 1780330092550,
+      "contentHash": "3bbff316b1d6d1b871bb2e7c8e38991e",
       "sourceName": "contracts/MvaultStaking.sol",
       "solcConfig": {
         "version": "0.8.27",
@@ -661,6 +661,7 @@
       },
       "imports": [
         "@openzeppelin/contracts/token/ERC20/IERC20.sol",
+        "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol",
         "@openzeppelin/contracts/access/Ownable.sol",
         "@openzeppelin/contracts/utils/ReentrancyGuard.sol"
       ],

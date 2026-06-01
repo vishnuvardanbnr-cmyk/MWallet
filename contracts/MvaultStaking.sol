@@ -2,6 +2,7 @@
 pragma solidity ^0.8.20;
 
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
@@ -25,6 +26,7 @@ interface IMvaultMain {
 }
 
 contract MvaultStaking is Ownable, ReentrancyGuard {
+    using SafeERC20 for IERC20;
 
     IERC20        public immutable usdtToken;
     IMvaultToken  public immutable mvaultToken;
@@ -88,7 +90,7 @@ contract MvaultStaking is Ownable, ReentrancyGuard {
         if (amount < MIN_STAKE_USDT) revert BelowMinStake();
 
         // Pull USDT from MvaultContract
-        usdtToken.transferFrom(address(mvaultMain), address(this), amount);
+        usdtToken.safeTransferFrom(address(mvaultMain), address(this), amount);
 
         // Mint MVT via bonding curve (mints 90% of theoretical = grossMvt)
         usdtToken.approve(address(mvaultToken), amount);
@@ -142,7 +144,7 @@ contract MvaultStaking is Ownable, ReentrancyGuard {
         // Only stakedMvt stays here (burned on unstake via mvaultToken.sell()).
         uint256 toTransfer = levelDistributed + levelToAdmin + adminAmt;
         if (toTransfer > 0) {
-            IERC20(address(mvaultToken)).transfer(address(mvaultMain), toTransfer);
+            IERC20(address(mvaultToken)).safeTransfer(address(mvaultMain), toTransfer);
         }
 
         uint256 stakeIndex = _stakes[user].length;
@@ -221,7 +223,7 @@ contract MvaultStaking is Ownable, ReentrancyGuard {
 
         // Transfer all USDT to MvaultContract; callback credits user and records tx
         if (usdtGross > 0) {
-            usdtToken.transfer(address(mvaultMain), usdtGross);
+            usdtToken.safeTransfer(address(mvaultMain), usdtGross);
         }
         mvaultMain.staking_postUnstake(user, usdtToUser, adminCapCut);
         emit Unstaked(user, stakeIndex, totalMvt, usdtToUser, adminCapCut);
