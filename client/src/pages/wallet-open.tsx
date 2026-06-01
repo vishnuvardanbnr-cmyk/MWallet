@@ -32,8 +32,10 @@ const WALLETS: WalletDef[] = [
     logo: "/metamask-logo.svg",
     cardCls: "border-orange-500/40 bg-orange-500/10",
     detect: (e) => !!e?.isMetaMask && !e?.isBraveWallet && !e?.isTokenPocket,
-    getLink: (_t, host, ref, side) =>
-      `https://metamask.app.link/dapp/${host}/?ref=${ref}&side=${side}`,
+    getLink: (t, host) => {
+      const u = new URL(t);
+      return `https://metamask.app.link/dapp/${host}${u.pathname}${u.search}`;
+    },
     iosStore:     "https://apps.apple.com/app/metamask/id1438144202",
     androidStore: "https://play.google.com/store/apps/details?id=io.metamask",
   },
@@ -84,10 +86,15 @@ function isMobile()  { return isAndroid() || isIOS(); }
 export default function WalletOpenPage() {
   const params    = new URLSearchParams(window.location.search);
   const ref       = params.get("ref") || "";
-  const side      = params.get("side") || "left";
+  const sideRaw   = params.get("side");                        // null = not set in link
+  const side      = sideRaw ?? "left";                         // UI default only
   const host      = window.location.host;
   const origin    = window.location.origin;
-  const targetUrl = `${origin}/?ref=${ref}&side=${side}`;
+  // Only append side if the original link explicitly included it (sponsor chose a side).
+  // Without side, register.tsx shows the left/right picker to the new user.
+  const targetUrl = sideRaw !== null
+    ? `${origin}/?ref=${ref}&side=${sideRaw}`
+    : `${origin}/?ref=${ref}`;
 
   const [autoOpened,     setAutoOpened]     = useState(false);
   const [detectedWallet, setDetectedWallet] = useState<string | null>(null);
