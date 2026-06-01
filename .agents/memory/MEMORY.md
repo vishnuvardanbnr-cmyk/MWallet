@@ -1,6 +1,7 @@
-- [VPS PM2 restart pattern](vps-pm2-restart.md) — interactive SSH always times out; use fuser -k + SCP to reload new binary
+- [VPS PM2 restart pattern](vps-pm2-restart.md) — PM2 SSH hangs; use `systemctl restart mvault.service` instead (returns in <5s)
 - [MvaultView deployment](mvaultview-deploy.md) — current VIEW at 0x1324CE45...; env-var || fallback pattern doesn't bypass a stale set value
 - [Contract size limit](contract-size.md) — EIP-170 (24,576 bytes) IS enforced on MChain 1888; gasUsed=0 + status=0 in receipt = size rejection, not gas issue.
 - [Delegation view removal](delegation-views.md) — getMvtPrice/getActiveStakes/getBtcPoolInfo/getUserBoardStats removed from MvaultContract to save bytespace; frontend calls MVT token and staking module contracts directly.
 - [MChain raw deployment](mchain-raw-deploy.md) — hardhat deploys silently fail on MChain (nonce skipping); always use scripts/deploy-raw-mchain.cjs (raw JSON-RPC, fresh nonce per tx).
 - [MChain contract wipe](mchain-contract-wipe.md) — MChain 1888 periodically wipes contract state (test network reset); contracts verified via eth_getCode after every deploy.
+- [MChain block.timestamp=0 bug](mchain-timestamp-zero.md) — block.timestamp is always 0 on MChain 1888; any timestamp-based state flag is unreliable; use explicit bool fields instead.

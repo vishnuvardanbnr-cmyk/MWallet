@@ -131,7 +131,7 @@ export default function PaidStakingPage({
   const totStakedMvt  = positions.reduce((s, p) => s + parseFloat(formatTokenAmount(p.mvtAmount,    tokenDecimals)), 0);
   const totStakedUsdt = positions.reduce((s, p) => s + parseFloat(formatTokenAmount(p.usdtInvested, tokenDecimals)), 0);
 
-  function isFlexible(pos: StakePosition) { return pos.lockedSince === 0; }
+  function isFlexible(pos: StakePosition) { return pos.lockedSince === 0 || pos.lockedSince === undefined; }
   function isUnlocked(pos: StakePosition) {
     if (isFlexible(pos)) return true;
     return Date.now() / 1000 >= pos.lockedSince + LOCK_DURATION_S;
