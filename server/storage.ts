@@ -1,4 +1,4 @@
-import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome, usdtDeposits, type UsdtDeposit, leadershipRewards, type LeadershipReward, musdtStakingPlans, type MusdtStakingPlan, type InsertMusdtStakingPlan, musdtOverrideIncome, type MusdtOverrideIncome, mTokenPurchaseBatches, type MTokenPurchaseBatch, type InsertTokenBatch, distributionCycles, type DistributionCycle, distributionProofs, type DistributionProof, kvStore, onchainUsers, type OnchainUser, onChainEvents, type OnChainEvent } from "@shared/schema";
+import { profiles, type Profile, type InsertProfile, stakingPlans, type StakingPlan, type InsertStakingPlan, mwalletBalances, type MwalletBalance, stakingClaims, type StakingClaim, type InsertStakingClaim, type HardwareProduct, type HardwareOrder, hardwareProducts, supportTickets, type SupportTicket, type InsertTicket, ticketMessages, type TicketMessage, type InsertTicketMessage, virtualBtcBalances, type VirtualBtcBalance, btcSwapTxns, type BtcSwapTxn, type InsertBtcSwapTxn, tokenEconomics, type TokenEconomics, virtualUsdtBalances, type VirtualUsdtBalance, mTokenBalances, type MTokenBalance, paidStakingPlans, type PaidStakingPlan, type InsertPaidStakingPlan, tokenTransactions, type TokenTransaction, stakingOverrideIncome, type StakingOverrideIncome, usdtDeposits, type UsdtDeposit, leadershipRewards, type LeadershipReward, musdtStakingPlans, type MusdtStakingPlan, type InsertMusdtStakingPlan, musdtOverrideIncome, type MusdtOverrideIncome, mTokenPurchaseBatches, type MTokenPurchaseBatch, type InsertTokenBatch, distributionCycles, type DistributionCycle, distributionProofs, type DistributionProof, kvStore, onchainUsers, type OnchainUser, onChainEvents, type OnChainEvent } from "@shared/schema";
 import { db } from "./db";
 import { eq, and, sql, desc, or } from "drizzle-orm";
 import { randomUUID } from "crypto";
@@ -115,11 +115,9 @@ export interface IStorage {
 }
 
 export class DatabaseStorage implements IStorage {
-  private products: Map<string, HardwareProduct>;
   private orders: Map<string, HardwareOrder>;
 
   constructor() {
-    this.products = new Map();
     this.orders = new Map();
   }
 
@@ -419,30 +417,39 @@ export class DatabaseStorage implements IStorage {
   }
 
   async getProducts(): Promise<HardwareProduct[]> {
-    return Array.from(this.products.values());
+    const rows = await db.select().from(hardwareProducts).orderBy(hardwareProducts.createdAt);
+    return rows.map(r => ({ id: r.id, name: r.name, description: r.description ?? "", price: r.price, image: r.image ?? "", category: r.category ?? "Hardware Wallet", inStock: r.inStock ?? true }));
   }
 
   async getProduct(id: string): Promise<HardwareProduct | undefined> {
-    return this.products.get(id);
+    const [row] = await db.select().from(hardwareProducts).where(eq(hardwareProducts.id, id));
+    if (!row) return undefined;
+    return { id: row.id, name: row.name, description: row.description ?? "", price: row.price, image: row.image ?? "", category: row.category ?? "Hardware Wallet", inStock: row.inStock ?? true };
   }
 
   async addProduct(product: Omit<HardwareProduct, "id">): Promise<HardwareProduct> {
     const id = randomUUID();
-    const newProduct: HardwareProduct = { ...product, id };
-    this.products.set(id, newProduct);
-    return newProduct;
+    await db.insert(hardwareProducts).values({ id, name: product.name, description: product.description, price: product.price, image: product.image, category: product.category, inStock: product.inStock });
+    return { ...product, id };
   }
 
   async updateProduct(id: string, updates: Partial<HardwareProduct>): Promise<HardwareProduct | undefined> {
-    const existing = this.products.get(id);
+    const existing = await this.getProduct(id);
     if (!existing) return undefined;
-    const updated = { ...existing, ...updates, id };
-    this.products.set(id, updated);
-    return updated;
+    const patch: Partial<typeof hardwareProducts.$inferInsert> = {};
+    if (updates.name !== undefined) patch.name = updates.name;
+    if (updates.description !== undefined) patch.description = updates.description;
+    if (updates.price !== undefined) patch.price = updates.price;
+    if (updates.image !== undefined) patch.image = updates.image;
+    if (updates.category !== undefined) patch.category = updates.category;
+    if (updates.inStock !== undefined) patch.inStock = updates.inStock;
+    await db.update(hardwareProducts).set(patch).where(eq(hardwareProducts.id, id));
+    return { ...existing, ...updates, id };
   }
 
   async deleteProduct(id: string): Promise<boolean> {
-    return this.products.delete(id);
+    const result = await db.delete(hardwareProducts).where(eq(hardwareProducts.id, id));
+    return (result.rowCount ?? 0) > 0;
   }
 
   async getOrders(walletAddress?: string): Promise<HardwareOrder[]> {

@@ -1,6 +1,6 @@
-import { useState, useRef } from "react";
+import { useState, useRef, useEffect } from "react";
 import { ethers } from "ethers";
-import { ShieldCheck, UserCheck, Loader2, CheckCircle, AlertCircle, Settings, Smartphone, Save, Upload, Link, Bitcoin } from "lucide-react";
+import { ShieldCheck, UserCheck, Loader2, CheckCircle, AlertCircle, Settings, Smartphone, Save, Upload, Link, Bitcoin, Package, Plus, Pencil, Trash2, X, ToggleLeft, ToggleRight } from "lucide-react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -41,7 +41,72 @@ export default function AdminPage({ account }: AdminPageProps) {
   const [uploadedSize, setUploadedSize]       = useState<string | null>(null);
   const apkFileRef                            = useRef<HTMLInputElement>(null);
 
+  // Product management state
+  type Product = { id: string; name: string; description: string; price: number; image: string; category: string; inStock: boolean };
+  const [products, setProducts]               = useState<Product[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(false);
+  const [showProductForm, setShowProductForm] = useState(false);
+  const [editingProduct, setEditingProduct]   = useState<Product | null>(null);
+  const [savingProduct, setSavingProduct]     = useState(false);
+  const [deletingId, setDeletingId]           = useState<string | null>(null);
+  const [pName, setPName]                     = useState("");
+  const [pDesc, setPDesc]                     = useState("");
+  const [pPrice, setPPrice]                   = useState("");
+  const [pImage, setPImage]                   = useState("");
+  const [pCategory, setPCategory]             = useState("Hardware Wallet");
+  const [pInStock, setPInStock]               = useState(true);
+
   const isAdmin = account?.toLowerCase() === ADMIN_WALLET;
+
+  const loadProducts = async () => {
+    setLoadingProducts(true);
+    try {
+      const res = await fetch("/api/hardware/products");
+      setProducts(await res.json());
+    } catch { /* ignore */ } finally { setLoadingProducts(false); }
+  };
+
+  useEffect(() => { loadProducts(); }, []);
+
+  const openAddForm = () => {
+    setEditingProduct(null);
+    setPName(""); setPDesc(""); setPPrice(""); setPImage(""); setPCategory("Hardware Wallet"); setPInStock(true);
+    setShowProductForm(true);
+  };
+
+  const openEditForm = (p: Product) => {
+    setEditingProduct(p);
+    setPName(p.name); setPDesc(p.description); setPPrice(String(p.price)); setPImage(p.image); setPCategory(p.category); setPInStock(p.inStock);
+    setShowProductForm(true);
+  };
+
+  const handleSaveProduct = async () => {
+    if (!pName.trim() || !pPrice.trim()) return;
+    setSavingProduct(true);
+    try {
+      const body = { name: pName.trim(), description: pDesc.trim(), price: parseFloat(pPrice), image: pImage.trim(), category: pCategory.trim(), inStock: pInStock };
+      if (editingProduct) {
+        await fetch(`/api/admin/products/${editingProduct.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      } else {
+        await fetch("/api/admin/products", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+      }
+      setShowProductForm(false);
+      loadProducts();
+    } catch { /* ignore */ } finally { setSavingProduct(false); }
+  };
+
+  const handleDeleteProduct = async (id: string) => {
+    setDeletingId(id);
+    try {
+      await fetch(`/api/admin/products/${id}`, { method: "DELETE" });
+      loadProducts();
+    } catch { /* ignore */ } finally { setDeletingId(null); }
+  };
+
+  const handleToggleStock = async (p: Product) => {
+    await fetch(`/api/admin/products/${p.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ inStock: !p.inStock }) });
+    loadProducts();
+  };
 
   if (!isAdmin) {
     return (
@@ -529,6 +594,101 @@ export default function AdminPage({ account }: AdminPageProps) {
           )}
 
           {mwalletResult && <ResultBanner result={mwalletResult} />}
+        </CardContent>
+      </Card>
+
+      {/* Store Product Management */}
+      <Card className="border-white/[0.08] bg-white/[0.02]">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <Package className="w-4 h-4 text-violet-400" />
+              Store Products
+            </CardTitle>
+            <Button size="sm" onClick={openAddForm} className="bg-violet-600 hover:bg-violet-500 text-white h-8 px-3 text-xs">
+              <Plus className="w-3.5 h-3.5 mr-1" /> Add Product
+            </Button>
+          </div>
+          <p className="text-xs text-muted-foreground">Add, edit, or remove products shown in the marketplace.</p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+
+          {/* Add / Edit form */}
+          {showProductForm && (
+            <div className="rounded-xl border border-violet-500/20 bg-violet-500/5 p-4 space-y-3">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-sm font-semibold text-violet-300">{editingProduct ? "Edit Product" : "New Product"}</p>
+                <button onClick={() => setShowProductForm(false)} className="text-muted-foreground hover:text-white">
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="col-span-2 space-y-1">
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wider">Product Name *</Label>
+                  <Input value={pName} onChange={e => setPName(e.target.value)} placeholder="e.g. Ledger Nano X" className="bg-white/[0.03] border-white/[0.08] text-sm" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wider">Price (USD) *</Label>
+                  <Input value={pPrice} onChange={e => setPPrice(e.target.value)} placeholder="99" type="number" min="0" className="bg-white/[0.03] border-white/[0.08] text-sm" />
+                </div>
+                <div className="space-y-1">
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wider">Category</Label>
+                  <Input value={pCategory} onChange={e => setPCategory(e.target.value)} placeholder="Hardware Wallet" className="bg-white/[0.03] border-white/[0.08] text-sm" />
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wider">Image URL</Label>
+                  <Input value={pImage} onChange={e => setPImage(e.target.value)} placeholder="https://..." className="bg-white/[0.03] border-white/[0.08] text-sm font-mono" />
+                </div>
+                <div className="col-span-2 space-y-1">
+                  <Label className="text-xs text-muted-foreground uppercase tracking-wider">Description</Label>
+                  <Input value={pDesc} onChange={e => setPDesc(e.target.value)} placeholder="Short product description" className="bg-white/[0.03] border-white/[0.08] text-sm" />
+                </div>
+                <div className="col-span-2 flex items-center gap-3">
+                  <button onClick={() => setPInStock(v => !v)} className="flex items-center gap-2 text-sm">
+                    {pInStock ? <ToggleRight className="w-5 h-5 text-emerald-400" /> : <ToggleLeft className="w-5 h-5 text-muted-foreground" />}
+                    <span className={pInStock ? "text-emerald-400" : "text-muted-foreground"}>In Stock</span>
+                  </button>
+                </div>
+              </div>
+              <Button onClick={handleSaveProduct} disabled={savingProduct || !pName.trim() || !pPrice.trim()} className="w-full bg-violet-600 hover:bg-violet-500 text-white font-semibold">
+                {savingProduct ? <><Loader2 className="w-4 h-4 animate-spin mr-2" />Saving…</> : <><Save className="w-4 h-4 mr-2" />{editingProduct ? "Save Changes" : "Add Product"}</>}
+              </Button>
+            </div>
+          )}
+
+          {/* Product list */}
+          {loadingProducts ? (
+            <div className="flex justify-center py-6"><Loader2 className="w-5 h-5 animate-spin text-muted-foreground" /></div>
+          ) : products.length === 0 ? (
+            <div className="text-center py-6 text-muted-foreground text-sm">No products yet. Click "Add Product" to get started.</div>
+          ) : (
+            <div className="space-y-2">
+              {products.map(p => (
+                <div key={p.id} className="flex items-center gap-3 rounded-lg border border-white/[0.06] bg-white/[0.02] p-3">
+                  {p.image ? (
+                    <img src={p.image} alt={p.name} className="w-10 h-10 rounded-lg object-cover shrink-0 bg-white/[0.04]" onError={e => { (e.target as HTMLImageElement).style.display = "none"; }} />
+                  ) : (
+                    <div className="w-10 h-10 rounded-lg bg-white/[0.04] flex items-center justify-center shrink-0">
+                      <Package className="w-5 h-5 text-muted-foreground" />
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-semibold text-white truncate">{p.name}</p>
+                    <p className="text-xs text-muted-foreground">{p.category} · <span className="text-amber-400 font-medium">${p.price}</span></p>
+                  </div>
+                  <button onClick={() => handleToggleStock(p)} className="shrink-0" title="Toggle stock">
+                    {p.inStock ? <ToggleRight className="w-5 h-5 text-emerald-400" /> : <ToggleLeft className="w-5 h-5 text-muted-foreground" />}
+                  </button>
+                  <button onClick={() => openEditForm(p)} className="shrink-0 text-muted-foreground hover:text-white transition-colors" data-testid={`button-edit-product-${p.id}`}>
+                    <Pencil className="w-4 h-4" />
+                  </button>
+                  <button onClick={() => handleDeleteProduct(p.id)} disabled={deletingId === p.id} className="shrink-0 text-muted-foreground hover:text-red-400 transition-colors" data-testid={`button-delete-product-${p.id}`}>
+                    {deletingId === p.id ? <Loader2 className="w-4 h-4 animate-spin" /> : <Trash2 className="w-4 h-4" />}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

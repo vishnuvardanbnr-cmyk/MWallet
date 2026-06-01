@@ -328,6 +328,18 @@ export const onchainUsers = pgTable("onchain_users", {
 });
 export type OnchainUser = typeof onchainUsers.$inferSelect;
 
+export const hardwareProducts = pgTable("hardware_products", {
+  id:          varchar("id", { length: 36 }).primaryKey(),
+  name:        varchar("name", { length: 255 }).notNull(),
+  description: text("description").default(""),
+  price:       integer("price").notNull(),
+  image:       text("image").default(""),
+  category:    varchar("category", { length: 100 }).default("Hardware Wallet"),
+  inStock:     boolean("in_stock").default(true),
+  createdAt:   timestamp("created_at").defaultNow(),
+});
+export type HardwareProductRow = typeof hardwareProducts.$inferSelect;
+
 export interface HardwareProduct {
   id: string;
   name: string;
