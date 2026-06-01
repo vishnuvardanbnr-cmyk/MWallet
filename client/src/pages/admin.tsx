@@ -225,12 +225,19 @@ export default function AdminPage({ account }: AdminPageProps) {
       const provider = new ethers.BrowserProvider((window as any).ethereum);
       const signer = await provider.getSigner();
 
-      toast({ title: "Crediting BTC Pool", description: "Confirm the transaction in MetaMask…" });
+      // Step 1: Approve USDT spend from admin wallet to the MVault contract
+      toast({ title: "Step 1/2: Approve USDT", description: "Approve USDT spend in MetaMask…" });
+      const usdtContract = getTokenContract(signer);
+      const approveTx = await usdtContract.approve(MVAULT_CONTRACT_ADDRESS, amountWei, { gasLimit: 100_000n });
+      await approveTx.wait();
+
+      // Step 2: Credit the user's BTC pool (pulls USDT from admin into contract)
+      toast({ title: "Step 2/2: Credit BTC Pool", description: "Confirm the credit transaction in MetaMask…" });
       const mvaultContract = getMvaultContract(signer);
-      const tx = await mvaultContract.adminCreditBtcPool(addr, amountWei, { gasLimit: 200_000n });
+      const tx = await mvaultContract.adminCreditBtcPool(addr, amountWei, { gasLimit: 500_000n });
       await tx.wait();
 
-      setBtcCreditResult({ success: true, msg: `Credited $${btcCreditAmount} USDT to ${addr}'s BTC pool` });
+      setBtcCreditResult({ success: true, msg: `Deposited & credited $${btcCreditAmount} USDT to ${addr}'s BTC pool` });
       toast({ title: "BTC Pool Credited", description: `$${btcCreditAmount} USDT deposited and credited to ${addr}.` });
       setBtcCreditAddr("");
       setBtcCreditAmount("");
