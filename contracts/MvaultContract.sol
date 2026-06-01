@@ -1322,13 +1322,15 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice OWNER/MANAGER: Credit a user's btcPoolBalance directly.
-     *         No USDT is transferred — bookkeeping credit only.
-     *         Use to seed company accounts for marketing / board entry.
+     * @notice OWNER/MANAGER: Deposit real USDT from caller into the contract
+     *         and credit it to a user's btcPoolBalance.
+     *         Caller must have approved this contract for `amount` USDT first.
      */
     function adminCreditBtcPool(address user, uint256 amount) external onlyOwnerOrManager {
         if (user == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
+        bool ok = usdtToken.transferFrom(msg.sender, address(this), amount);
+        if (!ok) revert TransferFailed();
         users[user].btcPoolBalance += amount;
         users[user].totalBtcEarned += amount;
         _recordTx(user, TX_BTC_CREDITED, amount, 0, msg.sender);

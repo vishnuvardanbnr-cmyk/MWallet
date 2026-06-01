@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { getMvaultContract, decodeContractError, ADMIN_WALLET } from "@/lib/contract";
+import { getMvaultContract, getContract, MVAULT_CONTRACT_ADDRESS, decodeContractError, ADMIN_WALLET } from "@/lib/contract";
 
 interface AdminPageProps {
   account: string;
@@ -158,11 +158,21 @@ export default function AdminPage({ account }: AdminPageProps) {
     try {
       const provider = new ethers.BrowserProvider((window as any).ethereum);
       const signer = await provider.getSigner();
-      const contract = getMvaultContract(signer);
-      const tx = await contract.adminCreditBtcPool(addr, amountWei, { gasLimit: 500_000n });
+
+      // Step 1: Approve USDT from admin wallet to the MVault contract
+      toast({ title: "Step 1/2: Approve USDT", description: "Approve USDT spend in MetaMask…" });
+      const usdtContract = getContract(signer);
+      const approveTx = await usdtContract.approve(MVAULT_CONTRACT_ADDRESS, amountWei, { gasLimit: 100_000n });
+      await approveTx.wait();
+
+      // Step 2: Credit the user's BTC pool (pulls USDT from admin into contract)
+      toast({ title: "Step 2/2: Credit BTC Pool", description: "Confirm the credit transaction in MetaMask…" });
+      const mvaultContract = getMvaultContract(signer);
+      const tx = await mvaultContract.adminCreditBtcPool(addr, amountWei, { gasLimit: 500_000n });
       await tx.wait();
-      setBtcCreditResult({ success: true, msg: `Credited $${btcCreditAmount} USDT BTC pool to ${addr}` });
-      toast({ title: "BTC Pool Credited", description: `$${btcCreditAmount} USDT added to ${addr}'s BTC pool.` });
+
+      setBtcCreditResult({ success: true, msg: `Deposited & credited $${btcCreditAmount} USDT to ${addr}'s BTC pool` });
+      toast({ title: "BTC Pool Credited", description: `$${btcCreditAmount} USDT deposited and credited to ${addr}.` });
       setBtcCreditAddr("");
       setBtcCreditAmount("");
     } catch (e: any) {
@@ -355,8 +365,8 @@ export default function AdminPage({ account }: AdminPageProps) {
             Credit BTC Pool
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Directly add USDT to a user's BTC pool balance. No USDT is transferred — bookkeeping credit only.
-            Use to seed company or marketing accounts.
+            Deposits real USDT from your admin wallet into the contract and credits it to the user's BTC pool.
+            Two MetaMask confirmations: approve USDT, then credit.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -391,7 +401,7 @@ export default function AdminPage({ account }: AdminPageProps) {
           </div>
 
           <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 px-3 py-2 text-xs text-orange-300/80 space-y-0.5">
-            <div>⚠ No USDT leaves the contract — this is a virtual credit</div>
+            <div>✓ Real USDT moves from your wallet → contract → user's BTC pool</div>
             <div>✓ User's btcPoolBalance and totalBtcEarned both increase</div>
             <div>✓ User can immediately use it for board entry</div>
           </div>
