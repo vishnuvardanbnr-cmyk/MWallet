@@ -212,8 +212,14 @@ export default function PaidStakingPage({
     setConvertingIndex(pos.index);
     try {
       await convertStakeToLocked(pos.index);
+      // Optimistically mark as locked immediately so the badge updates instantly
+      const now = Math.floor(Date.now() / 1000);
+      setPositions(prev => prev.map(p =>
+        p.index === pos.index ? { ...p, lockedSince: now } : p
+      ));
       toast({ title: "Converted to Locked!", description: "10-month lock started. No 2× cap applies anymore." });
-      await loadPositions();
+      // Delay then re-fetch to sync with chain state (MChain propagation lag)
+      setTimeout(() => loadPositions(), 4000);
     } catch (e: any) {
       toast({ title: "Conversion Failed", description: decodeContractError(e), variant: "destructive" });
     } finally { setConvertingIndex(null); }
