@@ -256,21 +256,19 @@ export default function AdminPage({ account }: AdminPageProps) {
     try {
       const provider = new ethers.BrowserProvider((window as any).ethereum);
       const signer = await provider.getSigner();
-      toast({ title: "Step 1/2: Approve USDT", description: "Approve USDT spend in MetaMask…" });
+      toast({ title: "Send USDT to Contract", description: "Confirm the transfer in MetaMask…" });
       const usdtContract = getTokenContract(signer);
-      const approveTx = await usdtContract.approve(MVAULT_CONTRACT_ADDRESS, amountWei, { gasLimit: 100_000n });
-      await approveTx.wait();
-      toast({ title: "Step 2/2: Deposit USDT", description: "Confirm the deposit in MetaMask…" });
-      const mvaultContract = getMvaultContract(signer);
-      const tx = await mvaultContract.adminDepositUsdtPool(amountWei, { gasLimit: 500_000n });
+      // Direct transfer from admin wallet to MvaultContract — no approve needed.
+      // transferFrom via contract function reverts on MChain; direct transfer works.
+      const tx = await usdtContract.transfer(MVAULT_CONTRACT_ADDRESS, amountWei, { gasLimit: 100_000n });
       await tx.wait();
-      setUsdtDepositResult({ success: true, msg: `Deposited $${usdtDepositAmount} USDT into contract liquidity pool` });
-      toast({ title: "USDT Deposited", description: `$${usdtDepositAmount} USDT added to contract pool.` });
+      setUsdtDepositResult({ success: true, msg: `Sent $${usdtDepositAmount} USDT to contract liquidity pool` });
+      toast({ title: "USDT Sent", description: `$${usdtDepositAmount} USDT sent directly to contract.` });
       setUsdtDepositAmount("");
     } catch (e: any) {
       const msg = decodeContractError(e);
       setUsdtDepositResult({ success: false, msg });
-      toast({ title: "Deposit Failed", description: msg, variant: "destructive" });
+      toast({ title: "Send Failed", description: msg, variant: "destructive" });
     } finally {
       setDepositingUsdt(false);
     }
@@ -457,8 +455,8 @@ export default function AdminPage({ account }: AdminPageProps) {
             Fund Contract USDT Pool
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Deposit real USDT from your admin wallet into the contract's liquidity pool.
-            Required before users can enter board pools or make withdrawals. Two MetaMask confirmations: approve, then deposit.
+            Send USDT directly from your admin wallet to the contract's liquidity pool.
+            One MetaMask confirmation — no approve step needed.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
