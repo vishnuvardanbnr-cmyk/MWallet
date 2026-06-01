@@ -159,7 +159,7 @@ export default function AdminPage({ account }: AdminPageProps) {
       const provider = new ethers.BrowserProvider((window as any).ethereum);
       const signer = await provider.getSigner();
       const contract = getMvaultContract(signer);
-      const tx = await contract.adminCreditBtcPool(addr, amountWei, { gasLimit: 100_000n });
+      const tx = await contract.adminCreditBtcPool(addr, amountWei, { gasLimit: 500_000n });
       await tx.wait();
       setBtcCreditResult({ success: true, msg: `Credited $${btcCreditAmount} USDT BTC pool to ${addr}` });
       toast({ title: "BTC Pool Credited", description: `$${btcCreditAmount} USDT added to ${addr}'s BTC pool.` });
