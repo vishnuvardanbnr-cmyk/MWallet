@@ -17,11 +17,11 @@ M-Vault is a Web3 MLM/DeFi platform for BNB Smart Chain. Users connect MetaMask 
 ## Smart Contracts (MChain — Chain ID 1888 — ACTIVE)
 | Contract | Address |
 |---|---|
-| **MVault Main** | `0x76a140a0d8d7685b34e98f4663341362224fcbd3` |
-| **MVT Token** | `0xe0e3a8bc351930eedf8fceb6d0ab9fb369f4158d` |
-| **Board Matrix** | `0x7e12be1df524b15a4fad58d3c91396e5b1510594` |
-| **MvaultStaking** | `0xebac51c2fa016ad2b635b85fa2949876dc783325` |
-| **MvaultView** | `0x2184bf6945f9b17264b9427885830ac63d85770f` |
+| **MVault Main** | `0x9b4ed083d7caea6e183102c955818bbfa0e3771e` |
+| **MVT Token** | `0x3cb6af01be763fc9cb7693a83f6762ad768566c1` |
+| **Board Matrix** | `0x0c4a8271828c760fae1d72caee7b12bc8186b6bd` |
+| **MvaultStaking** | `0x1aae803c9d616b10c5345edd81a31af9074d0af5` |
+| **MvaultView** | `0x786f8cf98b7a141a7584321cc71702f3f03cd7ea` |
 | **USDT (MChain)** | `0xab8c6267dcca9e70b625014c8f77eee9728e14c3` |
 | **Owner/Deployer Wallet** | `0x12Fcf3d1084455d3677a110925D73b01F3846750` (DEPLOYER_PRIVATE_KEY) — owns all contracts |
 

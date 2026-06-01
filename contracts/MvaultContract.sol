@@ -150,8 +150,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint8 internal constant TX_SELL_MVT          = 5;
     uint8 internal constant TX_BTC_CREDITED   = 6;
     uint8 internal constant TX_USDT_WITHDRAW  = 7;
-    uint8 internal constant TX_REACTIVATION   = 15;
-    uint8 internal constant TX_RANK_INCOME    = 16;
+    uint8 internal constant TX_REACTIVATION         = 15;
+    uint8 internal constant TX_RANK_INCOME           = 16;
+    uint8 internal constant TX_STAKING_LEVEL_INCOME  = 17;
     uint8 internal constant TX_BTC_WITHDRAW   = 8;
     uint8 internal constant TX_REBIRTH        = 9;
     uint8 internal constant TX_BOARD_ENTRY    = 10;
@@ -400,7 +401,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         for (uint256 i = 0; i < tos.length; i++) {
             users[tos[i]].mvtBalance    += amounts[i];
             users[tos[i]].totalReceived += amounts[i];
-            _recordTx(tos[i], TX_LEVEL_INCOME, amounts[i], levels[i], staker);
+            _recordTx(tos[i], TX_STAKING_LEVEL_INCOME, amounts[i], levels[i], staker);
         }
     }
 
