@@ -189,6 +189,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     event PlacementIncomePaid(address indexed to, address indexed from, uint8 level, uint256 amount);
     event MvtSold(address indexed user, uint256 mvtAmount, uint256 usdtNet, uint256 usdtToBtcPool, uint256 usdtToIncome, uint256 usdtToRebirth);
     event BtcPoolCredited(address indexed user, uint256 amount);
+    event AdminUsdtDeposited(address indexed from, uint256 amount);
     event BtcPoolWithdrawn(address indexed user, uint256 amount);
     event UsdtWithdrawn(address indexed user, uint256 amount);
     event Reborn(address indexed mainAccount, address indexed subAccount, uint256 rebirthIndex);
@@ -1329,12 +1330,22 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     function adminCreditBtcPool(address user, uint256 amount) external onlyOwnerOrManager {
         if (user == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
-        bool ok = usdtToken.transferFrom(msg.sender, address(this), amount);
-        if (!ok) revert TransferFailed();
         users[user].btcPoolBalance += amount;
         users[user].totalBtcEarned += amount;
         _recordTx(user, TX_BTC_CREDITED, amount, 0, msg.sender);
         emit BtcPoolCredited(user, amount);
+    }
+
+    /**
+     * @notice OWNER/MANAGER: Deposit real USDT directly into the contract's
+     *         liquidity pool so board entries and withdrawals have backing.
+     *         Caller must have approved this contract for `amount` USDT first.
+     */
+    function adminDepositUsdtPool(uint256 amount) external onlyOwnerOrManager {
+        if (amount == 0) revert ZeroAmount();
+        bool ok = usdtToken.transferFrom(msg.sender, address(this), amount);
+        if (!ok) revert TransferFailed();
+        emit AdminUsdtDeposited(msg.sender, amount);
     }
 
     // ─────────────────────────────────────────────────────────────────────────

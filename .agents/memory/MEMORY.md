@@ -1,5 +1,7 @@
+- [VPS SSH deploy pattern](vps-ssh-deploy.md) — VPS_SSH_KEY is base64 of raw OpenSSH binary; decode + wrap in PEM header/footer to use with ssh/scp; password auth is disabled
 - [VPS PM2 restart pattern](vps-pm2-restart.md) — PM2 SSH hangs; use `systemctl restart mvault.service` instead (returns in <5s)
 - [MvaultView deployment](mvaultview-deploy.md) — current VIEW at 0x1324CE45...; env-var || fallback pattern doesn't bypass a stale set value
+- [MChain USDT transferFrom quirk](mchain-usdt-quirk.md) — MChain test USDT returns true from transferFrom but doesn't move tokens; adminCreditBtcPool must NOT use transferFrom; split into virtual credit + separate adminDepositUsdtPool for real USDT funding
 - [Contract size limit](contract-size.md) — EIP-170 (24,576 bytes) IS enforced on MChain 1888; gasUsed=0 + status=0 in receipt = size rejection, not gas issue.
 - [Delegation view removal](delegation-views.md) — getMvtPrice/getActiveStakes/getBtcPoolInfo/getUserBoardStats removed from MvaultContract to save bytespace; frontend calls MVT token and staking module contracts directly.
 - [MChain raw deployment](mchain-raw-deploy.md) — hardhat deploys silently fail on MChain (nonce skipping); always use scripts/deploy-raw-mchain.cjs (raw JSON-RPC, fresh nonce per tx).

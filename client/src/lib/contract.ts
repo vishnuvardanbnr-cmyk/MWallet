@@ -312,6 +312,7 @@ export const MVAULT_ABI = [
   "function setUserRanks(address[] addrs, uint8[] ranks_) external",
   "function adminActivate(address user, uint8 pkg) external",
   "function adminCreditBtcPool(address user, uint256 amount) external",
+  "function adminDepositUsdtPool(uint256 amount) external",
   "function setManager(address _manager) external",
   // Events
   "event AdminActivated(address indexed user, uint8 pkg)",

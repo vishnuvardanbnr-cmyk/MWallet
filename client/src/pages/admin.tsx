@@ -33,6 +33,9 @@ export default function AdminPage({ account }: AdminPageProps) {
   const [btcCreditAmount, setBtcCreditAmount] = useState("");
   const [creditingBtc, setCreditingBtc]       = useState(false);
   const [btcCreditResult, setBtcCreditResult] = useState<{ success: boolean; msg: string } | null>(null);
+  const [usdtDepositAmount, setUsdtDepositAmount] = useState("");
+  const [depositingUsdt, setDepositingUsdt]       = useState(false);
+  const [usdtDepositResult, setUsdtDepositResult] = useState<{ success: boolean; msg: string } | null>(null);
 
   // MWallet download URL
   const [mwalletUrl, setMwalletUrl]           = useState("");
@@ -224,21 +227,12 @@ export default function AdminPage({ account }: AdminPageProps) {
     try {
       const provider = new ethers.BrowserProvider((window as any).ethereum);
       const signer = await provider.getSigner();
-
-      // Step 1: Approve USDT spend from admin wallet to the MVault contract
-      toast({ title: "Step 1/2: Approve USDT", description: "Approve USDT spend in MetaMask…" });
-      const usdtContract = getTokenContract(signer);
-      const approveTx = await usdtContract.approve(MVAULT_CONTRACT_ADDRESS, amountWei, { gasLimit: 100_000n });
-      await approveTx.wait();
-
-      // Step 2: Credit the user's BTC pool (pulls USDT from admin into contract)
-      toast({ title: "Step 2/2: Credit BTC Pool", description: "Confirm the credit transaction in MetaMask…" });
+      toast({ title: "Credit BTC Pool", description: "Confirm the transaction in MetaMask…" });
       const mvaultContract = getMvaultContract(signer);
       const tx = await mvaultContract.adminCreditBtcPool(addr, amountWei, { gasLimit: 500_000n });
       await tx.wait();
-
-      setBtcCreditResult({ success: true, msg: `Deposited & credited $${btcCreditAmount} USDT to ${addr}'s BTC pool` });
-      toast({ title: "BTC Pool Credited", description: `$${btcCreditAmount} USDT deposited and credited to ${addr}.` });
+      setBtcCreditResult({ success: true, msg: `Credited $${btcCreditAmount} USDT to ${addr}'s BTC pool` });
+      toast({ title: "BTC Pool Credited", description: `$${btcCreditAmount} credited to ${addr}.` });
       setBtcCreditAddr("");
       setBtcCreditAmount("");
     } catch (e: any) {
@@ -247,6 +241,38 @@ export default function AdminPage({ account }: AdminPageProps) {
       toast({ title: "Credit Failed", description: msg, variant: "destructive" });
     } finally {
       setCreditingBtc(false);
+    }
+  };
+
+  const handleDepositUsdtPool = async () => {
+    const parsed = parseFloat(usdtDepositAmount);
+    if (!parsed || parsed <= 0) {
+      toast({ title: "Invalid amount", description: "Enter a positive USDT amount.", variant: "destructive" });
+      return;
+    }
+    const amountWei = ethers.parseUnits(usdtDepositAmount.trim(), 18);
+    setDepositingUsdt(true);
+    setUsdtDepositResult(null);
+    try {
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const signer = await provider.getSigner();
+      toast({ title: "Step 1/2: Approve USDT", description: "Approve USDT spend in MetaMask…" });
+      const usdtContract = getTokenContract(signer);
+      const approveTx = await usdtContract.approve(MVAULT_CONTRACT_ADDRESS, amountWei, { gasLimit: 100_000n });
+      await approveTx.wait();
+      toast({ title: "Step 2/2: Deposit USDT", description: "Confirm the deposit in MetaMask…" });
+      const mvaultContract = getMvaultContract(signer);
+      const tx = await mvaultContract.adminDepositUsdtPool(amountWei, { gasLimit: 500_000n });
+      await tx.wait();
+      setUsdtDepositResult({ success: true, msg: `Deposited $${usdtDepositAmount} USDT into contract liquidity pool` });
+      toast({ title: "USDT Deposited", description: `$${usdtDepositAmount} USDT added to contract pool.` });
+      setUsdtDepositAmount("");
+    } catch (e: any) {
+      const msg = decodeContractError(e);
+      setUsdtDepositResult({ success: false, msg });
+      toast({ title: "Deposit Failed", description: msg, variant: "destructive" });
+    } finally {
+      setDepositingUsdt(false);
     }
   };
 
@@ -423,6 +449,56 @@ export default function AdminPage({ account }: AdminPageProps) {
           </Button>
         </CardContent>
       </Card>
+      {/* Fund Contract USDT Pool */}
+      <Card className="border-white/[0.08] bg-white/[0.02]">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Bitcoin className="w-4 h-4 text-emerald-400" />
+            Fund Contract USDT Pool
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Deposit real USDT from your admin wallet into the contract's liquidity pool.
+            Required before users can enter board pools or make withdrawals. Two MetaMask confirmations: approve, then deposit.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="usdt-deposit-amount" className="text-xs text-muted-foreground uppercase tracking-wider">
+              Amount (USDT)
+            </Label>
+            <Input
+              id="usdt-deposit-amount"
+              data-testid="input-usdt-deposit-amount"
+              type="number"
+              min="0"
+              step="any"
+              placeholder="e.g. 500"
+              value={usdtDepositAmount}
+              onChange={e => setUsdtDepositAmount(e.target.value)}
+              className="text-sm bg-white/[0.03] border-white/[0.08]"
+            />
+          </div>
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-300/80 space-y-0.5">
+            <div>✓ Real USDT moves from your wallet → contract's liquidity pool</div>
+            <div>✓ Backs board entries, rewards, and user withdrawals</div>
+            <div>✓ Deposit enough to cover all credited BTC pool balances</div>
+          </div>
+          {usdtDepositResult && <ResultBanner result={usdtDepositResult} />}
+          <Button
+            data-testid="button-deposit-usdt-pool"
+            onClick={handleDepositUsdtPool}
+            disabled={depositingUsdt || !usdtDepositAmount.trim()}
+            className="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-semibold"
+          >
+            {depositingUsdt ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Depositing…</>
+            ) : (
+              <><Bitcoin className="w-4 h-4" /> Deposit USDT to Pool</>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* Credit BTC Pool */}
       <Card className="border-white/[0.08] bg-white/[0.02]">
         <CardHeader className="pb-3">
@@ -431,8 +507,8 @@ export default function AdminPage({ account }: AdminPageProps) {
             Credit BTC Pool
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Deposits real USDT from your admin wallet into the contract and credits it to the user's BTC pool.
-            Two MetaMask confirmations: approve USDT, then credit.
+            Virtually credits a user's BTC pool balance so they can enter board pools.
+            One MetaMask confirmation. Make sure to fund the contract USDT pool above first.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
@@ -465,15 +541,12 @@ export default function AdminPage({ account }: AdminPageProps) {
               className="text-sm bg-white/[0.03] border-white/[0.08]"
             />
           </div>
-
           <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 px-3 py-2 text-xs text-orange-300/80 space-y-0.5">
-            <div>✓ Real USDT moves from your wallet → contract → user's BTC pool</div>
-            <div>✓ User's btcPoolBalance and totalBtcEarned both increase</div>
-            <div>✓ User can immediately use it for board entry</div>
+            <div>✓ Credits user's btcPoolBalance and totalBtcEarned</div>
+            <div>✓ User can use it for board pool entry</div>
+            <div>⚠ Fund the USDT pool above before user enters board</div>
           </div>
-
           {btcCreditResult && <ResultBanner result={btcCreditResult} />}
-
           <Button
             data-testid="button-credit-btc-pool"
             onClick={handleCreditBtcPool}
