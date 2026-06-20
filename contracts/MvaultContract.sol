@@ -92,9 +92,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 usdtBalance;      // withdrawable USDT
         uint256 rebirthPool;      // USDT accumulating toward next rebirth
         uint256 totalUsdtEarned;  // lifetime USDT received to usdtBalance
-        // BTC pool (10% deducted from every sell, per user — like backup contract)
-        uint256 btcPoolBalance;   // accumulated USDT for BTC purchase
-        uint256 totalBtcEarned;   // lifetime BTC pool credits
+        // Legacy fields — no longer written to (kept for storage layout compatibility)
+        uint256 btcPoolBalance;
+        uint256 totalBtcEarned;
         // Package
         uint256 packagePrice;     // activation price paid ($75 or $150)
         uint256 incomeLimitCap;   // max income per cycle (3 × packagePrice)
@@ -112,8 +112,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         string  phone;
         string  country;
         bool    profileSet;
-        // BTC pool allocation rate: 10–80% (0 = default 10%)
-        uint8   btcPoolRate;
+        uint8   btcPoolRate; // legacy — no longer used
     }
 
     mapping(address => User) public users;
