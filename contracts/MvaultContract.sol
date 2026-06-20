@@ -61,6 +61,10 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // $20 of every activation/reactivation is carved out and auto-placed in Board Pool 1
     uint256 internal constant BOARD_AUTO_ENTRY = 20 * 1e18;
 
+    // ── Sell deduction rates ───────────────────────────────────────────────────
+    uint256 internal constant SELL_ADMIN_RATE = 5;  // 5% of USDT received → adminUsdtPool
+    uint256 internal constant SELL_DIST_HALF  = 5;  // 5% upline + 5% downline each
+
     // ── Pool allocation constants ──────────────────────────────────────────────
     uint256 internal constant LEVEL_ALLOC    = 30;
     uint256 internal constant COMMUNITY_ALLOC = 10;
@@ -127,6 +131,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint256 public rankPool;
     uint256 public communityPool;
 
+    // ── USDT admin pool (5% sell fee + unqualified sell distribution) ─────────
+    uint256 public adminUsdtPool;
+
     // Community wallet — receives 10% of grossMvt on every activation
     address public communityWallet;
 
@@ -155,6 +162,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint8 internal constant TX_REACTIVATION         = 15;
     uint8 internal constant TX_RANK_INCOME           = 16;
     uint8 internal constant TX_STAKING_LEVEL_INCOME  = 17;
+    uint8 internal constant TX_SELL_DIST             = 18; // sell upline/downline credit
     uint8 internal constant TX_BTC_WITHDRAW   = 8;
     uint8 internal constant TX_REBIRTH        = 9;
     uint8 internal constant TX_BOARD_ENTRY    = 10;
@@ -190,6 +198,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     event LevelIncomeSkipped(address indexed upline, uint8 level, uint256 amount);
     event PlacementIncomePaid(address indexed to, address indexed from, uint8 level, uint256 amount);
     event MvtSold(address indexed user, uint256 mvtAmount, uint256 usdtNet, uint256 usdtToBtcPool, uint256 usdtToIncome, uint256 usdtToRebirth);
+    event SellDistributed(address indexed seller, uint256 adminFee, uint256 upDist, uint256 downDist);
     event BtcPoolCredited(address indexed user, uint256 amount);
     event AdminUsdtDeposited(address indexed from, uint256 amount);
     event BtcPoolWithdrawn(address indexed user, uint256 amount);
@@ -826,17 +835,28 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         mvaultToken.sell(amount);
         uint256 usdtReceived = usdtToken.balanceOf(address(this)) - usdtBefore;
 
-        // ── Deduct BTC pool % (user-configurable 10–80%, default 10%) ───────
+        // ── Deduct BTC pool % (user-configurable 5–80%, default 5%) ────────
         uint256 _btcRate  = u.btcPoolRate != 0 ? u.btcPoolRate : BTC_POOL_RATE;
         uint256 btcCharge = (usdtReceived * _btcRate) / 100;
-        uint256 netUsdt   = usdtReceived - btcCharge;
 
         u.btcPoolBalance += btcCharge;
         u.totalBtcEarned += btcCharge;
         emit BtcPoolCredited(msg.sender, btcCharge);
         _recordTx(msg.sender, TX_BTC_CREDITED, btcCharge, 0, address(0));
 
-        // ── Route remaining 90% through income limit → rebirth pool ──────────
+        // ── 5% admin fee → adminUsdtPool ──────────────────────────────────────
+        uint256 adminFee = (usdtReceived * SELL_ADMIN_RATE) / 100;
+        adminUsdtPool += adminFee;
+
+        // ── 5% upline + 5% downline sell distribution ─────────────────────────
+        uint256 upDist   = (usdtReceived * SELL_DIST_HALF) / 100;
+        uint256 downDist = (usdtReceived * SELL_DIST_HALF) / 100;
+        _sellDist(msg.sender, upDist,   true);
+        _sellDist(msg.sender, downDist, false);
+        emit SellDistributed(msg.sender, adminFee, upDist, downDist);
+
+        // ── Route net through income limit → rebirth pool ────────────────────
+        uint256 netUsdt   = usdtReceived - btcCharge - adminFee - upDist - downDist;
         uint256 toIncome  = 0;
         uint256 toRebirth = 0;
 
@@ -854,6 +874,35 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
         emit MvtSold(msg.sender, amount, netUsdt, btcCharge, toIncome, toRebirth);
         _recordTx(msg.sender, TX_SELL_MVT, netUsdt, 0, address(0));
+    }
+
+    /**
+     * @dev Distribute `amt` USDT across 10 upline (sponsor chain) or downline
+     *      (leftChild→rightChild chain) levels using 40/20/10/6/4/4/4/4/4/4%
+     *      of amt per level (sums to 100% of amt = 5% of usdtReceived each way).
+     *      Active recipients get usdtBalance credited; inactive → adminUsdtPool.
+     */
+    function _sellDist(address from, uint256 amt, bool up) internal {
+        uint16[10] memory r = [uint16(200),100,50,30,20,20,20,20,20,20];
+        address cur = up
+            ? users[from].sponsor
+            : (users[from].leftChild != address(0) ? users[from].leftChild : users[from].rightChild);
+        uint256 dist;
+        for (uint8 i; i < 10 && cur != address(0); i++) {
+            uint256 s = amt * r[i] / 500;
+            if (users[cur].isActive) {
+                users[cur].usdtBalance    += s;
+                users[cur].totalUsdtEarned += s;
+                _recordTx(cur, TX_SELL_DIST, s, i + 1, from);
+            } else {
+                adminUsdtPool += s;
+            }
+            dist += s;
+            cur = up
+                ? users[cur].sponsor
+                : (users[cur].leftChild != address(0) ? users[cur].leftChild : users[cur].rightChild);
+        }
+        if (amt > dist) adminUsdtPool += amt - dist;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1173,6 +1222,17 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         users[to].mvtBalance    += amount;
         users[to].totalReceived += amount;
         emit AdminWithdraw(to, amount);
+    }
+
+    /**
+     * @notice Withdraw USDT from adminUsdtPool (accumulated 5% sell admin fees
+     *         and unqualified sell distribution shares) to any address.
+     */
+    function withdrawAdminUsdt(address to, uint256 amount) external onlyOwner {
+        if (to == address(0)) revert ZeroAddress();
+        require(amount <= adminUsdtPool, "ExceedsPool");
+        adminUsdtPool -= amount;
+        usdtToken.transfer(to, amount);
     }
 
     /**
