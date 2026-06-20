@@ -243,52 +243,58 @@ contract MvaultView {
     {
         data = new RankBatchEntry[](addrs.length);
         for (uint256 i = 0; i < addrs.length; i++) {
-            (
-                bool _reg, bool _act,
-                address _sp, uint256 _dc, address _bp, bool _pl, address _lc, address _rc,
-                uint256 _l, uint256 _r,
-                uint256 _mb, uint256 _tr, uint256 _ts, uint256 _il, uint256 _ub,
-                uint256 _rp, uint256 _tue, uint256 _bb, uint256 _tbe,
-                uint256 _pp, uint256 _ilc, address _ma, uint256 _rb,
-                uint8 _rk, uint256 _tsu, uint256 _ja,
-                string memory _dn, string memory _em, string memory _ph, string memory _co,
-                bool _prs
-            ) = mvault.users(addrs[i]);
-            _bp; _pl; _lc; _rc;
-            _mb; _tr; _ts; _il; _ub; _rp; _tue; _bb; _tbe;
-            _pp; _ilc; _ma; _rb; _ja;
-            _dn; _em; _ph; _co; _prs;
-            if (!_reg) continue;
-            data[i] = RankBatchEntry({
-                isActive:       _act,
-                rank:           _rk,
-                sponsor:        _sp,
-                directCount:    _dc,
-                teamSalesUsdt:  _tsu,
-                leftSubVolume:  _l,
-                rightSubVolume: _r
-            });
+            _fillRankEntry(data, i, addrs[i]);
         }
     }
 
+    function _fillRankEntry(RankBatchEntry[] memory data, uint256 idx, address addr) internal view {
+        (
+            bool reg_, bool act_,
+            address sp_, uint256 dc_, , , , ,
+            uint256 lv_, uint256 rv_,
+            , , , , , , , , ,
+            , , , ,
+            uint8 rk_, uint256 tsu_, ,
+            , , , ,
+            bool prs_
+        ) = mvault.users(addr);
+        prs_;
+        if (!reg_) return;
+        data[idx] = RankBatchEntry({
+            isActive:       act_,
+            rank:           rk_,
+            sponsor:        sp_,
+            directCount:    dc_,
+            teamSalesUsdt:  tsu_,
+            leftSubVolume:  lv_,
+            rightSubVolume: rv_
+        });
+    }
+
     // ── Board eligibility check ───────────────────────────────────────────────
+
+    function _getUserBoardData(address _user) internal view returns (bool act_, uint256 btc_) {
+        (
+            , bool a_, , , , , , , , ,
+            , , , , , , , uint256 b_,
+            , , , , , , , ,
+            , , , ,
+            bool p_
+        ) = mvault.users(_user);
+        p_;
+        act_ = a_;
+        btc_ = b_;
+    }
 
     function canEnterBoard(address _user) external view returns (
         bool eligible, uint256 btcBalance, uint256 boardPrice
     ) {
         address bh = mvault.boardHandler();
         if (bh == address(0)) return (false, 0, 0);
-        // users() returns 31 fields; pos 2=isActive, pos 18=btcPoolBalance
-        (
-            , bool _act, , , , , , , , ,
-            , , , , , , , uint256 _btc,
-            , , , , , , , ,
-            string memory _s1, string memory _s2, string memory _s3, string memory _s4,
-        ) = mvault.users(_user);
-        _s1; _s2; _s3; _s4;
-        btcBalance = _btc;
+        bool act_;
+        (act_, btcBalance) = _getUserBoardData(_user);
         boardPrice = IBoardHandler(bh).getBoardPrice(1);
-        eligible   = _act && btcBalance >= boardPrice;
+        eligible   = act_ && btcBalance >= boardPrice;
     }
 
     // ── Contract addresses ────────────────────────────────────────────────────

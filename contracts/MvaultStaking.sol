@@ -93,55 +93,53 @@ contract MvaultStaking is Ownable, ReentrancyGuard {
         usdtToken.safeTransferFrom(address(mvaultMain), address(this), amount);
 
         // Mint MVT via bonding curve (mints 90% of theoretical = grossMvt)
-        usdtToken.approve(address(mvaultToken), amount);
-        uint256 balBefore = mvaultToken.balanceOf(address(this));
-        mvaultToken.addLiquidityAndMint(address(this), amount);
-        uint256 grossMvt = mvaultToken.balanceOf(address(this)) - balBefore;
-        if (grossMvt == 0) revert NoMvtMinted();
+        uint256 grossMvt;
+        {
+            usdtToken.approve(address(mvaultToken), amount);
+            uint256 balBefore = mvaultToken.balanceOf(address(this));
+            mvaultToken.addLiquidityAndMint(address(this), amount);
+            grossMvt = mvaultToken.balanceOf(address(this)) - balBefore;
+            if (grossMvt == 0) revert NoMvtMinted();
+        }
 
-        // 20% → 10 upline levels; compute distribution locally, then batch-credit via callback
-        uint256[10] memory levelRates = [uint256(100), 50, 20, 10, 5, 5, 3, 3, 2, 2];
-        (address[] memory sponsors, bool[] memory actives) =
-            mvaultMain.staking_getSponsorChain(user, 10);
+        // 20% → 10 upline levels; batch-credit via callback, remainder → admin
+        uint256 levelDistributed;
+        uint256 levelToAdmin;
+        {
+            uint256[10] memory levelRates = [uint256(100), 50, 20, 10, 5, 5, 3, 3, 2, 2];
+            (address[] memory sponsors, bool[] memory actives) =
+                mvaultMain.staking_getSponsorChain(user, 10);
+            address[]  memory creditTos     = new address[](10);
+            uint8[]    memory creditLevels  = new uint8[](10);
+            uint256[]  memory creditAmounts = new uint256[](10);
+            uint256 creditCount = 0;
 
-        address[]  memory creditTos     = new address[](10);
-        uint8[]    memory creditLevels  = new uint8[](10);
-        uint256[]  memory creditAmounts = new uint256[](10);
-        uint256 creditCount      = 0;
-        uint256 levelDistributed = 0;
-        uint256 levelToAdmin     = 0;
+            for (uint8 i = 0; i < 10; i++) {
+                uint256 share = grossMvt * levelRates[i] / 1000;
+                if (share == 0) continue;
+                if (i >= sponsors.length || sponsors[i] == address(0) || !actives[i]) {
+                    levelToAdmin += share;
+                } else {
+                    creditTos[creditCount]     = sponsors[i];
+                    creditLevels[creditCount]  = i + 1;
+                    creditAmounts[creditCount] = share;
+                    creditCount++;
+                    levelDistributed += share;
+                    emit StakeLevelIncomePaid(sponsors[i], user, i + 1, share);
+                }
+            }
 
-        for (uint8 i = 0; i < 10; i++) {
-            uint256 share = grossMvt * levelRates[i] / 1000;
-            if (share == 0) continue;
-            if (i >= sponsors.length || sponsors[i] == address(0) || !actives[i]) {
-                levelToAdmin += share;
-            } else {
-                creditTos[creditCount]     = sponsors[i];
-                creditLevels[creditCount]  = i + 1;
-                creditAmounts[creditCount] = share;
-                creditCount++;
-                levelDistributed += share;
-                emit StakeLevelIncomePaid(sponsors[i], user, i + 1, share);
+            if (creditCount > 0) {
+                assembly { mstore(creditTos, creditCount) mstore(creditLevels, creditCount) mstore(creditAmounts, creditCount) }
+                mvaultMain.staking_batchCreditMvtIncome(user, creditTos, creditLevels, creditAmounts);
             }
         }
 
-        if (creditCount > 0) {
-            // Trim arrays to actual length
-            assembly { mstore(creditTos, creditCount) mstore(creditLevels, creditCount) mstore(creditAmounts, creditCount) }
-            mvaultMain.staking_batchCreditMvtIncome(user, creditTos, creditLevels, creditAmounts);
-        }
-
-        // 10% → adminPool + unqualified level shares (5% base + 5% from removed liquidity slice)
-        uint256 adminAmt = grossMvt * 10 / 100;
-
-        // 70% → user stake (90% mint + sell rate provides natural price support; no separate liquidity slice needed)
+        // 10% → adminPool; remainder → user stake
+        uint256 adminAmt  = grossMvt * 10 / 100;
         uint256 stakedMvt = grossMvt - levelDistributed - levelToAdmin - adminAmt;
         if (stakedMvt == 0) revert NoMvtMinted();
 
-        // Transfer all non-staked MVT to MvaultContract so virtual mvtBalance + adminPool credits
-        // are backed by real ERC20 tokens that MvaultContract can burn when users call sellMvt().
-        // Only stakedMvt stays here (burned on unstake via mvaultToken.sell()).
         uint256 toTransfer = levelDistributed + levelToAdmin + adminAmt;
         if (toTransfer > 0) {
             IERC20(address(mvaultToken)).safeTransfer(address(mvaultMain), toTransfer);
@@ -178,35 +176,7 @@ contract MvaultStaking is Ownable, ReentrancyGuard {
         uint256 usdtCap  = pos.usdtInvested * FLEX_CAP_MULT;
         uint256 toSell   = totalMvt;
 
-        {
-            uint8 depth = isLocked ? 5 : 1;
-            (address[] memory sponsors, bool[] memory actives) =
-                mvaultMain.staking_getSponsorChain(user, depth);
-
-            address[] memory tos     = new address[](depth);
-            uint8[]   memory lvls    = new uint8[](depth);
-            uint256[] memory amts    = new uint256[](depth);
-            uint256 cnt = 0;
-
-            uint8[5] memory rates = isLocked ? [uint8(5), 2, 1, 1, 1] : [uint8(5), 0, 0, 0, 0];
-
-            for (uint8 i = 0; i < uint8(sponsors.length); i++) {
-                if (rates[i] == 0) break;
-                if (!actives[i] || sponsors[i] == address(0)) continue;
-                uint256 share = (totalMvt * rates[i]) / 100;
-                if (share == 0) continue;
-                tos[cnt]  = sponsors[i];
-                lvls[cnt] = i + 1;
-                amts[cnt] = share;
-                cnt++;
-                toSell -= share;
-                emit StakeLevelIncomePaid(sponsors[i], user, i + 1, share);
-            }
-            if (cnt > 0) {
-                assembly { mstore(tos, cnt) mstore(lvls, cnt) mstore(amts, cnt) }
-                mvaultMain.staking_batchCreditMvtIncome(user, tos, lvls, amts);
-            }
-        }
+        toSell -= _unstakeDist(user, totalMvt, isLocked);
 
         // Sell remaining MVT → USDT lands in this contract
         uint256 usdtBefore = usdtToken.balanceOf(address(this));
@@ -227,6 +197,33 @@ contract MvaultStaking is Ownable, ReentrancyGuard {
         }
         mvaultMain.staking_postUnstake(user, usdtToUser, adminCapCut);
         emit Unstaked(user, stakeIndex, totalMvt, usdtToUser, adminCapCut);
+    }
+
+    function _unstakeDist(address user, uint256 totalMvt, bool isLocked) internal returns (uint256 distributed) {
+        uint8 depth = isLocked ? 5 : 1;
+        (address[] memory sponsors, bool[] memory actives) =
+            mvaultMain.staking_getSponsorChain(user, depth);
+        address[] memory tos  = new address[](depth);
+        uint8[]   memory lvls = new uint8[](depth);
+        uint256[] memory amts = new uint256[](depth);
+        uint256 cnt;
+        uint8[5] memory rates = isLocked ? [uint8(5), 2, 1, 1, 1] : [uint8(5), 0, 0, 0, 0];
+        for (uint8 i = 0; i < uint8(sponsors.length); i++) {
+            if (rates[i] == 0) break;
+            if (!actives[i] || sponsors[i] == address(0)) continue;
+            uint256 share = (totalMvt * rates[i]) / 100;
+            if (share == 0) continue;
+            tos[cnt] = sponsors[i];
+            lvls[cnt] = i + 1;
+            amts[cnt] = share;
+            cnt++;
+            distributed += share;
+            emit StakeLevelIncomePaid(sponsors[i], user, i + 1, share);
+        }
+        if (cnt > 0) {
+            assembly { mstore(tos, cnt) mstore(lvls, cnt) mstore(amts, cnt) }
+            mvaultMain.staking_batchCreditMvtIncome(user, tos, lvls, amts);
+        }
     }
 
     /**
