@@ -68,7 +68,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint256 internal constant ADMIN_ALLOC    = 20;
     uint256 internal constant RANK_ALLOC     = 10;
     // Liquidity 10% handled internally by MvaultToken (only 90% minted)
-    uint256 internal constant BTC_POOL_RATE  = 10;
+    uint256 internal constant BTC_POOL_RATE  = 5;
 
     // ── User record ───────────────────────────────────────────────────────────
     struct User {
@@ -1288,7 +1288,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     }
 
     function setBtcPoolRate(uint8 _rate) external {
-        require(users[msg.sender].isRegistered && _rate >= 10 && _rate <= 80, "E");
+        require(users[msg.sender].isRegistered && _rate >= 5 && _rate <= 80, "E");
         users[msg.sender].btcPoolRate = _rate;
     }
 
