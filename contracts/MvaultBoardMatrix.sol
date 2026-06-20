@@ -46,7 +46,7 @@ contract MvaultBoardMatrix is Ownable, ReentrancyGuard {
     }
 
     uint256 public constant TOTAL_BOARDS            = 6;
-    uint256 public constant BOARD_MEMBERS_REQUIRED  = 9;
+    uint256 public constant BOARD_MEMBERS_REQUIRED  = 12;
     uint256 public constant BOARD_POOL_MEMBERS      = 9;    // 9 members × price = total pool
     uint256 public constant BOARD_REWARD_RATE_BP    = 4000; // 40% → owner reward (pools 1-5)
     uint256 public constant BOARD_NEXT_POOL_RATE_BP = 4000; // 40% → next pool entry (pools 1-5)
