@@ -68,6 +68,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint256 internal constant ADMIN_ALLOC    = 20;
     uint256 internal constant RANK_ALLOC     = 10;
     // Liquidity 10% handled internally by MvaultToken (only 90% minted)
+    uint256 internal constant BTC_POOL_RATE  = 10;
 
     // ── User record ───────────────────────────────────────────────────────────
     struct User {
@@ -92,9 +93,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 usdtBalance;      // withdrawable USDT
         uint256 rebirthPool;      // USDT accumulating toward next rebirth
         uint256 totalUsdtEarned;  // lifetime USDT received to usdtBalance
-        // Legacy fields — no longer written to (kept for storage layout compatibility)
-        uint256 btcPoolBalance;
-        uint256 totalBtcEarned;
+        // BTC pool (10% deducted from every sell, per user — like backup contract)
+        uint256 btcPoolBalance;   // accumulated USDT for BTC purchase
+        uint256 totalBtcEarned;   // lifetime BTC pool credits
         // Package
         uint256 packagePrice;     // activation price paid ($75 or $150)
         uint256 incomeLimitCap;   // max income per cycle (3 × packagePrice)
@@ -112,7 +113,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         string  phone;
         string  country;
         bool    profileSet;
-        uint8   btcPoolRate; // legacy — no longer used
+        // BTC pool allocation rate: 10–80% (0 = default 10%)
+        uint8   btcPoolRate;
     }
 
     mapping(address => User) public users;
@@ -148,10 +150,12 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint8 internal constant TX_PLACEMENT_INCOME  = 3;
     uint8 internal constant TX_PLACEMENT_MISSED  = 4;
     uint8 internal constant TX_SELL_MVT          = 5;
+    uint8 internal constant TX_BTC_CREDITED   = 6;
     uint8 internal constant TX_USDT_WITHDRAW  = 7;
     uint8 internal constant TX_REACTIVATION         = 15;
     uint8 internal constant TX_RANK_INCOME           = 16;
     uint8 internal constant TX_STAKING_LEVEL_INCOME  = 17;
+    uint8 internal constant TX_BTC_WITHDRAW   = 8;
     uint8 internal constant TX_REBIRTH        = 9;
     uint8 internal constant TX_BOARD_ENTRY    = 10;
     uint8 internal constant TX_BOARD_REWARD   = 11;
@@ -185,8 +189,10 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     event LevelIncomePaid(address indexed to, address indexed from, uint8 level, uint256 amount);
     event LevelIncomeSkipped(address indexed upline, uint8 level, uint256 amount);
     event PlacementIncomePaid(address indexed to, address indexed from, uint8 level, uint256 amount);
-    event MvtSold(address indexed user, uint256 mvtAmount, uint256 usdtNet, uint256 usdtToIncome, uint256 usdtToRebirth);
+    event MvtSold(address indexed user, uint256 mvtAmount, uint256 usdtNet, uint256 usdtToBtcPool, uint256 usdtToIncome, uint256 usdtToRebirth);
+    event BtcPoolCredited(address indexed user, uint256 amount);
     event AdminUsdtDeposited(address indexed from, uint256 amount);
+    event BtcPoolWithdrawn(address indexed user, uint256 amount);
     event UsdtWithdrawn(address indexed user, uint256 amount);
     event Reborn(address indexed mainAccount, address indexed subAccount, uint256 rebirthIndex);
     event Reactivated(address indexed user, uint256 pkgPrice, uint256 grossMvt, bool upgraded);
@@ -217,6 +223,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     error PositionTaken();
     error InsufficientVirtualBalance();
     error InsufficientUsdtBalance();
+    error InsufficientBtcPool();
     error InsufficientRebirthPool();
     error NoOpenBinarySlot();
     error ZeroAddress();
@@ -227,6 +234,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     error IncomeNotExhausted();
     error CannotDowngradePackage();
     error BoardHandlerNotSet();
+    error InsufficientBtcPoolForBoard();
     error NotBoardHandler();
     error ExceedsPool();
     error SubAccountAlreadyRegistered();
@@ -322,6 +330,39 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     modifier onlyStakingModule() {
         if (msg.sender != address(stakingModule)) revert NotStakingModule();
         _;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // BOARD MATRIX — ENTRY
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Use your BTC pool balance to enter the Board Matrix at Level 1.
+     *         BTC pool fills automatically (10% of every MVT sell).
+     *         Requires boardHandler to be set by admin.
+     */
+    function enterBoardPool() external nonReentrant {
+        if (address(boardHandler) == address(0)) revert BoardHandlerNotSet();
+
+        User storage u = users[msg.sender];
+        if (!u.isActive) revert NotActive();
+
+        uint256 price = boardHandler.getBoardPrice(1);
+        if (u.btcPoolBalance < price) revert InsufficientBtcPoolForBoard();
+
+        // Deduct from user's BTC pool
+        u.btcPoolBalance -= price;
+
+        // Transfer USDT to board handler
+        bool ok = usdtToken.transfer(address(boardHandler), price);
+        if (!ok) revert TransferFailed();
+
+        // Register entry in board matrix
+        boardEntryCount[msg.sender]++;
+        boardHandler.enterBoard(msg.sender, 1);
+
+        emit BoardEntered(msg.sender, 1, price);
+        _recordTx(msg.sender, TX_BOARD_ENTRY, price, 1, address(0));
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -785,8 +826,17 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         mvaultToken.sell(amount);
         uint256 usdtReceived = usdtToken.balanceOf(address(this)) - usdtBefore;
 
-        // ── Route full USDT through income limit → rebirth pool ──────────────
-        uint256 netUsdt   = usdtReceived;
+        // ── Deduct BTC pool % (user-configurable 10–80%, default 10%) ───────
+        uint256 _btcRate  = u.btcPoolRate != 0 ? u.btcPoolRate : BTC_POOL_RATE;
+        uint256 btcCharge = (usdtReceived * _btcRate) / 100;
+        uint256 netUsdt   = usdtReceived - btcCharge;
+
+        u.btcPoolBalance += btcCharge;
+        u.totalBtcEarned += btcCharge;
+        emit BtcPoolCredited(msg.sender, btcCharge);
+        _recordTx(msg.sender, TX_BTC_CREDITED, btcCharge, 0, address(0));
+
+        // ── Route remaining 90% through income limit → rebirth pool ──────────
         uint256 toIncome  = 0;
         uint256 toRebirth = 0;
 
@@ -802,7 +852,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
         u.rebirthPool += toRebirth;
 
-        emit MvtSold(msg.sender, amount, netUsdt, toIncome, toRebirth);
+        emit MvtSold(msg.sender, amount, netUsdt, btcCharge, toIncome, toRebirth);
         _recordTx(msg.sender, TX_SELL_MVT, netUsdt, 0, address(0));
     }
 
@@ -824,6 +874,28 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
         emit UsdtWithdrawn(msg.sender, amount);
         _recordTx(msg.sender, TX_USDT_WITHDRAW, amount, 0, address(0));
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // WITHDRAW BTC POOL
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /**
+     * @notice Withdraw from your BTC pool balance.
+     *         The USDT is sent to your wallet; the frontend/app handles BTC swap.
+     *         10% of every sell accumulates here (same as backup contract pattern).
+     */
+    function withdrawBtcPool(uint256 amount) external nonReentrant {
+        if (amount == 0) revert ZeroAmount();
+        User storage u = users[msg.sender];
+        if (u.btcPoolBalance < amount) revert InsufficientBtcPool();
+
+        u.btcPoolBalance -= amount;
+        bool ok = usdtToken.transfer(msg.sender, amount);
+        if (!ok) revert TransferFailed();
+
+        emit BtcPoolWithdrawn(msg.sender, amount);
+        _recordTx(msg.sender, TX_BTC_WITHDRAW, amount, 0, address(0));
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -1215,6 +1287,12 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         emit ProfileUpdated(msg.sender);
     }
 
+    function setBtcPoolRate(uint8 _rate) external {
+        require(users[msg.sender].isRegistered && _rate >= 10 && _rate <= 80, "E");
+        users[msg.sender].btcPoolRate = _rate;
+    }
+
+
     /**
      * @notice Get direct referrals of a user with pagination (newest first).
      */
@@ -1270,6 +1348,20 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         rankPool = 0;
         adminPool += pool;
         emit RankIncomeDistributed(pool, 0);
+    }
+
+    /**
+     * @notice OWNER/MANAGER: Deposit real USDT from caller into the contract
+     *         and credit it to a user's btcPoolBalance.
+     *         Caller must have approved this contract for `amount` USDT first.
+     */
+    function adminCreditBtcPool(address user, uint256 amount) external onlyOwnerOrManager {
+        if (user == address(0)) revert ZeroAddress();
+        if (amount == 0) revert ZeroAmount();
+        users[user].btcPoolBalance += amount;
+        users[user].totalBtcEarned += amount;
+        _recordTx(user, TX_BTC_CREDITED, amount, 0, msg.sender);
+        emit BtcPoolCredited(user, amount);
     }
 
     /**
