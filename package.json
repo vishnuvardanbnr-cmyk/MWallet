@@ -85,6 +85,7 @@
     "zod-validation-error": "^3.5.4"
   },
   "devDependencies": {
+    "@openzeppelin/contracts": "^5.6.1",
     "@replit/vite-plugin-cartographer": "^0.4.11",
     "@replit/vite-plugin-dev-banner": "^0.1.2",
     "@replit/vite-plugin-runtime-error-modal": "^0.0.3",
@@ -104,6 +105,7 @@
     "drizzle-kit": "^0.31.10",
     "esbuild": "^0.25.12",
     "postcss": "^8.5.8",
+    "solc": "^0.8.35",
     "tailwindcss": "^3.4.19",
     "tsx": "^4.21.0",
     "typescript": "^5.6.3",
