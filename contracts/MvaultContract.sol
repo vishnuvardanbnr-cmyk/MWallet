@@ -54,10 +54,12 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     IMvaultStaking      public           stakingModule;
 
     // ── Package constants ──────────────────────────────────────────────────────
-    uint256 internal constant PRICE_STARTER  = 55  * 1e18;
-    uint256 internal constant INCOME_STARTER = 165 * 1e18;
-    uint256 internal constant PRICE_PRO      = 130 * 1e18;
-    uint256 internal constant INCOME_PRO     = 390 * 1e18;
+    uint256 internal constant PRICE_STARTER  =  75 * 1e18;
+    uint256 internal constant INCOME_STARTER = 225 * 1e18;
+    uint256 internal constant PRICE_PRO      = 150 * 1e18;
+    uint256 internal constant INCOME_PRO     = 450 * 1e18;
+    // $20 of every activation/reactivation is carved out and auto-placed in Board Pool 1
+    uint256 internal constant BOARD_AUTO_ENTRY = 20 * 1e18;
 
     // ── Pool allocation constants ──────────────────────────────────────────────
     uint256 internal constant LEVEL_ALLOC    = 30;
@@ -95,7 +97,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 btcPoolBalance;   // accumulated USDT for BTC purchase
         uint256 totalBtcEarned;   // lifetime BTC pool credits
         // Package
-        uint256 packagePrice;     // activation price paid ($55 or $130)
+        uint256 packagePrice;     // activation price paid ($75 or $150)
         uint256 incomeLimitCap;   // max income per cycle (3 × packagePrice)
         // Rebirth
         address mainAccount;      // if sub-account → points to main; else address(0)
@@ -522,8 +524,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
     /**
      * @dev Resolves package params from pkg index.
-     *      pkg=1 → STARTER ($55 / $165 limit)
-     *      pkg=2 → PRO     ($130 / $390 limit)
+     *      pkg=1 → STARTER ($75 / $225 limit)
+     *      pkg=2 → PRO     ($150 / $450 limit)
+     *      $20 of the price is auto-placed into Board Pool 1 on activation.
      */
     function _pkgParams(uint8 pkg) internal pure returns (uint256 price, uint256 incomeCap) {
         if (pkg == 1) return (PRICE_STARTER, INCOME_STARTER);
@@ -533,8 +536,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
     /**
      * @notice Pay USDT and activate. Choose your package:
-     *         pkg=1 → STARTER $55  (income limit $165)
-     *         pkg=2 → PRO     $130 (income limit $390)
+     *         pkg=1 → STARTER $75  (income limit $225, $20 auto board entry)
+     *         pkg=2 → PRO     $150 (income limit $450, $20 auto board entry)
      *         Caller must have pre-approved this contract for the chosen package price.
      */
     function activate(uint8 pkg) external nonReentrant {
@@ -553,7 +556,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      * @notice Activate using your in-contract USDT balance (usdtBalance).
      *         Useful if you have accumulated USDT from income/unstaking and want to
      *         self-activate without an external wallet transfer.
-     *         pkg=1 → STARTER ($55)   pkg=2 → PRO ($130)
+     *         pkg=1 → STARTER ($75)   pkg=2 → PRO ($150)
      */
     function activateFromBalance(uint8 pkg) external nonReentrant {
         User storage u = users[msg.sender];
@@ -572,7 +575,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      *         Caller (msg.sender) becomes the direct sponsor of `newUser`.
      *         USDT is deducted from the caller's in-contract virtual usdtBalance.
      *         No external wallet approval needed — uses earned income already in the contract.
-     *         pkg=1 → STARTER ($55)   pkg=2 → PRO ($130)
+     *         pkg=1 → STARTER ($75)   pkg=2 → PRO ($150)
      */
     function registerAndActivateFor(
         address newUser,
@@ -618,19 +621,32 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
     /**
      * @dev Core activation logic.  USDT must already be in this contract before calling.
-     *      pkgPrice   — amount paid ($55e18 or $130e18)
-     *      incomeCap  — max income this cycle ($165e18 or $390e18)
+     *      pkgPrice   — amount paid ($75e18 or $150e18)
+     *      incomeCap  — max income this cycle ($225e18 or $450e18)
+     *      $20 is carved out first for Board Pool 1 auto-entry; the remaining
+     *      $55/$130 base (mvtBase = pkgPrice − $20) drives MVT minting and income distribution.
      */
     function _doActivate(address user, uint256 pkgPrice, uint256 incomeCap) internal {
+        // ── Auto board matrix entry: carve out $20 → Board Pool 1 ────────────
+        uint256 mvtBase = pkgPrice;
+        if (address(boardHandler) != address(0) && pkgPrice >= BOARD_AUTO_ENTRY) {
+            mvtBase = pkgPrice - BOARD_AUTO_ENTRY;
+            usdtToken.transfer(address(boardHandler), BOARD_AUTO_ENTRY);
+            boardEntryCount[user]++;
+            boardHandler.enterBoard(user, 1);
+            emit BoardEntered(user, 1, BOARD_AUTO_ENTRY);
+            _recordTx(user, TX_BOARD_ENTRY, BOARD_AUTO_ENTRY, 1, address(0));
+        }
+
         // Snapshot buy price BEFORE minting (price rises after)
         uint256 buyPrice = mvaultToken.getBuyPrice();
-        // Gross MVT = what pkgPrice buys at current price
-        uint256 grossMvt = (pkgPrice * 1e18) / buyPrice;
+        // Gross MVT = what mvtBase buys at current price
+        uint256 grossMvt = (mvtBase * 1e18) / buyPrice;
 
-        // Approve token contract and mint
-        usdtToken.approve(address(mvaultToken), pkgPrice);
+        // Approve token contract and mint on mvtBase
+        usdtToken.approve(address(mvaultToken), mvtBase);
         uint256 before = mvaultToken.balanceOf(address(this));
-        mvaultToken.addLiquidityAndMint(address(this), pkgPrice);
+        mvaultToken.addLiquidityAndMint(address(this), mvtBase);
         uint256 minted = mvaultToken.balanceOf(address(this)) - before; // actual 90%
 
         // Split on GROSS basis: 30% level + 10% community + 20% placement + 20% admin + 10% rank
@@ -947,8 +963,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     }
 
     /**
-     * @notice Claim a partial rebirth pool balance (< $130) back to USDT balance.
-     *         If rebirthPool >= $130 the user must use rebirth() instead.
+     * @notice Claim a partial rebirth pool balance (< $150) back to USDT balance.
+     *         If rebirthPool >= $150 the user must use rebirth() instead.
      *         This allows users to recover small overflow amounts that are not
      *         enough to trigger a full rebirth.
      */
@@ -971,8 +987,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     //
     // When a user's incomeLimit reaches 0 they have two options:
     //   A) Reactivate at their current pkg price → income limit resets.
-    //   B) Upgrade from STARTER → PRO by paying $130 → income limit resets
-    //      to $390, packagePrice updated to PRO, rebirth becomes eligible.
+    //   B) Upgrade from STARTER → PRO by paying $150 → income limit resets
+    //      to $450, packagePrice updated to PRO, rebirth becomes eligible.
     //
     // Rules:
     //   • Caller must be active and have incomeLimit == 0.
@@ -982,8 +998,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
     /**
      * @notice Reactivate (or upgrade) by paying USDT from your wallet.
-     *         pkg=1 → STARTER $55  (resets limit to $165, no rebirth)
-     *         pkg=2 → PRO     $130 (resets limit to $390, rebirth eligible)
+     *         pkg=1 → STARTER $75  (resets limit to $225, no rebirth)
+     *         pkg=2 → PRO     $150 (resets limit to $450, rebirth eligible)
      *         Caller must pre-approve the contract for the chosen pkg price.
      */
     function reactivate(uint8 pkg) external nonReentrant {
@@ -1002,7 +1018,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
     /**
      * @notice Reactivate (or upgrade) using your in-contract USDT balance.
-     *         pkg=1 → STARTER $55   pkg=2 → PRO $130
+     *         pkg=1 → STARTER $75   pkg=2 → PRO $150
      */
     function reactivateFromBalance(uint8 pkg) external nonReentrant {
         User storage u = users[msg.sender];
@@ -1020,15 +1036,27 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     /**
      * @dev Core reactivation logic. Same MVT minting / distribution as activation.
      *      Updates packagePrice and incomeLimitCap to reflect any upgrade.
+     *      $20 is carved out for Board Pool 1 auto-entry (same as activation).
      */
     function _doReactivate(address user, uint256 pkgPrice, uint256 incomeCap) internal {
         bool upgraded = (users[user].packagePrice != pkgPrice);
 
-        uint256 buyPrice = mvaultToken.getBuyPrice();
-        uint256 grossMvt = (pkgPrice * 1e18) / buyPrice;
+        // ── Auto board matrix entry: carve out $20 → Board Pool 1 ────────────
+        uint256 mvtBase = pkgPrice;
+        if (address(boardHandler) != address(0) && pkgPrice >= BOARD_AUTO_ENTRY) {
+            mvtBase = pkgPrice - BOARD_AUTO_ENTRY;
+            usdtToken.transfer(address(boardHandler), BOARD_AUTO_ENTRY);
+            boardEntryCount[user]++;
+            boardHandler.enterBoard(user, 1);
+            emit BoardEntered(user, 1, BOARD_AUTO_ENTRY);
+            _recordTx(user, TX_BOARD_ENTRY, BOARD_AUTO_ENTRY, 1, address(0));
+        }
 
-        usdtToken.approve(address(mvaultToken), pkgPrice);
-        mvaultToken.addLiquidityAndMint(address(this), pkgPrice);
+        uint256 buyPrice = mvaultToken.getBuyPrice();
+        uint256 grossMvt = (mvtBase * 1e18) / buyPrice;
+
+        usdtToken.approve(address(mvaultToken), mvtBase);
+        mvaultToken.addLiquidityAndMint(address(this), mvtBase);
 
         uint256 levelAmt     = (grossMvt * LEVEL_ALLOC)     / 100;
         uint256 communityAmt = (grossMvt * COMMUNITY_ALLOC) / 100;

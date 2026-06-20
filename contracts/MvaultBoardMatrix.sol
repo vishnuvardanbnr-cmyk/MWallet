@@ -9,23 +9,26 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 // ─────────────────────────────────────────────────────────────────────────────
 // MvaultBoardMatrix
 //
-// Board Matrix System (10 levels):
-//   Users fund entry using their BTC pool balance (accumulated from MVT sells).
-//   Each board needs 12 members to complete.
-//   Pool = boardPrice × 9 members.
+// Board Matrix System (6 pools):
+//   $20 is carved out of every activation/reactivation and placed in Pool 1.
+//   Each pool needs 9 members to complete.
+//   Pool reward = boardPrice × 9 members.
 //
-//   Boards 1–9 on completion:
-//     40% → owner reward      (USDT sent directly to owner)
-//     40% → next board entry  (auto-enters owner into next level)
+//   Pools 1–5 on completion (40/40/20 split):
+//     40% → owner reward      (USDT credited back to MvaultContract for owner)
+//     40% → next pool entry   (auto-enters owner into next level; USDT stays in contract)
 //     20% → liquidity address
 //
-//   Board 10 (final) on completion:
-//     87.5% → owner reward
-//      6.25% → system address
-//      6.25% → liquidity address
+//   Pool 6 (final) on completion (~76.52/23.48 split):
+//     76.52% → owner reward
+//     23.48% → liquidity address
+//
+// Pool prices (derived from $20 × 9 × 0.4 = $72 chain):
+//   Pool 1: $20      Pool 2: $72      Pool 3: $259.20
+//   Pool 4: $933.12  Pool 5: $3,359.23  Pool 6: $12,093.24
 //
 // Entry:
-//   MvaultContract calls enterBoard(user, 1) after deducting from btcPoolBalance.
+//   MvaultContract automatically calls enterBoard(user, 1) on every activation.
 //   USDT is transferred from MvaultContract to this contract before calling enterBoard.
 // ─────────────────────────────────────────────────────────────────────────────
 
@@ -42,15 +45,15 @@ contract MvaultBoardMatrix is Ownable, ReentrancyGuard {
         bool    completed;
     }
 
-    uint256 public constant TOTAL_BOARDS            = 10;
-    uint256 public constant BOARD_MEMBERS_REQUIRED  = 12;
-    uint256 public constant BOARD_POOL_MEMBERS      = 9;   // used for pool calculation
-    uint256 public constant BOARD_REWARD_RATE_BP    = 4000; // 40%
-    uint256 public constant BOARD_NEXT_POOL_RATE_BP = 4000; // 40%
-    uint256 public constant BOARD_LIQUIDITY_RATE_BP = 2000; // 20%
-    uint256 public constant BOARD_10_REWARD_RATE_BP    = 8750; // 87.50%
-    uint256 public constant BOARD_10_SYSTEM_RATE_BP    = 625;  //  6.25%
-    uint256 public constant BOARD_10_LIQUIDITY_RATE_BP = 625;  //  6.25%
+    uint256 public constant TOTAL_BOARDS            = 6;
+    uint256 public constant BOARD_MEMBERS_REQUIRED  = 9;
+    uint256 public constant BOARD_POOL_MEMBERS      = 9;    // 9 members × price = total pool
+    uint256 public constant BOARD_REWARD_RATE_BP    = 4000; // 40% → owner reward (pools 1-5)
+    uint256 public constant BOARD_NEXT_POOL_RATE_BP = 4000; // 40% → next pool entry (pools 1-5)
+    uint256 public constant BOARD_LIQUIDITY_RATE_BP = 2000; // 20% → liquidity (pools 1-5)
+    // Pool 6 (final): no next pool — split between reward and liquidity
+    uint256 public constant BOARD_FINAL_REWARD_RATE_BP    = 7652; // 76.52%
+    uint256 public constant BOARD_FINAL_LIQUIDITY_RATE_BP = 2348; //  23.48%
     uint256 public constant BASIS_POINTS            = 10000;
 
     mapping(uint256 => BoardMatrix[]) internal _boardMatrices;
@@ -65,18 +68,16 @@ contract MvaultBoardMatrix is Ownable, ReentrancyGuard {
     mapping(address => uint256) public pendingBoardRewards;
     mapping(address => uint256) public pendingBoardLevel;
 
-    uint256[11] public boardPrices; // index 1–10
+    uint256[7] public boardPrices; // index 1–6
 
     IERC20  public immutable usdtToken;
     address public mvaultContract;
     address public liquidityAddress;
-    address public systemAddress;
 
     event BoardEntered(address indexed user, uint256 indexed boardLevel, uint256 matrixIndex);
     event BoardCompleted(address indexed owner, uint256 indexed boardLevel, uint256 reward, uint256 liquidity);
     event BoardHandlerSet(address indexed mvaultContract);
     event LiquidityAddressSet(address indexed addr);
-    event SystemAddressSet(address indexed addr);
     event PendingBoardReward(address indexed user, uint256 amount, uint256 boardLevel);
     event PendingBoardRewardSettled(address indexed user, uint256 amount);
 
@@ -90,18 +91,15 @@ contract MvaultBoardMatrix is Ownable, ReentrancyGuard {
         require(_usdt != address(0), "ZA");
         usdtToken = IERC20(_usdt);
 
-        // Board prices derived from 40/40/20 split: price[N+1] = price[N] × 9 × 0.4 = price[N] × 3.6
+        // Board prices: Pool 1 entry = $20 (auto-funded from activation)
+        // price[N+1] = price[N] × 9 × 0.40  (the 40% that flows forward)
         // Using 18-decimal USDT (1e18 = $1)
-        boardPrices[1]  = 50       * 1e18;
-        boardPrices[2]  = 180      * 1e18;
-        boardPrices[3]  = 648      * 1e18;
-        boardPrices[4]  = 2333     * 1e18;
-        boardPrices[5]  = 8398     * 1e18;
-        boardPrices[6]  = 30233    * 1e18;
-        boardPrices[7]  = 108839   * 1e18;
-        boardPrices[8]  = 391821   * 1e18;
-        boardPrices[9]  = 1410555  * 1e18;
-        boardPrices[10] = 5077998  * 1e18;
+        boardPrices[1] = 20 * 1e18;              //  $20.00
+        boardPrices[2] = 72 * 1e18;              //  $72.00
+        boardPrices[3] = 2592 * 1e17;            // $259.20
+        boardPrices[4] = 93312 * 1e16;           // $933.12
+        boardPrices[5] = 3359232 * 1e15;         // $3,359.232
+        boardPrices[6] = 120932352 * 1e14;       // $12,093.2352
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -118,12 +116,6 @@ contract MvaultBoardMatrix is Ownable, ReentrancyGuard {
         require(_addr != address(0), "ZA");
         liquidityAddress = _addr;
         emit LiquidityAddressSet(_addr);
-    }
-
-    function setSystemAddress(address _addr) external onlyOwner {
-        require(_addr != address(0), "ZA");
-        systemAddress = _addr;
-        emit SystemAddressSet(_addr);
     }
 
     function setBoardPrice(uint256 _level, uint256 _price) external onlyOwner {
@@ -180,36 +172,29 @@ contract MvaultBoardMatrix is Ownable, ReentrancyGuard {
         uint256 totalPool = boardPrices[_boardLevel] * BOARD_POOL_MEMBERS;
 
         if (_boardLevel < TOTAL_BOARDS) {
+            // ── Pools 1–5: 40% reward / 40% next pool / 20% liquidity ────────
             uint256 reward    = (totalPool * BOARD_REWARD_RATE_BP)    / BASIS_POINTS; // 40%
-            // 40% (BOARD_NEXT_POOL_RATE_BP) stays in this contract to fund the owner's next board entry
+            // 40% (BOARD_NEXT_POOL_RATE_BP) stays in this contract to fund the owner's next pool entry
             uint256 liquidity = (totalPool * BOARD_LIQUIDITY_RATE_BP) / BASIS_POINTS; // 20%
 
-            // ── Credit reward ─────────────────────────────────────────────────
             _creditReward(_owner, reward, _boardLevel);
 
-            // ── Send liquidity ────────────────────────────────────────────────
             if (liquidityAddress != address(0) && liquidity > 0) {
                 usdtToken.safeTransfer(liquidityAddress, liquidity);
             }
 
             emit BoardCompleted(_owner, _boardLevel, reward, liquidity);
 
-            // ── Auto-enter owner into next board (nextEntry stays in contract) ──
-            // nextEntry amount is already held in this contract from previous collections.
-            // We simply register the owner — no additional USDT transfer needed.
+            // ── Auto-enter owner into next pool (40% USDT already in contract) ──
             _enterBoard(_owner, _boardLevel + 1);
 
         } else {
-            // ── Final board (Level 10) ────────────────────────────────────────
-            uint256 reward    = (totalPool * BOARD_10_REWARD_RATE_BP)    / BASIS_POINTS; // 87.5%
-            uint256 systemFee = (totalPool * BOARD_10_SYSTEM_RATE_BP)    / BASIS_POINTS; //  6.25%
-            uint256 liquidity = (totalPool * BOARD_10_LIQUIDITY_RATE_BP) / BASIS_POINTS; //  6.25%
+            // ── Final pool (Level 6): 76.52% reward / 23.48% liquidity ───────
+            uint256 reward    = (totalPool * BOARD_FINAL_REWARD_RATE_BP)    / BASIS_POINTS; // 76.52%
+            uint256 liquidity = (totalPool * BOARD_FINAL_LIQUIDITY_RATE_BP) / BASIS_POINTS; // 23.48%
 
             _creditReward(_owner, reward, _boardLevel);
 
-            if (systemAddress != address(0) && systemFee > 0) {
-                usdtToken.safeTransfer(systemAddress, systemFee);
-            }
             if (liquidityAddress != address(0) && liquidity > 0) {
                 usdtToken.safeTransfer(liquidityAddress, liquidity);
             }

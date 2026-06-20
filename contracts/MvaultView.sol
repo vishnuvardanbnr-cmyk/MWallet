@@ -146,10 +146,10 @@ contract MvaultView {
 
     // ── Package / income constants ────────────────────────────────────────────
 
-    uint256 public constant PRICE_STARTER  =  55 * 1e18;
-    uint256 public constant INCOME_STARTER = 165 * 1e18;
-    uint256 public constant PRICE_PRO      = 130 * 1e18;
-    uint256 public constant INCOME_PRO     = 390 * 1e18;
+    uint256 public constant PRICE_STARTER  =  75 * 1e18;
+    uint256 public constant INCOME_STARTER = 225 * 1e18;
+    uint256 public constant PRICE_PRO      = 150 * 1e18;
+    uint256 public constant INCOME_PRO     = 450 * 1e18;
 
     function PACKAGE_PRICE() external pure returns (uint256) { return PRICE_PRO; }
     function INCOME_LIMIT()  external pure returns (uint256) { return INCOME_PRO; }
