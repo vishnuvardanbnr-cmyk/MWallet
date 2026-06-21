@@ -111,21 +111,22 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 teamSalesUsdt;    // cumulative USDT activated in sponsor-tree downline
         // Meta
         uint256 joinedAt;
-        // Profile
-        string  displayName;
-        string  email;
-        string  phone;
-        string  country;
+        // Profile flag
         bool    profileSet;
-        // BTC pool allocation rate: 10–80% (0 = default 10%)
+        // BTC pool allocation rate: 5–80% (0 = default 5%)
         uint8   btcPoolRate;
     }
 
-    mapping(address => User) internal _users;
+    /// @notice String profile fields stored separately to keep users() auto-getter under EIP-170.
+    struct UserProfile {
+        string displayName;
+        string email;
+        string phone;
+        string country;
+    }
 
-    /// @notice Returns the full User struct for any address (replaces the 31-field auto-getter
-    ///         which overflows the legacy codegen stack limit).
-    function users(address addr) external view returns (User memory) { return _users[addr]; }
+    mapping(address => User) public users;
+    mapping(address => UserProfile) public userProfiles;
 
     address[] public allUsers;
     uint256   public totalUsers;
@@ -325,13 +326,13 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (to == address(0)) revert ZeroAddress();
         if (communityPool < amount) revert ExceedsPool();
         communityPool           -= amount;
-        _users[to].mvtBalance    += amount;
-        _users[to].totalReceived += amount;
+        users[to].mvtBalance    += amount;
+        users[to].totalReceived += amount;
     }
 
     // Ghost-activate: sets account active at chosen package with no USDT/MVT/income
     function adminActivate(address user, uint8 pkg) external onlyOwnerOrManager {
-        User storage u = _users[user];
+        User storage u = users[user];
         if (!u.isRegistered) revert NotRegistered();
         if (u.isActive) revert AlreadyActive();
         (uint256 p, uint256 c) = _pkgParams(pkg);
@@ -359,7 +360,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     function enterBoardPool() external nonReentrant {
         if (address(boardHandler) == address(0)) revert BoardHandlerNotSet();
 
-        User storage u = _users[msg.sender];
+        User storage u = users[msg.sender];
         if (!u.isActive) revert NotActive();
 
         uint256 price = boardHandler.getBoardPrice(1);
@@ -394,8 +395,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (_user == address(0)) revert ZeroAddress();
         if (_usdtAmount == 0) revert ZeroAmount();
 
-        _users[_user].usdtBalance     += _usdtAmount;
-        _users[_user].totalUsdtEarned += _usdtAmount;
+        users[_user].usdtBalance     += _usdtAmount;
+        users[_user].totalUsdtEarned += _usdtAmount;
         totalBoardRewardsEarned[_user] += _usdtAmount;
 
         emit BoardRewardCredited(_user, _usdtAmount, _boardLevel);
@@ -417,8 +418,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256[] calldata amounts
     ) external onlyStakingModule {
         for (uint256 i = 0; i < tos.length; i++) {
-            _users[tos[i]].mvtBalance    += amounts[i];
-            _users[tos[i]].totalReceived += amounts[i];
+            users[tos[i]].mvtBalance    += amounts[i];
+            users[tos[i]].totalReceived += amounts[i];
             _recordTx(tos[i], TX_STAKING_LEVEL_INCOME, amounts[i], levels[i], staker);
         }
     }
@@ -435,7 +436,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     function staking_postUnstake(address user, uint256 usdtToUser, uint256 adminCapCut)
         external onlyStakingModule
     {
-        _users[user].usdtBalance += usdtToUser;
+        users[user].usdtBalance += usdtToUser;
         adminPool               += adminCapCut;
         _recordTx(user, TX_UNSTAKE, usdtToUser, 0, address(0));
     }
@@ -446,12 +447,12 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     {
         sponsors = new address[](depth);
         actives  = new bool[](depth);
-        address cur = _users[staker].sponsor;
+        address cur = users[staker].sponsor;
         for (uint8 i = 0; i < depth; i++) {
             if (cur == address(0)) break;
             sponsors[i] = cur;
-            actives[i]  = _users[cur].isActive;
-            cur = _users[cur].sponsor;
+            actives[i]  = users[cur].isActive;
+            cur = users[cur].sponsor;
         }
     }
 
@@ -470,18 +471,18 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         address binaryParent,
         bool    placeLeft
     ) external {
-        if (_users[msg.sender].isRegistered) revert AlreadyRegistered();
+        if (users[msg.sender].isRegistered) revert AlreadyRegistered();
 
         if (totalUsers == 0) {
             // Root / first user — no sponsor
             _createUser(msg.sender, address(0), address(0), false, address(0));
         } else {
-            if (!_users[sponsor].isRegistered) revert InvalidSponsor();
+            if (!users[sponsor].isRegistered) revert InvalidSponsor();
 
             // Start search from binaryParent if valid, otherwise from sponsor.
             // _findSlotOnSide walks the tree on-chain to find the deepest open slot
             // on the requested side — same logic used by rebirth().
-            address startFrom = (binaryParent != address(0) && _users[binaryParent].isRegistered)
+            address startFrom = (binaryParent != address(0) && users[binaryParent].isRegistered)
                 ? binaryParent
                 : sponsor;
 
@@ -489,10 +490,10 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
             _createUser(msg.sender, sponsor, parent, actualLeft, address(0));
 
-            if (actualLeft) _users[parent].leftChild  = msg.sender;
-            else            _users[parent].rightChild = msg.sender;
+            if (actualLeft) users[parent].leftChild  = msg.sender;
+            else            users[parent].rightChild = msg.sender;
 
-            _users[sponsor].directCount++;
+            users[sponsor].directCount++;
             // Volume update deferred to _doActivate (when pkgPrice is known)
         }
 
@@ -506,12 +507,12 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         bool    placeLeft,
         address main
     ) internal {
-        _users[u].isRegistered  = true;
-        _users[u].sponsor       = sponsor;
-        _users[u].binaryParent  = parent;
-        _users[u].placedLeft    = placeLeft;
-        _users[u].mainAccount   = main;
-        _users[u].joinedAt      = block.timestamp;
+        users[u].isRegistered  = true;
+        users[u].sponsor       = sponsor;
+        users[u].binaryParent  = parent;
+        users[u].placedLeft    = placeLeft;
+        users[u].mainAccount   = main;
+        users[u].joinedAt      = block.timestamp;
         allUsers.push(u);
         totalUsers++;
     }
@@ -522,14 +523,14 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      *      each activation contributes its real dollar value to binary volumes.
      */
     function _updateAncestorVolumes(address user, uint256 pkgPrice) internal {
-        address cur    = _users[user].binaryParent;
-        bool    isLeft = _users[user].placedLeft;
+        address cur    = users[user].binaryParent;
+        bool    isLeft = users[user].placedLeft;
 
         while (cur != address(0)) {
-            if (isLeft) _users[cur].leftSubVolume  += pkgPrice;
-            else        _users[cur].rightSubVolume += pkgPrice;
-            isLeft = _users[cur].placedLeft;
-            cur    = _users[cur].binaryParent;
+            if (isLeft) users[cur].leftSubVolume  += pkgPrice;
+            else        users[cur].rightSubVolume += pkgPrice;
+            isLeft = users[cur].placedLeft;
+            cur    = users[cur].binaryParent;
         }
     }
 
@@ -556,7 +557,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      *         Caller must have pre-approved this contract for the chosen package price.
      */
     function activate(uint8 pkg) external nonReentrant {
-        User storage u = _users[msg.sender];
+        User storage u = users[msg.sender];
         if (!u.isRegistered) revert NotRegistered();
         if (u.isActive)      revert AlreadyActive();
 
@@ -574,7 +575,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      *         pkg=1 → STARTER ($75)   pkg=2 → PRO ($150)
      */
     function activateFromBalance(uint8 pkg) external nonReentrant {
-        User storage u = _users[msg.sender];
+        User storage u = users[msg.sender];
         if (!u.isRegistered) revert NotRegistered();
         if (u.isActive)      revert AlreadyActive();
 
@@ -600,30 +601,30 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     ) external nonReentrant {
         if (newUser == address(0))           revert InvalidAddress();
         if (newUser == msg.sender)           revert CannotSelfRegister();
-        if (!_users[msg.sender].isRegistered) revert NotRegistered();
-        if (!_users[msg.sender].isActive)     revert CallerNotActive();
-        if (_users[newUser].isRegistered)     revert AlreadyRegistered();
+        if (!users[msg.sender].isRegistered) revert NotRegistered();
+        if (!users[msg.sender].isActive)     revert CallerNotActive();
+        if (users[newUser].isRegistered)     revert AlreadyRegistered();
 
         (uint256 price, uint256 incomeCap) = _pkgParams(pkg);
-        if (_users[msg.sender].usdtBalance < price) revert InsufficientUsdtBalance();
+        if (users[msg.sender].usdtBalance < price) revert InsufficientUsdtBalance();
 
         // Determine binary parent (default = caller), then auto-find open slot on-chain
-        address startFrom = (binaryParent != address(0) && _users[binaryParent].isRegistered)
+        address startFrom = (binaryParent != address(0) && users[binaryParent].isRegistered)
             ? binaryParent
             : msg.sender;
 
         (address parent, bool actualLeft) = _findSlotOnSide(startFrom, placeLeft);
 
         // Deduct from caller's virtual USDT balance (USDT already held by this contract)
-        _users[msg.sender].usdtBalance -= price;
+        users[msg.sender].usdtBalance -= price;
 
         // Register newUser with caller as sponsor
         _createUser(newUser, msg.sender, parent, actualLeft, address(0));
 
-        if (actualLeft) _users[parent].leftChild  = newUser;
-        else            _users[parent].rightChild = newUser;
+        if (actualLeft) users[parent].leftChild  = newUser;
+        else            users[parent].rightChild = newUser;
 
-        _users[msg.sender].directCount++;
+        users[msg.sender].directCount++;
         // Volume update deferred to _doActivate (when pkgPrice is known)
 
         emit Registered(newUser, msg.sender, parent, placeLeft);
@@ -681,10 +682,10 @@ contract MvaultContract is Ownable, ReentrancyGuard {
             emit Activated(user, minted, grossMvt, levelAmt, communityAmt + placementAmt, adminAmt);
         }
 
-        _users[user].isActive       = true;
-        _users[user].incomeLimit    = incomeCap;
-        _users[user].packagePrice   = pkgPrice;
-        _users[user].incomeLimitCap = incomeCap;
+        users[user].isActive       = true;
+        users[user].incomeLimit    = incomeCap;
+        users[user].packagePrice   = pkgPrice;
+        users[user].incomeLimitCap = incomeCap;
 
         _updateAncestorVolumes(user, pkgPrice);
         _updateTeamStats(user, pkgPrice);
@@ -703,21 +704,21 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 grossMvt,
         uint256 levelAmt
     ) internal {
-        address cur = _users[from].sponsor;
+        address cur = users[from].sponsor;
         uint256 distributed = 0;
 
         for (uint8 lvl = 1; lvl <= 10 && cur != address(0); lvl++) {
             uint256 share = _levelShare(grossMvt, lvl);
-            if (share == 0) { cur = _users[cur].sponsor; continue; }
+            if (share == 0) { cur = users[cur].sponsor; continue; }
 
             distributed += share;
 
-            bool qualified = _users[cur].isActive
-                && _users[cur].directCount >= _directReq(lvl);
+            bool qualified = users[cur].isActive
+                && users[cur].directCount >= _directReq(lvl);
 
             if (qualified) {
-                _users[cur].mvtBalance    += share;
-                _users[cur].totalReceived += share;
+                users[cur].mvtBalance    += share;
+                users[cur].totalReceived += share;
                 emit LevelIncomePaid(cur, from, lvl, share);
                 _recordTx(cur, TX_LEVEL_INCOME, share, lvl, from);
             } else {
@@ -726,7 +727,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
                 _recordTx(cur, TX_LEVEL_MISSED, share, lvl, address(0));
             }
 
-            cur = _users[cur].sponsor;
+            cur = users[cur].sponsor;
         }
 
         // Dust from rounding → admin
@@ -762,10 +763,10 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     function _distributeRankIncome(address from, uint256 grossMvt, uint256 rankAmt) internal {
         uint8   filled = 0;    // bitmask: bit k set ⟹ slot k is filled
         uint256 paid   = 0;
-        address cur    = _users[from].sponsor;
+        address cur    = users[from].sponsor;
 
         for (uint256 depth = 0; depth < 50 && cur != address(0); depth++) {
-            uint8 r = _users[cur].rank;
+            uint8 r = users[cur].rank;
             if (r > 5) r = 5;
             if (r > 0) {
                 for (uint8 slot = 1; slot <= r; slot++) {
@@ -773,8 +774,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
                     if (filled & bit == 0) {
                         filled |= bit;
                         uint256 slotAmt = _rankSlotAmt(slot, grossMvt);
-                        _users[cur].mvtBalance    += slotAmt;
-                        _users[cur].totalReceived += slotAmt;
+                        users[cur].mvtBalance    += slotAmt;
+                        users[cur].totalReceived += slotAmt;
                         paid += slotAmt;
                         emit RankIncomePaid(cur, from, slot, slotAmt);
                         _recordTx(cur, TX_RANK_INCOME, slotAmt, slot, from);
@@ -782,7 +783,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
                 }
             }
             if (filled == 0x3E) break;   // bits 1-5 all set → all slots filled
-            cur = _users[cur].sponsor;
+            cur = users[cur].sponsor;
         }
 
         if (rankAmt > paid) adminPool += rankAmt - paid;   // unfilled slots → admin
@@ -812,10 +813,10 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      *      Called on every activation / reactivation.
      */
     function _updateTeamStats(address from, uint256 pkgPrice) internal {
-        address cur = _users[from].sponsor;
+        address cur = users[from].sponsor;
         while (cur != address(0)) {
-            _users[cur].teamSalesUsdt += pkgPrice;
-            cur = _users[cur].sponsor;
+            users[cur].teamSalesUsdt += pkgPrice;
+            cur = users[cur].sponsor;
         }
     }
 
@@ -834,7 +835,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      */
     function sellMvt(uint256 amount) external nonReentrant {
         if (amount == 0) revert ZeroAmount();
-        User storage u = _users[msg.sender];
+        User storage u = users[msg.sender];
         if (!u.isActive)           revert NotRegistered();
         if (u.mvtBalance < amount) revert InsufficientVirtualBalance();
 
@@ -879,22 +880,22 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     function _sellDist(address from, uint256 amt, bool up) internal {
         uint16[10] memory r = [uint16(200),100,50,30,20,20,20,20,20,20];
         address cur = up
-            ? _users[from].sponsor
-            : (_users[from].leftChild != address(0) ? _users[from].leftChild : _users[from].rightChild);
+            ? users[from].sponsor
+            : (users[from].leftChild != address(0) ? users[from].leftChild : users[from].rightChild);
         uint256 dist;
         for (uint8 i; i < 10 && cur != address(0); i++) {
             uint256 s = amt * r[i] / 500;
-            if (_users[cur].isActive) {
-                _users[cur].usdtBalance    += s;
-                _users[cur].totalUsdtEarned += s;
+            if (users[cur].isActive) {
+                users[cur].usdtBalance    += s;
+                users[cur].totalUsdtEarned += s;
                 _recordTx(cur, TX_SELL_DIST, s, i + 1, from);
             } else {
                 adminUsdtPool += s;
             }
             dist += s;
             cur = up
-                ? _users[cur].sponsor
-                : (_users[cur].leftChild != address(0) ? _users[cur].leftChild : _users[cur].rightChild);
+                ? users[cur].sponsor
+                : (users[cur].leftChild != address(0) ? users[cur].leftChild : users[cur].rightChild);
         }
         if (amt > dist) adminUsdtPool += amt - dist;
     }
@@ -925,7 +926,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      */
     function withdrawUsdt(uint256 amount) external nonReentrant {
         if (amount == 0) revert ZeroAmount();
-        User storage u = _users[msg.sender];
+        User storage u = users[msg.sender];
         if (u.usdtBalance < amount) revert InsufficientUsdtBalance();
 
         u.usdtBalance -= amount;
@@ -947,7 +948,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      */
     function withdrawBtcPool(uint256 amount) external nonReentrant {
         if (amount == 0) revert ZeroAmount();
-        User storage u = _users[msg.sender];
+        User storage u = users[msg.sender];
         if (u.btcPoolBalance < amount) revert InsufficientBtcPool();
 
         u.btcPoolBalance -= amount;
@@ -971,11 +972,11 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     function rebirth(address subAccount, bool placeLeft) external nonReentrant {
         if (subAccount == address(0)) revert ZeroAddress();
 
-        User storage u = _users[msg.sender];
+        User storage u = users[msg.sender];
         if (!u.isActive) revert NotActive();
         if (u.packagePrice != PRICE_PRO) revert NotEligibleForRebirth();
         if (u.rebirthPool < u.packagePrice) revert InsufficientRebirthPool();
-        if (_users[subAccount].isRegistered) revert SubAccountAlreadyRegistered();
+        if (users[subAccount].isRegistered) revert SubAccountAlreadyRegistered();
 
         // ── 1. Deduct package price for sub-account activation ───────────────
         u.rebirthPool -= u.packagePrice;
@@ -1006,10 +1007,10 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
         _createUser(subAccount, subSponsor, binParent, actualLeft, msg.sender);
 
-        if (actualLeft) _users[binParent].leftChild  = subAccount;
-        else            _users[binParent].rightChild = subAccount;
+        if (actualLeft) users[binParent].leftChild  = subAccount;
+        else            users[binParent].rightChild = subAccount;
 
-        if (subSponsor != address(0)) _users[subSponsor].directCount++;
+        if (subSponsor != address(0)) users[subSponsor].directCount++;
         // Volume update handled in _doActivate below
 
         // ── 5 & 6. Activate sub-account (USDT already in contract) ───────────
@@ -1029,7 +1030,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      *         enough to trigger a full rebirth.
      */
     function claimRebirthBalance() external nonReentrant {
-        User storage u = _users[msg.sender];
+        User storage u = users[msg.sender];
         if (!u.isActive)               revert NotActive();
         if (u.rebirthPool == 0)              revert NoRebirthBalance();
         if (u.rebirthPool >= u.packagePrice) revert UseRebirthInstead();
@@ -1063,7 +1064,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      *         Caller must pre-approve the contract for the chosen pkg price.
      */
     function reactivate(uint8 pkg) external nonReentrant {
-        User storage u = _users[msg.sender];
+        User storage u = users[msg.sender];
         if (!u.isActive)        revert NotActive();
         if (u.incomeLimit > 0)  revert IncomeNotExhausted();
 
@@ -1081,7 +1082,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      *         pkg=1 → STARTER $75   pkg=2 → PRO $150
      */
     function reactivateFromBalance(uint8 pkg) external nonReentrant {
-        User storage u = _users[msg.sender];
+        User storage u = users[msg.sender];
         if (!u.isActive)        revert NotActive();
         if (u.incomeLimit > 0)  revert IncomeNotExhausted();
 
@@ -1099,7 +1100,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      *      $20 is carved out for Board Pool 1 auto-entry (same as activation).
      */
     function _doReactivate(address user, uint256 pkgPrice, uint256 incomeCap) internal {
-        bool upgraded = (_users[user].packagePrice != pkgPrice);
+        bool upgraded = (users[user].packagePrice != pkgPrice);
 
         // ── Auto board matrix entry: carve out $20 → Board Pool 1 ────────────
         uint256 mvtBase = pkgPrice;
@@ -1134,9 +1135,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
             adminPool     += adminAmt + dust;
         }
 
-        _users[user].packagePrice   = pkgPrice;
-        _users[user].incomeLimitCap = incomeCap;
-        _users[user].incomeLimit    = incomeCap;
+        users[user].packagePrice   = pkgPrice;
+        users[user].incomeLimitCap = incomeCap;
+        users[user].incomeLimit    = incomeCap;
 
         _updateAncestorVolumes(user, pkgPrice);
         _updateTeamStats(user, pkgPrice);
@@ -1160,8 +1161,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         returns (address parent, bool goLeft)
     {
         // Check direct slot under `start` first
-        if (preferLeft  && _users[start].leftChild  == address(0)) return (start, true);
-        if (!preferLeft && _users[start].rightChild == address(0)) return (start, false);
+        if (preferLeft  && users[start].leftChild  == address(0)) return (start, true);
+        if (!preferLeft && users[start].rightChild == address(0)) return (start, false);
 
         // BFS deeper, honouring the preferred side
         address[] memory queue = new address[](totalUsers + 1);
@@ -1170,21 +1171,21 @@ contract MvaultContract is Ownable, ReentrancyGuard {
 
         // Seed with the preferred child subtree
         address preferredChild = preferLeft
-            ? _users[start].leftChild
-            : _users[start].rightChild;
+            ? users[start].leftChild
+            : users[start].rightChild;
         if (preferredChild != address(0)) queue[back++] = preferredChild;
 
         while (front < back) {
             address cur = queue[front++];
-            if (_users[cur].leftChild  == address(0)) return (cur, true);
-            if (_users[cur].rightChild == address(0)) return (cur, false);
-            queue[back++] = _users[cur].leftChild;
-            queue[back++] = _users[cur].rightChild;
+            if (users[cur].leftChild  == address(0)) return (cur, true);
+            if (users[cur].rightChild == address(0)) return (cur, false);
+            queue[back++] = users[cur].leftChild;
+            queue[back++] = users[cur].rightChild;
         }
 
         // Fallback: check the other side of `start`
-        if (!preferLeft && _users[start].leftChild  == address(0)) return (start, true);
-        if (preferLeft  && _users[start].rightChild == address(0)) return (start, false);
+        if (!preferLeft && users[start].leftChild  == address(0)) return (start, true);
+        if (preferLeft  && users[start].rightChild == address(0)) return (start, false);
 
         revert NoOpenBinarySlot();
     }
@@ -1200,26 +1201,26 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      *      Unqualified or missing upline shares → adminPool.
      */
     function _distributePlacementIncome(address from, uint256 grossMvt, uint256 totalAmt) internal {
-        address cur = _users[from].binaryParent;
+        address cur = users[from].binaryParent;
         uint256 distributed = 0;
         for (uint8 lvl = 1; lvl <= 30 && cur != address(0); lvl++) {
             uint256 share = (grossMvt * placementRates[lvl - 1]) / 10000;
             if (share > 0) {
                 uint256 required = ((uint256(lvl) + 2) / 3) * refsPerGroup;
-                if (_users[cur].isActive && _users[cur].directCount >= required) {
-                    _users[cur].mvtBalance    += share;
-                    _users[cur].totalReceived += share;
+                if (users[cur].isActive && users[cur].directCount >= required) {
+                    users[cur].mvtBalance    += share;
+                    users[cur].totalReceived += share;
                     distributed += share;
                     emit PlacementIncomePaid(cur, from, lvl, share);
                     _recordTx(cur, TX_PLACEMENT_INCOME, share, lvl, from);
                 } else {
                     adminPool += share;
-                    if (_users[cur].isRegistered) {
+                    if (users[cur].isRegistered) {
                         _recordTx(cur, TX_PLACEMENT_MISSED, share, lvl, from);
                     }
                 }
             }
-            cur = _users[cur].binaryParent;
+            cur = users[cur].binaryParent;
         }
         if (totalAmt > distributed) adminPool += totalAmt - distributed;
     }
@@ -1235,8 +1236,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (to == address(0)) revert ZeroAddress();
         if (adminPool < amount) revert ExceedsPool();
         adminPool               -= amount;
-        _users[to].mvtBalance    += amount;
-        _users[to].totalReceived += amount;
+        users[to].mvtBalance    += amount;
+        users[to].totalReceived += amount;
         emit AdminWithdraw(to, amount);
     }
 
@@ -1258,8 +1259,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (to == address(0)) revert ZeroAddress();
         if (reservePool < amount) revert ExceedsPool();
         reservePool             -= amount;
-        _users[to].mvtBalance    += amount;
-        _users[to].totalReceived += amount;
+        users[to].mvtBalance    += amount;
+        users[to].totalReceived += amount;
         emit ReserveWithdraw(to, amount);
     }
 
@@ -1272,8 +1273,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      *         Requires prior USDT approval for this contract.
      */
     function stake(uint256 usdtAmount, bool isLocked) external nonReentrant {
-        if (!_users[msg.sender].isRegistered) revert NotRegistered();
-        if (!_users[msg.sender].isActive) revert NotActive();
+        if (!users[msg.sender].isRegistered) revert NotRegistered();
+        if (!users[msg.sender].isActive) revert NotActive();
         bool ok = usdtToken.transferFrom(msg.sender, address(this), usdtAmount);
         if (!ok) revert TransferFailed();
         usdtToken.approve(address(stakingModule), usdtAmount);
@@ -1285,10 +1286,10 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      *         No external wallet approval needed — USDT is already in this contract.
      */
     function stakeFromBalance(uint256 usdtAmount, bool isLocked) external nonReentrant {
-        if (!_users[msg.sender].isRegistered) revert NotRegistered();
-        if (!_users[msg.sender].isActive) revert NotActive();
-        if (_users[msg.sender].usdtBalance < usdtAmount) revert InsufficientUsdtBalance();
-        _users[msg.sender].usdtBalance -= usdtAmount;
+        if (!users[msg.sender].isRegistered) revert NotRegistered();
+        if (!users[msg.sender].isActive) revert NotActive();
+        if (users[msg.sender].usdtBalance < usdtAmount) revert InsufficientUsdtBalance();
+        users[msg.sender].usdtBalance -= usdtAmount;
         usdtToken.approve(address(stakingModule), usdtAmount);
         stakingModule.executeStake(msg.sender, usdtAmount, isLocked);
     }
@@ -1353,8 +1354,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         string calldata _phone,
         string calldata _country
     ) external {
-        if (!_users[msg.sender].isRegistered) revert NotRegistered();
-        User storage u = _users[msg.sender];
+        if (!users[msg.sender].isRegistered) revert NotRegistered();
+        User storage u = users[msg.sender];
         u.displayName = _displayName;
         u.email       = _email;
         u.phone       = _phone;
@@ -1364,8 +1365,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     }
 
     function setBtcPoolRate(uint8 _rate) external {
-        if (!_users[msg.sender].isRegistered || _rate < 5 || _rate > 80) revert InvalidParams();
-        _users[msg.sender].btcPoolRate = _rate;
+        if (!users[msg.sender].isRegistered || _rate < 5 || _rate > 80) revert InvalidParams();
+        users[msg.sender].btcPoolRate = _rate;
     }
 
 
@@ -1380,7 +1381,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 n = allUsers.length;
         // Count directs
         for (uint256 i = 0; i < n; i++) {
-            if (_users[allUsers[i]].sponsor == _user) total++;
+            if (users[allUsers[i]].sponsor == _user) total++;
         }
         if (total == 0 || _offset >= total) return (new address[](0), total);
         uint256 available = total - _offset;
@@ -1389,7 +1390,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 found = 0;
         uint256 skip  = _offset;
         for (uint256 i = 0; i < n && found < count; i++) {
-            if (_users[allUsers[i]].sponsor == _user) {
+            if (users[allUsers[i]].sponsor == _user) {
                 if (skip > 0) { skip--; continue; }
                 referrals[found++] = allUsers[i];
             }
@@ -1403,9 +1404,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     function setUserRanks(address[] calldata addrs, uint8[] calldata ranks_) external onlyOwnerOrManager {
         require(addrs.length == ranks_.length);
         for (uint256 i; i < addrs.length; i++) {
-            uint8 old = _users[addrs[i]].rank;
+            uint8 old = users[addrs[i]].rank;
             if (old != ranks_[i]) {
-                _users[addrs[i]].rank = ranks_[i];
+                users[addrs[i]].rank = ranks_[i];
                 emit RankUpdated(addrs[i], old, ranks_[i]);
             }
         }
@@ -1434,8 +1435,8 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     function adminCreditBtcPool(address user, uint256 amount) external onlyOwnerOrManager {
         if (user == address(0)) revert ZeroAddress();
         if (amount == 0) revert ZeroAmount();
-        _users[user].btcPoolBalance += amount;
-        _users[user].totalBtcEarned += amount;
+        users[user].btcPoolBalance += amount;
+        users[user].totalBtcEarned += amount;
         _recordTx(user, TX_BTC_CREDITED, amount, 0, msg.sender);
         emit BtcPoolCredited(user, amount);
     }
