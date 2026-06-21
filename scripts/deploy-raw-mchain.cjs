@@ -10,7 +10,7 @@ const path = require("path");
 
 const RPC         = "https://node.mymchain.com/api/rpc";
 const PK          = process.env.DEPLOYER_PRIVATE_KEY;
-const USDT        = "0xab8c6267dcca9e70b625014c8f77eee9728e14c3";
+const USDT        = "0x7b2ed1be97fa240dbd0328dd307e35e588bcb917";
 const MANAGER     = "0x12Fcf3d1084455d3677a110925D73b01F3846750";
 const GAS_PRICE   = 1_000_000_000n;  // 1 Gwei
 const CHAIN_ID    = 1888n;
