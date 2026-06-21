@@ -121,11 +121,11 @@ fi
 EOF
 echo "  ✓ VPS .env updated"
 
-# ── 5. Restart server via systemd service ─────────────────────────────────
+# ── 5. Restart server via PM2 ─────────────────────────────────────────────
 echo ""
-echo "[5/5] Restarting mvault.service via systemd..."
-$SSH "systemctl restart mvault.service && sleep 2 && systemctl is-active mvault.service"
-echo "  ✓ Server restarted (systemd mvault.service)"
+echo "[5/5] Restarting via PM2..."
+$SSH "cd ${VPS_PATH} && pm2 restart mvault --update-env && sleep 3 && pm2 show mvault | grep -E 'status|uptime|restarts'"
+echo "  ✓ Server restarted (PM2)"
 
 echo ""
 echo "══════════════════════════════════════════════════"
