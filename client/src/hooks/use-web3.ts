@@ -315,13 +315,16 @@ export function useWeb3() {
           setContractMvtBalance(bal);
         } catch { }
 
-        // Profile — read directly from the users() struct already fetched above.
-        // There is no separate getProfile() on-chain; the data lives in the User struct.
+        // Profile — bytes32 fields in users() struct; decode to human-readable string.
+        const decB32 = (v: any): string => {
+          if (!v || v === "0x" + "00".repeat(32)) return "";
+          try { return ethers.decodeBytes32String(v); } catch { return ""; }
+        };
         setProfileOnChain({
-          displayName: info.displayName ?? "",
-          email:       info.email       ?? "",
-          phone:       info.phone       ?? "",
-          country:     info.country     ?? "",
+          displayName: decB32(info.displayName),
+          email:       decB32(info.email),
+          phone:       decB32(info.phone),
+          country:     decB32(info.country),
           profileSet:  !!info.profileSet,
         });
 
@@ -522,8 +525,9 @@ export function useWeb3() {
     if (!account) return;
     const signer = await getSigner();
     const iface = getMvaultContract(getDirectProvider()).interface;
+    const encB32 = (s: string) => { try { return ethers.encodeBytes32String(s.slice(0, 31)); } catch { return ethers.encodeBytes32String(""); } };
     const txHash = await sendRawTx(signer, MVAULT_CONTRACT_ADDRESS,
-      iface.encodeFunctionData("setProfile", [displayName, email, phone, country]), 200_000);
+      iface.encodeFunctionData("setProfile", [encB32(displayName), encB32(email), encB32(phone), encB32(country)]), 200_000);
     await waitForTx(txHash);
     setProfileOnChain({ displayName, email, phone, country, profileSet: true });
   }, [account, getSigner]);

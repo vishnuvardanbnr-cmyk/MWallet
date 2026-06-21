@@ -17,11 +17,11 @@ M-Vault is a Web3 MLM/DeFi platform for BNB Smart Chain. Users connect MetaMask 
 ## Smart Contracts (MChain — Chain ID 1888 — ACTIVE)
 | Contract | Address |
 |---|---|
-| **MVault Main** | `0x6c6205077237f64751a607228ee94bb32767dc25` |
-| **MVT Token** | `0x4c9491bed7ecd722b27a49e74edc5b8edcf01c96` |
-| **Board Matrix** | `0x80b0b9fc4c999ed3e2a88ab1fcda94fa7b0c23e4` |
-| **MvaultStaking** | `0xc129d62b1801f67ade7c82817b269abeb6b7139b` |
-| **MvaultView** | `0x2d152831022812889d0f5da60f7fe9e692bb1bca` |
+| **MVault Main** | `0xf6bd5c5972f3fbc09f29928157d77842441801ad` |
+| **MVT Token** | `0x27803b7ea9d7b4c31bd61871ba252e9f344c35b4` |
+| **Board Matrix** | `0xf6ac89f319ee506f5b15da1230c0cfc2c497e016` |
+| **MvaultStaking** | `0x6e0971cedccf633820274fbbf09944c884e0e404` |
+| **MvaultView** | `0xd68e9476e3dcef15c30c3d47677a51fd794e0824` |
 | **USDT (MChain)** | `0xab8c6267dcca9e70b625014c8f77eee9728e14c3` |
 | **Owner/Deployer Wallet** | `0x12Fcf3d1084455d3677a110925D73b01F3846750` (DEPLOYER_PRIVATE_KEY) — owns all contracts |
 
@@ -124,10 +124,12 @@ scripts/
 - **USDT-denominated** (green, with $): types 0, 5–11
 
 ## users() Auto-Getter Field Order
-The `users(address)` public mapping getter returns all **31 struct fields** (matchedVolume and powerLegPoints removed):
-`isRegistered[0], isActive[1], sponsor[2], directCount[3], binaryParent[4], placedLeft[5], leftChild[6], rightChild[7], leftSubVolume[8], rightSubVolume[9], mvtBalance[10], totalReceived[11], totalSold[12], incomeLimit[13], usdtBalance[14], rebirthPool[15], totalUsdtEarned[16], btcPoolBalance[17], totalBtcEarned[18], packagePrice[19], incomeLimitCap[20], mainAccount[21], rebirthCount[22], rank[23], teamSalesUsdt[24], joinedAt[25], displayName[26], email[27], phone[28], country[29], profileSet[30]`
+The `users(address)` public mapping getter returns all **32 struct fields**:
+`isRegistered[0], isActive[1], sponsor[2], directCount[3], binaryParent[4], placedLeft[5], leftChild[6], rightChild[7], leftSubVolume[8], rightSubVolume[9], mvtBalance[10], totalReceived[11], totalSold[12], incomeLimit[13], usdtBalance[14], rebirthPool[15], totalUsdtEarned[16], btcPoolBalance[17], totalBtcEarned[18], packagePrice[19], incomeLimitCap[20], mainAccount[21], rebirthCount[22], rank[23], teamSalesUsdt[24], joinedAt[25], displayName[26](bytes32), email[27](bytes32), phone[28](bytes32), country[29](bytes32), profileSet[30], btcPoolRate[31]`
 
-Use **named properties** (`info.mvtBalance`, `info.usdtBalance`, etc.) — not numeric indices — to avoid breakage if struct fields are reordered.
+Profile fields (displayName/email/phone/country) are **bytes32** — decode with `ethers.decodeBytes32String()` / encode with `ethers.encodeBytes32String()` (max 31 chars each).
+
+Use **named properties** (`info.mvtBalance`, `info.displayName`, etc.) — not numeric indices — to avoid breakage if struct fields are reordered.
 
 ## Known Notes
 - `getDirectReferralsPaginated` uses the contract view function directly (single call, not event scanning)

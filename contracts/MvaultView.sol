@@ -49,12 +49,7 @@ interface IMvault {
         uint256 rebirthCount,
         uint8   rank,
         uint256 teamSalesUsdt,
-        uint256 joinedAt,
-        string  memory displayName,
-        string  memory email,
-        string  memory phone,
-        string  memory country,
-        bool    profileSet
+        uint256 joinedAt
     );
 }
 
@@ -254,11 +249,8 @@ contract MvaultView {
             uint256 lv_, uint256 rv_,
             , , , , , , , , ,
             , , , ,
-            uint8 rk_, uint256 tsu_, ,
-            , , , ,
-            bool prs_
+            uint8 rk_, uint256 tsu_, 
         ) = mvault.users(addr);
-        prs_;
         if (!reg_) return;
         data[idx] = RankBatchEntry({
             isActive:       act_,
@@ -277,11 +269,8 @@ contract MvaultView {
         (
             , bool a_, , , , , , , , ,
             , , , , , , , uint256 b_,
-            , , , , , , , ,
-            , , , ,
-            bool p_
+            , , , , , , , 
         ) = mvault.users(_user);
-        p_;
         act_ = a_;
         btc_ = b_;
     }

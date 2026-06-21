@@ -280,12 +280,11 @@ export const MVAULT_ABI = [
   // Rebirth
   "function rebirth(address subAccount, bool placeLeft) external",
   "function claimRebirthBalance() external",
-  // Profile
-  "function setProfile(string _displayName, string _email, string _phone, string _country) external",
-  "function getProfile(address _user) view returns (string displayName, string email, string phone, string country, bool profileSet)",
+  // Profile — bytes32 fields (max 31 chars each; use ethers.encodeBytes32String / decodeBytes32String)
+  "function setProfile(bytes32 _displayName, bytes32 _email, bytes32 _phone, bytes32 _country) external",
   "function setBtcPoolRate(uint8 _rate) external",
-  // Public state — users mapping (32 fields incl. btcPoolRate)
-  "function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, string displayName, string email, string phone, string country, bool profileSet, uint8 btcPoolRate)",
+  // Public state — users mapping (28 static fields; profile strings moved to bytes32)
+  "function users(address) view returns (bool isRegistered, bool isActive, address sponsor, uint256 directCount, address binaryParent, bool placedLeft, address leftChild, address rightChild, uint256 leftSubVolume, uint256 rightSubVolume, uint256 mvtBalance, uint256 totalReceived, uint256 totalSold, uint256 incomeLimit, uint256 usdtBalance, uint256 rebirthPool, uint256 totalUsdtEarned, uint256 btcPoolBalance, uint256 totalBtcEarned, uint256 packagePrice, uint256 incomeLimitCap, address mainAccount, uint256 rebirthCount, uint8 rank, uint256 teamSalesUsdt, uint256 joinedAt, bytes32 displayName, bytes32 email, bytes32 phone, bytes32 country, bool profileSet, uint8 btcPoolRate)",
   // Public pool variables
   "function communityPool() view returns (uint256)",
   "function reservePool() view returns (uint256)",

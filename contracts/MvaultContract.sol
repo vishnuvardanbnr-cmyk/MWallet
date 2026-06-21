@@ -111,22 +111,17 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         uint256 teamSalesUsdt;    // cumulative USDT activated in sponsor-tree downline
         // Meta
         uint256 joinedAt;
-        // Profile flag
+        // Profile — stored as bytes32 (max 32 bytes each) to avoid dynamic-type ABI encoding overhead
+        bytes32 displayName;
+        bytes32 email;
+        bytes32 phone;
+        bytes32 country;
         bool    profileSet;
         // BTC pool allocation rate: 5–80% (0 = default 5%)
         uint8   btcPoolRate;
     }
 
-    /// @notice String profile fields stored separately to keep users() auto-getter under EIP-170.
-    struct UserProfile {
-        string displayName;
-        string email;
-        string phone;
-        string country;
-    }
-
     mapping(address => User) public users;
-    mapping(address => UserProfile) public userProfiles;
 
     address[] public allUsers;
     uint256   public totalUsers;
@@ -734,19 +729,13 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         if (levelAmt > distributed) adminPool += levelAmt - distributed;
     }
 
-    /** @dev Level share as % of gross MVT.  Rates sum to 30%. */
+    // Level rates packed as 10 × uint8 (MSB=lvl1): 200,50,20,10,5,5,3,3,2,2 → /1000 → sum=300‰=30%
+    uint80 private constant LEVEL_RATES = 0xC832140A050503030202;
+
+    /** @dev Level share as ‰ of gross MVT.  Rates sum to 300‰ = 30%. */
     function _levelShare(uint256 grossMvt, uint8 lvl) internal pure returns (uint256) {
-        if (lvl == 1)  return (grossMvt * 20)  / 100;   // 20%
-        if (lvl == 2)  return (grossMvt * 5)   / 100;   //  5%
-        if (lvl == 3)  return (grossMvt * 2)   / 100;   //  2%
-        if (lvl == 4)  return (grossMvt * 1)   / 100;   //  1%
-        if (lvl == 5)  return (grossMvt * 5)   / 1000;  //  0.5%
-        if (lvl == 6)  return (grossMvt * 5)   / 1000;  //  0.5%
-        if (lvl == 7)  return (grossMvt * 3)   / 1000;  //  0.3%
-        if (lvl == 8)  return (grossMvt * 3)   / 1000;  //  0.3%
-        if (lvl == 9)  return (grossMvt * 2)   / 1000;  //  0.2%
-        if (lvl == 10) return (grossMvt * 2)   / 1000;  //  0.2%
-        return 0;
+        if (lvl == 0 || lvl > 10) return 0;
+        return grossMvt * uint8(LEVEL_RATES >> (8 * (10 - lvl))) / 1000;
     }
 
     /**
@@ -855,14 +844,15 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         _recordTx(msg.sender, TX_BTC_CREDITED, btcCharge, 0, address(0));
 
         // ── 5% admin fee → adminUsdtPool ──────────────────────────────────────
-        adminUsdtPool += (usdtReceived * SELL_ADMIN_RATE) / 100;
+        uint256 adminFee = (usdtReceived * SELL_ADMIN_RATE) / 100;
+        adminUsdtPool += adminFee;
 
         // ── 5% upline + 5% downline sell distribution ─────────────────────────
         {
             uint256 distAmt = (usdtReceived * SELL_DIST_HALF) / 100;
             _sellDist(msg.sender, distAmt, true);
             _sellDist(msg.sender, distAmt, false);
-            emit SellDistributed(msg.sender, (usdtReceived * SELL_ADMIN_RATE) / 100, distAmt, distAmt);
+            emit SellDistributed(msg.sender, adminFee, distAmt, distAmt);
         }
 
         // ── Route net through income limit → rebirth pool ────────────────────
@@ -877,14 +867,16 @@ contract MvaultContract is Ownable, ReentrancyGuard {
      *      of amt per level (sums to 100% of amt = 5% of usdtReceived each way).
      *      Active recipients get usdtBalance credited; inactive → adminUsdtPool.
      */
+    // Rates: 200,100,50,30,20×6 (sum=500) packed as 10 × uint8 MSB-first
+    uint80 private constant SELL_RATES = 0xC8643E14141414141414;
+
     function _sellDist(address from, uint256 amt, bool up) internal {
-        uint16[10] memory r = [uint16(200),100,50,30,20,20,20,20,20,20];
         address cur = up
             ? users[from].sponsor
             : (users[from].leftChild != address(0) ? users[from].leftChild : users[from].rightChild);
         uint256 dist;
         for (uint8 i; i < 10 && cur != address(0); i++) {
-            uint256 s = amt * r[i] / 500;
+            uint256 s = amt * uint8(SELL_RATES >> (8 * (9 - i))) / 500;
             if (users[cur].isActive) {
                 users[cur].usdtBalance    += s;
                 users[cur].totalUsdtEarned += s;
@@ -1349,10 +1341,10 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     // ─────────────────────────────────────────────────────────────────────────
 
     function setProfile(
-        string calldata _displayName,
-        string calldata _email,
-        string calldata _phone,
-        string calldata _country
+        bytes32 _displayName,
+        bytes32 _email,
+        bytes32 _phone,
+        bytes32 _country
     ) external {
         if (!users[msg.sender].isRegistered) revert NotRegistered();
         User storage u = users[msg.sender];

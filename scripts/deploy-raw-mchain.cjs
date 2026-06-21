@@ -154,9 +154,8 @@ async function main() {
   await call(wallet, "MvaultContract.setStakingModule", mainAddr,   mainIface,  "setStakingModule",  [stakingAddr]);
   // BoardMatrix → MvaultContract
   await call(wallet, "BoardMatrix.setMvaultContract",   boardAddr,  boardIface, "setMvaultContract", [mainAddr]);
-  // BoardMatrix liquidity + system address
+  // BoardMatrix liquidity address
   await call(wallet, "BoardMatrix.setLiquidityAddr",    boardAddr,  boardIface, "setLiquidityAddress",[wallet.address]);
-  await call(wallet, "BoardMatrix.setSystemAddr",       boardAddr,  boardIface, "setSystemAddress",  [wallet.address]);
   // MvaultContract → Manager
   await call(wallet, "MvaultContract.setManager",       mainAddr,   mainIface,  "setManager",        [MANAGER]);
 

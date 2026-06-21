@@ -44,7 +44,7 @@ const input = {
   language: "Solidity",
   sources,
   settings: {
-    optimizer: { enabled: true, runs: 200 },
+    optimizer: { enabled: true, runs: 1 },
     viaIR: true,
     evmVersion: "paris",
     outputSelection: {

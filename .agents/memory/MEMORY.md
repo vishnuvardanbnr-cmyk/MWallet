@@ -1,9 +1,10 @@
 - [VPS SSH deploy pattern](vps-ssh-deploy.md) — VPS_SSH_KEY is base64 of raw OpenSSH binary; decode + wrap in PEM header/footer to use with ssh/scp; password auth is disabled
 - [VPS PM2 restart pattern](vps-pm2-restart.md) — PM2 SSH hangs; use `systemctl restart mvault.service` instead (returns in <5s)
-- [MvaultView deployment](mvaultview-deploy.md) — current VIEW at 0x1324CE45...; env-var || fallback pattern doesn't bypass a stale set value
+- [MvaultView deployment](mvaultview-deploy.md) — VIEW at 0xd68e9476...; all 5 contracts redeployed June 2026 with bytes32 profile fields; see addresses in .env and replit.md
 - [MChain USDT transferFrom quirk](mchain-usdt-quirk.md) — MChain test USDT returns true from transferFrom but doesn't move tokens; adminCreditBtcPool must NOT use transferFrom; split into virtual credit + separate adminDepositUsdtPool for real USDT funding
 - [Contract size limit](contract-size.md) — EIP-170 (24,576 bytes) IS enforced on MChain 1888; gasUsed=0 + status=0 in receipt = size rejection, not gas issue.
 - [Delegation view removal](delegation-views.md) — getMvtPrice/getActiveStakes/getBtcPoolInfo/getUserBoardStats removed from MvaultContract to save bytespace; frontend calls MVT token and staking module contracts directly.
 - [MChain raw deployment](mchain-raw-deploy.md) — hardhat deploys silently fail on MChain (nonce skipping); always use scripts/deploy-raw-mchain.cjs (raw JSON-RPC, fresh nonce per tx).
 - [MChain contract wipe](mchain-contract-wipe.md) — MChain 1888 periodically wipes contract state (test network reset); contracts verified via eth_getCode after every deploy.
 - [MChain block.timestamp=0 bug](mchain-timestamp-zero.md) — block.timestamp is always 0 on MChain 1888; any timestamp-based state flag is unreliable; use explicit bool fields instead.
+- [Profile bytes32 encoding](profile-bytes32.md) — displayName/email/phone/country are bytes32 in User struct (max 31 chars); use ethers.encodeBytes32String/decodeBytes32String; setProfile(bytes32,bytes32,bytes32,bytes32); no getProfile() function exists.
