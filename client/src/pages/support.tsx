@@ -8,7 +8,7 @@ import { PACKAGE_NAMES, PACKAGE_PRICES_USD } from "@/lib/contract";
 import { useSupportWs } from "@/hooks/use-support-ws";
 import type { SupportTicket, TicketMessage } from "@shared/schema";
 
-const ADMIN_WALLET = "0x12fcf3d1084455d3677a110925d73b01f3846750";
+const ADMIN_WALLET = "0xf305fedfff08adaa7d2f73ca17f6ba4a3fb79318";
 
 const faqs = [
   {

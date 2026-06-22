@@ -228,7 +228,7 @@ export const TOKEN_ADDRESS =
 export const CONTRACT_ADDRESS =
   import.meta.env.VITE_CONTRACT_ADDRESS || "";
 
-export const ADMIN_WALLET = (import.meta.env.VITE_ADMIN_WALLET ?? "0x12Fcf3d1084455d3677a110925D73b01F3846750").toLowerCase();
+export const ADMIN_WALLET = (import.meta.env.VITE_ADMIN_WALLET ?? "0xF305fEdfFF08ADAA7D2F73cA17F6bA4a3FB79318").toLowerCase();
 
 // ── MvaultContract ABI ────────────────────────────────────────────────────────
 export const MVAULT_ABI = [
