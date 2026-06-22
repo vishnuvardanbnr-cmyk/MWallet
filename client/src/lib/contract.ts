@@ -592,7 +592,7 @@ export function decodeContractError(err: any): string {
 export const PACKAGE_NAMES = ["None", "Starter", "Basic", "Pro", "Elite", "Stockiest", "Super Stockiest"];
 export const PACKAGE_PRICES_USD = [0, 50, 200, 600, 1200, 2400, 4800];
 export const STATUS_NAMES = ["Inactive", "Active", "Grace Period"];
-export const BOARD_PRICES_USD = [0, 50, 180, 648, 2333, 8398, 30233, 108839, 391821, 1410555, 5077998];
+export const BOARD_PRICES_USD = [0, 20, 180, 648, 2333, 8398, 30233, 108839, 391821, 1410555, 5077998];
 
 export const TX_TYPE_NAMES = [
   "Activation", "Level Income", "Level Missed", "Placement Income",

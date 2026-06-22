@@ -134,7 +134,7 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
 
   const handleEnterPool = async () => {
     if (!canEnter) {
-      toast({ title: "Insufficient balance", description: "You need at least $50 in your USDT pool to enter.", variant: "destructive" });
+      toast({ title: "Insufficient balance", description: "You need at least $20 in your USDT pool to enter.", variant: "destructive" });
       return;
     }
     setEntering(true);
@@ -252,7 +252,7 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
             </svg>
             <div className="absolute inset-0 flex flex-col items-center justify-center">
               <span className="text-2xl font-bold gradient-text" style={{ fontFamily: 'var(--font-display)' }} data-testid="text-btc-pool-amount">${btcPoolNum.toFixed(2)}</span>
-              <span className="text-[10px] text-muted-foreground">of $50 required</span>
+              <span className="text-[10px] text-muted-foreground">of $20 required</span>
             </div>
           </div>
 
@@ -260,7 +260,7 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
             <h2 className="text-lg font-bold mb-1" style={{ fontFamily: 'var(--font-display)' }}>
               <span className="gradient-text">Your USDT Pool Balance</span>
             </h2>
-            <p className="text-xs text-muted-foreground mb-4">10% of every MWT sell is added to your USDT pool. Once you reach $50, you can enter Pool 1.</p>
+            <p className="text-xs text-muted-foreground mb-4">10% of every MWT sell is added to your USDT pool. Once you reach $20, you can enter Pool 1.</p>
             <button
               onClick={handleEnterPool}
               disabled={!canEnter || entering}
@@ -277,7 +277,7 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
               ) : canEnter ? (
                 <><Unlock className="h-4 w-4" /> Enter Pool 1</>
               ) : (
-                <><Lock className="h-4 w-4" /> Need $50 to Enter</>
+                <><Lock className="h-4 w-4" /> Need $20 to Enter</>
               )}
             </button>
           </div>
@@ -486,7 +486,7 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
             <div className="h-5 w-5 rounded-md bg-yellow-600/10 flex items-center justify-center shrink-0 mt-0.5">
               <span className="text-[10px] font-bold text-yellow-300">2</span>
             </div>
-            <p className="text-xs text-muted-foreground">Once your USDT pool reaches $50, you can enter Pool 1</p>
+            <p className="text-xs text-muted-foreground">Once your USDT pool reaches $20, you can enter Pool 1</p>
           </div>
           <div className="flex items-start gap-2.5">
             <div className="h-5 w-5 rounded-md bg-amber-600/10 flex items-center justify-center shrink-0 mt-0.5">
