@@ -29,7 +29,7 @@ const faqs = [
   },
   {
     question: "How do withdrawals work?",
-    answer: "You can withdraw your wallet balance at any time. A 10% withdrawal matching fee is deducted and distributed to upline sponsors, and an additional 10% is allocated to the BTC Reward Pool. The remaining 80% is transferred directly to your wallet as USDT.",
+    answer: "You can withdraw your USDT balance at any time — 100% is transferred directly to your wallet with no deductions or fees.",
   },
   {
     question: "What is the grace period?",
