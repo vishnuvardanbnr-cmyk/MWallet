@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Coins, DollarSign, ArrowDownUp, Loader2, TrendingDown, Flame, Info, Bitcoin, Shield, AlertTriangle } from "lucide-react";
+import { Coins, DollarSign, ArrowDownUp, Loader2, TrendingDown, Flame, Info, Shield, AlertTriangle } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import { formatTokenAmount } from "@/lib/contract";
@@ -184,7 +184,7 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
               <span className="font-medium">${preview.grossUsdt.toFixed(2)}</span>
             </div>
             <div className="flex items-center justify-between text-xs">
-              <span className="flex items-center gap-1 text-orange-400/80"><Bitcoin className="h-3 w-3" /> USDT pool (10%)</span>
+              <span className="flex items-center gap-1 text-orange-400/80"><DollarSign className="h-3 w-3" /> USDT pool (10%)</span>
               <span className="font-bold text-orange-400">−${preview.btcDeduction.toFixed(2)}</span>
             </div>
             <div className="h-px bg-white/[0.06]" />
