@@ -289,7 +289,7 @@ export default function TeamPage({ userInfo, formatAmount, getDirectReferrals, a
 
   const shareWhatsApp = (side: "left" | "right") => {
     const link = `${window.location.origin}/open?ref=${account}&side=${side}`;
-    const msg = `Join me on M-Wallet — the DeFi MLM ecosystem on BNB Smart Chain! Activate for $130 and earn up to $390 (3×). Use my ${side} referral link: ${link}`;
+    const msg = `Join me on M-Wallet — the DeFi MLM ecosystem on BNB Smart Chain! Activate for $150 and earn up to $450 (3×). Use my ${side} referral link: ${link}`;
     window.open(`https://wa.me/?text=${encodeURIComponent(msg)}`, "_blank");
   };
 

@@ -90,10 +90,10 @@ const CONTRACT_ERROR_MESSAGES_EXPORT: Record<string, string> = {
   InsufficientVirtualBalance: "Insufficient MWT balance.",
   InsufficientUsdtBalance:    "Insufficient USDT balance.",
   InsufficientBtcPool:        "Insufficient BTC pool balance.",
-  InsufficientRebirthPool:    "Insufficient rebirth pool balance — need $130 in rebirth pool first.",
-  NotEligibleForRebirth:      "Rebirth requires the PRO package ($130). STARTER accounts cannot rebirth.",
+  InsufficientRebirthPool:    "Insufficient rebirth pool balance — need $150 in rebirth pool first.",
+  NotEligibleForRebirth:      "Rebirth requires the PRO package ($150). STARTER accounts cannot rebirth.",
   SubAccountAlreadyRegistered:"That wallet is already registered — use a fresh, unregistered address.",
-  UseRebirthInstead:          "Your rebirth pool has $130+ — use the Create Sub-Account button, not Claim.",
+  UseRebirthInstead:          "Your rebirth pool has $150+ — use the Create Sub-Account button, not Claim.",
   NoRebirthBalance:           "Your rebirth pool is empty — sell MWT after your income limit is exhausted to fill it.",
   NoOpenBinarySlot:           "No open slot found in the binary tree.",
   ZeroAddress:                "Invalid address provided.",
@@ -103,7 +103,7 @@ const CONTRACT_ERROR_MESSAGES_EXPORT: Record<string, string> = {
   ExceedsPool:                "Amount exceeds pool balance.",
   BoardHandlerNotSet:         "Board module not configured yet.",
   InsufficientBtcPoolForBoard:"Insufficient BTC pool balance to enter the board.",
-  NotActive:                  "Your account is not yet activated. Please activate ($130 USDT) before staking.",
+  NotActive:                  "Your account is not yet activated. Please activate ($150 USDT) before staking.",
   BelowMinStake:              "Minimum stake is $50 USDT.",
   NoMvtMinted:                "MWT minting failed — bonding curve issue, please contact support.",
   AlreadyUnstaked:            "This position has already been unstaked.",
@@ -601,6 +601,6 @@ export const TX_TYPE_NAMES = [
 ];
 export const TX_TYPE_INCOME = [false, true, false, true, false, false, false, false, false, true, true, true];
 
-// Income limit = $390 USDT (3× package price)
-export const INCOME_LIMIT_USDT = 390;
-export const PACKAGE_PRICE_USDT = 130;
+// Income limit = $450 USDT (3× package price)
+export const INCOME_LIMIT_USDT = 450;
+export const PACKAGE_PRICE_USDT = 150;

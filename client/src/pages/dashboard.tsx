@@ -261,7 +261,7 @@ export default function Dashboard({
                 Income Limit Reached
               </p>
               <p className="text-xs text-muted-foreground mt-0.5">
-                You've earned your full ${incomeCap.toFixed(0)} cap. {pkgPriceNum <= 55 ? "Upgrade to Pro ($130) to unlock a $390 cap, or reactivate at $55 to reset your limit." : "Reactivate your $130 package to reset your income limit."}
+                You've earned your full ${incomeCap.toFixed(0)} cap. {pkgPriceNum <= 75 ? "Upgrade to Pro ($150) to unlock a $450 cap, or reactivate at $75 to reset your limit." : "Reactivate your $150 package to reset your income limit."}
               </p>
               <button
                 onClick={() => setLocation("/reactivate")}

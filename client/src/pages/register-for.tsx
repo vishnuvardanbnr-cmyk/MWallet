@@ -10,7 +10,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatTokenAmount } from "@/lib/contract";
 import { ethers } from "ethers";
 
-const PACKAGE_PRICE = 130;
+const PACKAGE_PRICE = 150;
 
 interface Props {
   account: string;
@@ -113,7 +113,7 @@ export default function RegisterForPage({
         <div className="glass-card rounded-2xl p-4">
           <DollarSign className="h-4 w-4 text-amber-400 mb-2" />
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Cost</p>
-          <p className="text-base font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>$130.00</p>
+          <p className="text-base font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>$150.00</p>
         </div>
         <div className="glass-card rounded-2xl p-4">
           <Shield className="h-4 w-4 mb-2 text-muted-foreground" />
@@ -252,7 +252,7 @@ export default function RegisterForPage({
             </div>
             <div className="px-4 py-3 flex items-center justify-between">
               <span className="text-[11px] text-muted-foreground">Deducted from your balance</span>
-              <span className="text-sm font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>$130.00</span>
+              <span className="text-sm font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>$150.00</span>
             </div>
           </div>
         )}
@@ -266,12 +266,12 @@ export default function RegisterForPage({
           style={{ fontFamily: "var(--font-display)" }}
         >
           {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <UserPlus className="h-4 w-4" />}
-          {processing ? "Processing transaction…" : "Register & Activate — $130"}
+          {processing ? "Processing transaction…" : "Register & Activate — $150"}
         </button>
 
         {!hasFunds && (
           <p className="text-[11px] text-center text-red-400 -mt-2">
-            Need at least $130 in your in-app balance — earn income or sell MWT first
+            Need at least $150 in your in-app balance — earn income or sell MWT first
           </p>
         )}
       </div>
@@ -284,7 +284,7 @@ export default function RegisterForPage({
         </div>
         <ol className="space-y-3">
           {[
-            { num: "1", text: "$130 is deducted from your in-app earned balance — no wallet approval needed." },
+            { num: "1", text: "$150 is deducted from your in-app earned balance — no wallet approval needed." },
             { num: "2", text: "The new wallet is registered and activated in one transaction." },
             { num: "3", text: "You become their direct sponsor — their level income flows up through you first." },
             { num: "4", text: "Ensure the chosen binary position is free, otherwise the transaction will revert." },
@@ -310,7 +310,7 @@ export default function RegisterForPage({
 
           <div className="space-y-4 pt-1">
             <p className="text-sm text-muted-foreground">
-              You are about to register and activate the following wallet with <strong className="text-foreground">$130 USDT</strong> from your in-app balance.
+              You are about to register and activate the following wallet with <strong className="text-foreground">$150 USDT from your in-app balance.
             </p>
 
             <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] divide-y divide-white/[0.05] text-sm">
@@ -341,7 +341,7 @@ export default function RegisterForPage({
                 data-testid="button-confirm-register"
                 style={{ fontFamily: "var(--font-display)" }}
               >
-                Confirm — $130
+                Confirm — $150
               </button>
             </div>
           </div>

@@ -9,7 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { formatTokenAmount, decodeContractError } from "@/lib/contract";
 import { ethers } from "ethers";
 
-const PACKAGE_PRICE = 130;
+const PACKAGE_PRICE = 150;
 
 interface Props {
   account: string;
@@ -41,7 +41,7 @@ export default function RebirthAccountPage({
   const [processing, setProcessing]   = useState(false);
   const [lastSuccess, setLastSuccess] = useState<string | null>(null);
 
-  const PRO_PRICE = 130n * 10n ** 18n;
+  const PRO_PRICE = 150n * 10n ** 18n;
   const poolBal     = rebirthPool   ? parseFloat(formatTokenAmount(rebirthPool,   tokenDecimals)) : 0;
   const limitLeft   = incomeLimit   ? parseFloat(formatTokenAmount(incomeLimit,   tokenDecimals)) : -1;
   const limitCap    = incomeLimitCap? parseFloat(formatTokenAmount(incomeLimitCap,tokenDecimals)) : 0;
@@ -61,7 +61,7 @@ export default function RebirthAccountPage({
       setLastSuccess(subAccount);
       setSubAccount("");
       setPlaceLeft(true);
-      toast({ title: "Rebirth Successful!", description: `Sub-account ${shortenAddr(subAccount)} is registered and activated. Your income limit is reset to $390.` });
+      toast({ title: "Rebirth Successful!", description: `Sub-account ${shortenAddr(subAccount)} is registered and activated. Your income limit is reset to $450.` });
     } catch (e: any) {
       const msg = decodeContractError(e);
       toast({ title: "Rebirth Failed", description: msg, variant: "destructive" });
@@ -83,7 +83,7 @@ export default function RebirthAccountPage({
             data-testid="text-page-title">Create Rebirth Account</h1>
         </div>
         <p className="text-sm text-muted-foreground">
-          Use your rebirth pool to activate a new sub-account — resets your income limit to $390
+          Use your rebirth pool to activate a new sub-account — resets your income limit to $450
         </p>
       </div>
 
@@ -96,7 +96,7 @@ export default function RebirthAccountPage({
             <p className="text-sm font-semibold text-emerald-300">Rebirth complete</p>
             <p className="text-xs font-mono text-muted-foreground mt-0.5">{lastSuccess}</p>
             <p className="text-xs text-muted-foreground mt-1">
-              Sub-account is registered, activated, and placed in your binary tree. Your income limit reset to $390.
+              Sub-account is registered, activated, and placed in your binary tree. Your income limit reset to $450.
             </p>
           </div>
         </div>
@@ -113,7 +113,7 @@ export default function RebirthAccountPage({
         <div className="glass-card rounded-2xl p-4">
           <Sparkles className="h-4 w-4 text-amber-400 mb-2" />
           <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Cost</p>
-          <p className="text-base font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>$130.00</p>
+          <p className="text-base font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>$150.00</p>
         </div>
         <div className="glass-card rounded-2xl p-4">
           <Shield className="h-4 w-4 mb-2 text-muted-foreground" />
@@ -132,7 +132,7 @@ export default function RebirthAccountPage({
           <div className="space-y-1">
             <p className="text-xs font-semibold text-red-300">STARTER package — rebirth not available</p>
             <p className="text-xs text-red-300/80">
-              Only PRO accounts ($130 activation) can create sub-accounts. Your current package is STARTER ($55).
+              Only PRO accounts ($150 activation) can create sub-accounts. Your current package is STARTER ($75).
             </p>
           </div>
         </div>
@@ -144,12 +144,12 @@ export default function RebirthAccountPage({
           <AlertCircle className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
           <div className="space-y-1">
             <p className="text-xs font-semibold text-amber-300">
-              Rebirth pool has <strong>${poolBal.toFixed(2)}</strong> — need $130
+              Rebirth pool has <strong>${poolBal.toFixed(2)}</strong> — need $150
             </p>
             {limitExhausted ? (
               <p className="text-xs text-amber-300/80">
                 Your income limit is fully exhausted ($0 remaining) — every MWT you sell now goes directly into your rebirth pool.
-                Keep selling MWT to reach $130.
+                Keep selling MWT to reach $150.
               </p>
             ) : limitFull ? (
               <p className="text-xs text-amber-300/80">
@@ -259,7 +259,7 @@ export default function RebirthAccountPage({
             </div>
             <div className="px-4 py-3 flex items-center justify-between">
               <span className="text-[11px] text-muted-foreground">Deducted from rebirth pool</span>
-              <span className="text-sm font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>$130.00</span>
+              <span className="text-sm font-bold text-amber-400" style={{ fontFamily: "var(--font-display)" }}>$150.00</span>
             </div>
             {remaining > 0 && (
               <div className="px-4 py-3 flex items-center justify-between">
@@ -279,12 +279,12 @@ export default function RebirthAccountPage({
           style={{ fontFamily: "var(--font-display)" }}
         >
           {processing ? <Loader2 className="h-4 w-4 animate-spin" /> : <RotateCcw className="h-4 w-4" />}
-          {processing ? "Processing…" : "Create Sub-Account — $130 from Rebirth Pool"}
+          {processing ? "Processing…" : "Create Sub-Account — $150 from Rebirth Pool"}
         </button>
 
         {!hasFunds && (
           <p className="text-[11px] text-center text-red-400 -mt-2">
-            Need at least $130 in your rebirth pool — keep selling MWT to fill it
+            Need at least $150 in your rebirth pool — keep selling MWT to fill it
           </p>
         )}
       </div>
@@ -297,8 +297,8 @@ export default function RebirthAccountPage({
         </div>
         <ol className="space-y-3">
           {[
-            { num: "1", text: "$130 is deducted from your rebirth pool — no wallet approval needed." },
-            { num: "2", text: "Your income limit resets to $390 so you can earn again." },
+            { num: "1", text: "$150 is deducted from your rebirth pool — no wallet approval needed." },
+            { num: "2", text: "Your income limit resets to $450 so you can earn again." },
             { num: "3", text: "Any remaining rebirth pool balance is credited to your main wallet (through your new income limit)." },
             { num: "4", text: "The new sub-account is registered and activated in one transaction — ready to use immediately." },
           ].map(step => (
@@ -322,7 +322,7 @@ export default function RebirthAccountPage({
           </DialogHeader>
           <div className="space-y-4 pt-1">
             <p className="text-sm text-muted-foreground">
-              Creating a sub-account using <strong className="text-foreground">$130</strong> from your rebirth pool. Your income limit will reset to $390.
+              Creating a sub-account using <strong className="text-foreground">$150</strong> from your rebirth pool. Your income limit will reset to $450.
             </p>
             <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] divide-y divide-white/[0.05] text-sm">
               <div className="px-4 py-3 flex justify-between">

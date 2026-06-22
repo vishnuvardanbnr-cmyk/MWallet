@@ -194,12 +194,12 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
             </Badge>
           </div>
 
-          {/* Progress bar toward $130 */}
+          {/* Progress bar toward $150 */}
           {rebirthPool < REBIRTH_THRESHOLD && (
             <div className="mb-3">
               <div className="flex justify-between text-[10px] text-muted-foreground mb-1">
                 <span>Progress to rebirth</span>
-                <span>${rebirthPool.toFixed(2)} / $130.00</span>
+                <span>${rebirthPool.toFixed(2)} / $150.00</span>
               </div>
               <div className="h-1.5 rounded-full bg-white/[0.06] overflow-hidden">
                 <div
@@ -216,10 +216,10 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
           {rebirthPool >= REBIRTH_THRESHOLD ? (
             <div className="space-y-2">
               <p className="text-[11px] text-emerald-400 font-medium">
-                Rebirth pool is ready! Use it to activate a new sub-account and reset your income limit to $390.
+                Rebirth pool is ready! Use it to activate a new sub-account and reset your income limit to $450.
               </p>
               <p className="text-[11px] text-muted-foreground">
-                After rebirth: $130 activates sub-account → income limit resets to $390 → remaining <span className="text-violet-300">${(rebirthPool - REBIRTH_THRESHOLD).toFixed(2)} credits to your new limit</span>. Any amount beyond $390 stays here for the next rebirth.
+                After rebirth: $150 activates sub-account → income limit resets to $450 → remaining <span className="text-violet-300">${(rebirthPool - REBIRTH_THRESHOLD).toFixed(2)} credits to your new limit</span>. Any amount beyond $450 stays here for the next rebirth.
               </p>
               <button
                 onClick={() => setLocation("/rebirth")}
@@ -232,7 +232,7 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
           ) : (
             <div className="space-y-2">
               <p className="text-[11px] text-muted-foreground">
-                Keep selling MWT to fill this wallet. Once it hits $130, you can create a sub-account — income limit resets to $390, and <span className="text-violet-300 font-medium">remaining funds credit to your new income limit</span>.
+                Keep selling MWT to fill this wallet. Once it hits $150, you can create a sub-account — income limit resets to $450, and <span className="text-violet-300 font-medium">remaining funds credit to your new income limit</span>.
               </p>
               <button
                 onClick={handleClaimRebirth}
@@ -252,7 +252,7 @@ export default function WalletPage({ userInfo, account, formatAmount, withdrawFu
       <div className="flex items-start gap-2.5 p-3 rounded-xl bg-amber-500/10 border border-amber-500/20 slide-in" style={{ animationDelay: "0.07s" }}>
         <Info className="h-4 w-4 text-amber-400 shrink-0 mt-0.5" />
         <div className="text-[11px] text-muted-foreground leading-relaxed space-y-1">
-          <p><span className="text-amber-400 font-medium">Income Limit ($390): </span>MWT sells → 90% goes to USDT balance (subject to $390 cap). Excess beyond the cap flows to your Rebirth Wallet.</p>
+          <p><span className="text-amber-400 font-medium">Income Limit ($450): </span>MWT sells → 90% goes to USDT balance (subject to $450 cap). Excess beyond the cap flows to your Rebirth Wallet.</p>
           <p><span className="text-emerald-400 font-medium">Staking/Unstaking — No limit: </span>USDT received on unstake is credited directly to your USDT balance and is NOT subject to the income limit.</p>
           <p><span className="text-orange-400 font-medium">Board rewards: </span>40% of board pool completions credited directly to your USDT balance — also NOT subject to income limit.</p>
         </div>

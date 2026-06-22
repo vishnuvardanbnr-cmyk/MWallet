@@ -192,7 +192,7 @@ export default function AdminPage({ account }: AdminPageProps) {
       const contract = getMvaultContract(signer);
       const tx = await contract.adminActivate(addr, pkg, { gasLimit: 500_000n });
       await tx.wait();
-      const pkgLabel = pkg === 1 ? "Starter ($55)" : "Pro ($130)";
+      const pkgLabel = pkg === 1 ? "Starter ($75)" : "Pro ($150)";
       setActivateResult({ success: true, msg: `Ghost activated ${addr} as ${pkgLabel}` });
       toast({ title: "Ghost Activation Success", description: `${addr} is now active (${pkgLabel}, no USDT/MWT used).` });
       setTargetAddress("");
@@ -420,7 +420,7 @@ export default function AdminPage({ account }: AdminPageProps) {
                 }`}
               >
                 <div className="text-sm font-semibold">Starter</div>
-                <div className="text-xs mt-0.5">$55 package · $165 cap</div>
+                <div className="text-xs mt-0.5">$75 package · $225 cap</div>
               </button>
               <button
                 data-testid="btn-pkg-pro"
@@ -432,7 +432,7 @@ export default function AdminPage({ account }: AdminPageProps) {
                 }`}
               >
                 <div className="text-sm font-semibold">Pro</div>
-                <div className="text-xs mt-0.5">$130 package · $390 cap</div>
+                <div className="text-xs mt-0.5">$150 package · $450 cap</div>
               </button>
             </div>
           </div>

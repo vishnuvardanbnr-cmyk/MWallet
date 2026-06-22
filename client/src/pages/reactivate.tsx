@@ -19,8 +19,8 @@ interface ReactivatePageProps {
 }
 
 const PACKAGES = [
-  { pkg: 1, label: "Starter", price: 55, cap: 165, color: "amber", icon: Star },
-  { pkg: 2, label: "Pro",     price: 130, cap: 390, color: "yellow", icon: Zap  },
+  { pkg: 1, label: "Starter", price: 75, cap: 225, color: "amber", icon: Star },
+  { pkg: 2, label: "Pro",     price: 150, cap: 450, color: "yellow", icon: Zap  },
 ];
 
 function parseReactivateError(err: any): string {
@@ -164,7 +164,7 @@ export default function ReactivatePage({
         {selectedPkg === 2 && !isPro && (
           <div className="flex items-center gap-2 px-3 py-2 rounded-xl bg-amber-500/8 border border-amber-500/20">
             <Zap className="h-3.5 w-3.5 text-amber-400 shrink-0" />
-            <p className="text-[11px] text-amber-300">Upgrading to Pro unlocks rebirth and a $390 cap.</p>
+            <p className="text-[11px] text-amber-300">Upgrading to Pro unlocks rebirth and a $450 cap.</p>
           </div>
         )}
       </div>

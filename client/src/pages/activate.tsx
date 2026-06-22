@@ -33,11 +33,11 @@ const PACKAGES = [
   {
     pkg: 1,
     label: "Starter",
-    price: 55,
-    cap: 165,
+    price: 75,
+    cap: 225,
     color: "amber",
     icon: Star,
-    desc: "Entry-level package · Earn up to $165 (3×)",
+    desc: "Entry-level package · Earn up to $225 (3×)",
     distribution: [
       { label: "Level Income", pct: 40, color: "text-amber-300", bar: "bg-amber-400", bg: "bg-amber-400/10", border: "border-amber-400/20" },
       { label: "Binary Pool",  pct: 30, color: "text-blue-300",  bar: "bg-blue-500",  bg: "bg-blue-500/10",  border: "border-blue-500/20"  },
@@ -47,11 +47,11 @@ const PACKAGES = [
   {
     pkg: 2,
     label: "Pro",
-    price: 130,
-    cap: 390,
+    price: 150,
+    cap: 450,
     color: "yellow",
     icon: Zap,
-    desc: "Full package · Earn up to $390 (3×)",
+    desc: "Full package · Earn up to $450 (3×)",
     distribution: [
       { label: "Level Income", pct: 40, color: "text-amber-300", bar: "bg-amber-400", bg: "bg-amber-400/10", border: "border-amber-400/20" },
       { label: "Binary Pool",  pct: 30, color: "text-blue-300",  bar: "bg-blue-500",  bg: "bg-blue-500/10",  border: "border-blue-500/20"  },
@@ -270,7 +270,7 @@ export default function ActivatePage({ account, approveToken, activatePackage, a
               <ArrowRight className="h-6 w-6 text-amber-400" />
             </div>
             <p className="text-sm font-semibold text-amber-300" style={{ fontFamily: "var(--font-display)" }}>Select a package above to continue</p>
-            <p className="text-xs text-muted-foreground">Choose Starter ($55) or Pro ($130) to see the approval steps</p>
+            <p className="text-xs text-muted-foreground">Choose Starter ($75) or Pro ($150) to see the approval steps</p>
           </div>
         )}
 

@@ -223,7 +223,7 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
           {[
             { step: "1", title: "Burn MWT Tokens", desc: "Your virtual MWT balance is burned via the bonding curve using the contract's real token pool." },
             { step: "2", title: "10% to USDT Pool", desc: "10% of USDT proceeds go to your personal USDT pool — used exclusively to fund your board pool entries." },
-            { step: "3", title: "90% to Your USDT Balance", desc: "Net USDT fills your $390 income limit → credited to USDT balance. Excess goes to rebirth pool." },
+            { step: "3", title: "90% to Your USDT Balance", desc: "Net USDT fills your $450 income limit → credited to USDT balance. Excess goes to rebirth pool." },
             { step: "4", title: "Withdraw Anytime", desc: "Pull your USDT balance to your wallet from the Wallet page whenever you're ready." },
           ].map((item) => (
             <div key={item.step} className="flex items-start gap-3">

@@ -24,7 +24,7 @@ export interface UserInfo {
   totalSold: bigint;
   incomeLimit: bigint;
   incomeLimitCap: bigint;   // max income for this user's package (3× packagePrice)
-  packagePrice: bigint;     // activation price paid: 55e18 (Starter) or 130e18 (Pro)
+  packagePrice: bigint;     // activation price paid: 75e18 (Starter) or 150e18 (Pro)
   usdtBalance: bigint;
   rebirthPool: bigint;
   btcPoolBalance: bigint;
@@ -272,8 +272,8 @@ export function useWeb3() {
         totalReceived:   info.totalReceived,
         totalSold:       info.totalSold,
         incomeLimit:     info.incomeLimit,
-        incomeLimitCap:  info.incomeLimitCap  ?? 390n * 10n ** 18n,
-        packagePrice:    info.packagePrice    ?? 130n * 10n ** 18n,
+        incomeLimitCap:  info.incomeLimitCap  ?? 450n * 10n ** 18n,
+        packagePrice:    info.packagePrice    ?? 150n * 10n ** 18n,
         usdtBalance:     info.usdtBalance,
         rebirthPool:     info.rebirthPool,
         btcPoolBalance:  info.btcPoolBalance,
@@ -430,7 +430,7 @@ export function useWeb3() {
     await waitForTx(txHash);
   }, [getSigner, tokenDecimals]);
 
-  // ── Activation ($130 USDT, no package selection) ───────────────────────────
+  // ── Activation ($150 USDT, no package selection) ───────────────────────────
 
   // Notify server after any activation so it can refresh the DB snapshot
   // and trigger rank evaluation immediately (replaces the 30s BSC poller).
@@ -568,7 +568,7 @@ export function useWeb3() {
 
       // TX_META: type 0-11 from on-chain _recordTx
       const TX_META: Record<number, { type: string; isIncome: boolean; currency: "USDT" | "MWT"; detail: (r: any) => string }> = {
-        0:  { type: "Activation",          isIncome: false, currency: "USDT", detail: ()  => "$130 package activated" },
+        0:  { type: "Activation",          isIncome: false, currency: "USDT", detail: ()  => "$150 package activated" },
         1:  { type: "Level Income",         isIncome: true,  currency: "MWT",  detail: (r) => {
                const lvl = Number(r.level);
                const addr = r.addr as string;
@@ -662,7 +662,7 @@ export function useWeb3() {
 
   const reactivateWithWallet = useCallback(async (pkg: number) => {
     const signer = await getSigner();
-    const price = pkg === 1 ? ethers.parseUnits("55", 18) : ethers.parseUnits("130", 18);
+    const price = pkg === 1 ? ethers.parseUnits("75", 18) : ethers.parseUnits("150", 18);
     const tokenIface = getTokenContract(getDirectProvider()).interface;
     const approveHash = await sendRawTx(signer, TOKEN_ADDRESS,
       tokenIface.encodeFunctionData("approve", [MVAULT_CONTRACT_ADDRESS, price]), 100_000);
@@ -774,7 +774,7 @@ export function useWeb3() {
       throw new Error("This wallet is not registered. Please register first before staking.");
     }
     if (!userInfo.isActive) {
-      throw new Error("Your account is not yet activated. Please activate ($130 USDT) before staking.");
+      throw new Error("Your account is not yet activated. Please activate ($150 USDT) before staking.");
     }
 
     const amountBn = ethers.parseUnits(usdtAmount, 18);
