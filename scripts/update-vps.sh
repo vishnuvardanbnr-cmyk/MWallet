@@ -10,13 +10,13 @@ VPS_USER="root"
 VPS_PATH="/opt/mvault"
 SSH_KEY="/tmp/mvault_deploy_key"
 
-MVT_TOKEN="0x84bb5fa3df0eaee52fcb62c36177b27be0a50414"
-MVAULT_CONTRACT="0x6fe87971e55a0b38fc9ee6c2889eb7ed08b53e0f"
-BOARD_HANDLER="0xa1a1ad23fd060453aae02b5a29683f4f35767436"
-MVAULT_VIEW="0x86d15109f0360a74630eb8ded6f41ae38f7edfb0"
-MVAULT_STAKING="0x0c6cab6d3d3d152edcf3538042729575282ab262"
+MVT_TOKEN="0x27803b7ea9d7b4c31bd61871ba252e9f344c35b4"
+MVAULT_CONTRACT="0xf6bd5c5972f3fbc09f29928157d77842441801ad"
+BOARD_HANDLER="0xf6ac89f319ee506f5b15da1230c0cfc2c497e016"
+MVAULT_VIEW="0xd68e9476e3dcef15c30c3d47677a51fd794e0824"
+MVAULT_STAKING="0x6e0971cedccf633820274fbbf09944c884e0e404"
 DISTRIBUTOR=""
-USDT="0x7b2ed1be97fa240dbd0328dd307e35e588bcb917"
+USDT="0xab8c6267dcca9e70b625014c8f77eee9728e14c3"
 BSC_NETWORK="mchain"
 
 if [ -z "$VPS_SSH_KEY" ]; then
@@ -121,11 +121,11 @@ fi
 EOF
 echo "  ✓ VPS .env updated"
 
-# ── 5. Restart server via PM2 ─────────────────────────────────────────────
+# ── 5. Restart server via systemd service ─────────────────────────────────
 echo ""
-echo "[5/5] Restarting via PM2..."
-$SSH "cd ${VPS_PATH} && pm2 restart mvault --update-env && sleep 3 && pm2 show mvault | grep -E 'status|uptime|restarts'"
-echo "  ✓ Server restarted (PM2)"
+echo "[5/5] Restarting mvault.service via systemd..."
+$SSH "systemctl restart mvault.service && sleep 2 && systemctl is-active mvault.service"
+echo "  ✓ Server restarted (systemd mvault.service)"
 
 echo ""
 echo "══════════════════════════════════════════════════"

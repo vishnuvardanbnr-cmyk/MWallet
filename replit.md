@@ -17,12 +17,12 @@ M-Vault is a Web3 MLM/DeFi platform for BNB Smart Chain. Users connect MetaMask 
 ## Smart Contracts (MChain — Chain ID 1888 — ACTIVE)
 | Contract | Address |
 |---|---|
-| **MVault Main** | `0x6fe87971e55a0b38fc9ee6c2889eb7ed08b53e0f` |
-| **MVT Token** | `0x84bb5fa3df0eaee52fcb62c36177b27be0a50414` |
-| **Board Matrix** | `0xa1a1ad23fd060453aae02b5a29683f4f35767436` |
-| **MvaultStaking** | `0x0c6cab6d3d3d152edcf3538042729575282ab262` |
-| **MvaultView** | `0x86d15109f0360a74630eb8ded6f41ae38f7edfb0` |
-| **USDT (MChain)** | `0x7b2ed1be97fa240dbd0328dd307e35e588bcb917` |
+| **MVault Main** | `0xf6bd5c5972f3fbc09f29928157d77842441801ad` |
+| **MVT Token** | `0x27803b7ea9d7b4c31bd61871ba252e9f344c35b4` |
+| **Board Matrix** | `0xf6ac89f319ee506f5b15da1230c0cfc2c497e016` |
+| **MvaultStaking** | `0x6e0971cedccf633820274fbbf09944c884e0e404` |
+| **MvaultView** | `0xd68e9476e3dcef15c30c3d47677a51fd794e0824` |
+| **USDT (MChain)** | `0xab8c6267dcca9e70b625014c8f77eee9728e14c3` |
 | **Owner/Deployer Wallet** | `0x12Fcf3d1084455d3677a110925D73b01F3846750` (DEPLOYER_PRIVATE_KEY) — owns all contracts |
 
 > MvaultDistributor is retired — binary/power-leg distribution replaced by on-chain placement income.
