@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import { Coins, Loader2, Lock, Unlock, ChevronRight, Users, Trophy, Zap, CheckCircle2, Grid2X2, Gift } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { BOARD_PRICES_USD, getMvaultContract, BOARD_HANDLER_ABI, formatTokenAmount } from "@/lib/contract";
+import { BOARD_PRICES_USD, getMvaultContract, BOARD_HANDLER_ABI, formatTokenAmount, getDirectProvider } from "@/lib/contract";
 
 interface BoardProps {
   btcPoolBalance: bigint;
@@ -45,14 +45,14 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
 
   const btcPoolFormatted = formatAmount(btcPoolBalance);
   const btcPoolNum = parseFloat(btcPoolFormatted.replace(/,/g, ''));
-  const btcPoolPercent = Math.min((btcPoolNum / 50) * 100, 100);
-  const canEnter = btcPoolNum >= 50;
+  const btcPoolPercent = Math.min((btcPoolNum / 20) * 100, 100);
+  const canEnter = btcPoolNum >= 20;
 
   const loadBoardData = useCallback(async () => {
     setLoading(true);
     try {
       const { ethers } = await import("ethers");
-      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const provider = getDirectProvider();
       const mvaultContract = getMvaultContract(provider);
       const userAddr = account.toLowerCase();
 
@@ -72,7 +72,7 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
       }
 
       const tiers: BoardTier[] = [];
-      for (let i = 1; i <= 10; i++) {
+      for (let i = 1; i <= 6; i++) {
         try {
           if (!boardContract) throw new Error("Board handler not set");
 
