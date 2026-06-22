@@ -62,8 +62,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint256 internal constant BOARD_AUTO_ENTRY = 20 * 1e18;
 
     // ── Sell deduction rates ───────────────────────────────────────────────────
-    uint256 internal constant SELL_ADMIN_RATE = 5;  // 5% of USDT received → adminUsdtPool
-    uint256 internal constant SELL_DIST_HALF  = 5;  // 5% upline + 5% downline each
+    uint256 internal constant SELL_ADMIN_RATE = 10; // 10% of USDT received → adminUsdtPool
 
     // ── Pool allocation constants ──────────────────────────────────────────────
     uint256 internal constant LEVEL_ALLOC    = 30;
@@ -72,7 +71,7 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     uint256 internal constant ADMIN_ALLOC    = 20;
     uint256 internal constant RANK_ALLOC     = 10;
     // Liquidity 10% handled internally by MvaultToken (only 90% minted)
-    uint256 internal constant BTC_POOL_RATE  = 5;
+    uint256 internal constant BTC_POOL_RATE  = 10;
 
     // ── User record ───────────────────────────────────────────────────────────
     struct User {
@@ -836,60 +835,21 @@ contract MvaultContract is Ownable, ReentrancyGuard {
         mvaultToken.sell(amount);
         uint256 usdtReceived = usdtToken.balanceOf(address(this)) - usdtBefore;
 
-        // ── Deduct BTC pool % (user-configurable 5–80%, default 5%) ────────
+        // ── Deduct BTC pool % (user-configurable, default 10%) ──────────────
         uint256 btcCharge = (usdtReceived * (u.btcPoolRate != 0 ? u.btcPoolRate : BTC_POOL_RATE)) / 100;
         u.btcPoolBalance += btcCharge;
         u.totalBtcEarned += btcCharge;
         emit BtcPoolCredited(msg.sender, btcCharge);
         _recordTx(msg.sender, TX_BTC_CREDITED, btcCharge, 0, address(0));
 
-        // ── 5% admin fee → adminUsdtPool ──────────────────────────────────────
+        // ── 10% admin fee → adminUsdtPool ────────────────────────────────────
         uint256 adminFee = (usdtReceived * SELL_ADMIN_RATE) / 100;
         adminUsdtPool += adminFee;
+        emit SellDistributed(msg.sender, adminFee, 0, 0);
 
-        // ── 5% upline + 5% downline sell distribution ─────────────────────────
-        {
-            uint256 distAmt = (usdtReceived * SELL_DIST_HALF) / 100;
-            _sellDist(msg.sender, distAmt, true);
-            _sellDist(msg.sender, distAmt, false);
-            emit SellDistributed(msg.sender, adminFee, distAmt, distAmt);
-        }
-
-        // ── Route net through income limit → rebirth pool ────────────────────
-        uint256 netUsdt = usdtReceived - btcCharge
-            - (usdtReceived * (SELL_ADMIN_RATE + SELL_DIST_HALF + SELL_DIST_HALF)) / 100;
+        // ── Route net (80%) through income limit → rebirth pool ──────────────
+        uint256 netUsdt = usdtReceived - btcCharge - adminFee;
         _routeSellNet(u, msg.sender, amount, netUsdt, btcCharge);
-    }
-
-    /**
-     * @dev Distribute `amt` USDT across 10 upline (sponsor chain) or downline
-     *      (leftChild→rightChild chain) levels using 40/20/10/6/4/4/4/4/4/4%
-     *      of amt per level (sums to 100% of amt = 5% of usdtReceived each way).
-     *      Active recipients get usdtBalance credited; inactive → adminUsdtPool.
-     */
-    // Rates: 200,100,50,30,20×6 (sum=500) packed as 10 × uint8 MSB-first
-    uint80 private constant SELL_RATES = 0xC8643E14141414141414;
-
-    function _sellDist(address from, uint256 amt, bool up) internal {
-        address cur = up
-            ? users[from].sponsor
-            : (users[from].leftChild != address(0) ? users[from].leftChild : users[from].rightChild);
-        uint256 dist;
-        for (uint8 i; i < 10 && cur != address(0); i++) {
-            uint256 s = amt * uint8(SELL_RATES >> (8 * (9 - i))) / 500;
-            if (users[cur].isActive) {
-                users[cur].usdtBalance    += s;
-                users[cur].totalUsdtEarned += s;
-                _recordTx(cur, TX_SELL_DIST, s, i + 1, from);
-            } else {
-                adminUsdtPool += s;
-            }
-            dist += s;
-            cur = up
-                ? users[cur].sponsor
-                : (users[cur].leftChild != address(0) ? users[cur].leftChild : users[cur].rightChild);
-        }
-        if (amt > dist) adminUsdtPool += amt - dist;
     }
 
     function _routeSellNet(User storage u, address seller, uint256 mvtAmt, uint256 net, uint256 btc) internal {
