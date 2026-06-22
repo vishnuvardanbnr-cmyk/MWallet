@@ -132,7 +132,7 @@ export default function Dashboard({
   const pkgPriceNum = parseFloat(formatTokenAmount(userInfo.packagePrice, 18));
   const rebirthThreshold = pkgPriceNum > 0 ? pkgPriceNum : 130;
 
-  const estimatedSellValue = sellPriceNum > 0 ? mvtBalanceNum * sellPriceNum * 0.9 : 0;
+  const estimatedSellValue = sellPriceNum > 0 ? mvtBalanceNum * sellPriceNum * 0.8 : 0;
   const incomeCap = incomeLimitCapNum > 0 ? incomeLimitCapNum : 390;
   const incomeUsed = incomeCap - incomeLimitNum;
   const incomeProgress = Math.min(100, (incomeUsed / incomeCap) * 100);

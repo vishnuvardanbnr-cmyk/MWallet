@@ -34,11 +34,12 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
   const sellAmt = parseFloat(sellAmount) || 0;
 
   function estimateSell(tokens: number) {
-    if (tokens <= 0 || sellPrice <= 0) return { grossUsdt: 0, btcDeduction: 0, netUsdt: 0 };
+    if (tokens <= 0 || sellPrice <= 0) return { grossUsdt: 0, btcDeduction: 0, adminFee: 0, netUsdt: 0 };
     const grossUsdt    = tokens * sellPrice;
     const btcDeduction = grossUsdt * 0.1;
-    const netUsdt      = grossUsdt * 0.9;
-    return { grossUsdt, btcDeduction, netUsdt };
+    const adminFee     = grossUsdt * 0.1;
+    const netUsdt      = grossUsdt * 0.8;
+    return { grossUsdt, btcDeduction, adminFee, netUsdt };
   }
 
   const preview = sellAmt > 0 ? estimateSell(sellAmt) : null;
@@ -126,8 +127,8 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
       <div className="flex items-start gap-2.5 p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20">
         <Info className="w-4 h-4 text-amber-400 shrink-0 mt-0.5" />
         <div className="text-[11px] text-muted-foreground leading-relaxed space-y-1">
-          <p><span className="text-foreground font-medium">Sell routing:</span> 10% of sale value → your USDT pool.</p>
-          <p>Remaining 90% fills your income limit first → any excess goes to rebirth pool.</p>
+          <p><span className="text-foreground font-medium">Sell routing:</span> 10% → your USDT pool · 10% → admin pool.</p>
+          <p>Remaining 80% fills your income limit first → any excess goes to rebirth pool.</p>
           <p>Income limit remaining: <span className="text-amber-400 font-medium">${incomeLimit.toFixed(2)}</span></p>
         </div>
       </div>
@@ -187,12 +188,16 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
               <span className="flex items-center gap-1 text-orange-400/80"><DollarSign className="h-3 w-3" /> USDT pool (10%)</span>
               <span className="font-bold text-orange-400">−${preview.btcDeduction.toFixed(2)}</span>
             </div>
+            <div className="flex items-center justify-between text-xs">
+              <span className="flex items-center gap-1 text-red-400/80"><DollarSign className="h-3 w-3" /> Admin pool (10%)</span>
+              <span className="font-bold text-red-400">−${preview.adminFee.toFixed(2)}</span>
+            </div>
             <div className="h-px bg-white/[0.06]" />
             <div className="flex items-center justify-between text-xs">
               <span className="text-emerald-400 font-medium">You receive (USDT balance)</span>
               <span className="font-bold text-emerald-400">+${preview.netUsdt.toFixed(2)}</span>
             </div>
-            <p className="text-[10px] text-muted-foreground/60">Contract routes 90% through your income limit automatically</p>
+            <p className="text-[10px] text-muted-foreground/60">Contract routes 80% through your income limit automatically</p>
           </div>
         )}
 
@@ -223,8 +228,9 @@ export default function SellTokensPage({ account, userInfo, mvtPrice, formatAmou
           {[
             { step: "1", title: "Burn MWT Tokens", desc: "Your virtual MWT balance is burned via the bonding curve using the contract's real token pool." },
             { step: "2", title: "10% to USDT Pool", desc: "10% of USDT proceeds go to your personal USDT pool — used exclusively to fund your board pool entries." },
-            { step: "3", title: "90% to Your USDT Balance", desc: "Net USDT fills your $450 income limit → credited to USDT balance. Excess goes to rebirth pool." },
-            { step: "4", title: "Withdraw Anytime", desc: "Pull your USDT balance to your wallet from the Wallet page whenever you're ready." },
+            { step: "3", title: "10% to Admin Pool", desc: "10% of USDT proceeds go to the platform admin pool for operations and rewards." },
+            { step: "4", title: "80% to Your USDT Balance", desc: "Net USDT fills your income limit → credited to USDT balance. Excess goes to rebirth pool." },
+            { step: "5", title: "Withdraw Anytime", desc: "Pull your USDT balance to your wallet from the Wallet page whenever you're ready." },
           ].map((item) => (
             <div key={item.step} className="flex items-start gap-3">
               <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-yellow-600/20 to-amber-400/10 border border-white/[0.08] flex items-center justify-center shrink-0">

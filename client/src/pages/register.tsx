@@ -90,7 +90,8 @@ export default function RegisterPage({ account, register, totalUsers, disconnect
       const info = await contract.users(addr);
       const isReg = info.isRegistered;
       const isAct = info.isActive;
-      const dname = info.displayName || "";
+      let dname = "";
+      try { dname = info.displayName ? ethers.decodeBytes32String(info.displayName) : ""; } catch { dname = ""; }
       if (!isReg) {
         setSponsorInfo(null);
       } else {
