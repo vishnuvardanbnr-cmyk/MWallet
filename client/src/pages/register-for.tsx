@@ -310,7 +310,7 @@ export default function RegisterForPage({
 
           <div className="space-y-4 pt-1">
             <p className="text-sm text-muted-foreground">
-              You are about to register and activate the following wallet with <strong className="text-foreground">$150 USDT from your in-app balance.
+              You are about to register and activate the following wallet with <strong className="text-foreground">$150 USDT</strong> from your in-app balance.
             </p>
 
             <div className="rounded-xl border border-white/[0.08] bg-white/[0.02] divide-y divide-white/[0.05] text-sm">
