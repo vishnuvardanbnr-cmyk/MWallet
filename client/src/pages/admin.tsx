@@ -24,7 +24,7 @@ export default function AdminPage({ account }: AdminPageProps) {
   const [activateResult, setActivateResult] = useState<{ success: boolean; msg: string } | null>(null);
 
   // Set manager state
-  const [managerAddress, setManagerAddress] = useState("");
+  const [managerAddress, setManagerAddress] = useState("0xe746140d043f65c0ea2f1774bcbfc222d70734bf");
   const [settingManager, setSettingManager] = useState(false);
   const [managerResult, setManagerResult] = useState<{ success: boolean; msg: string } | null>(null);
 
@@ -579,18 +579,23 @@ export default function AdminPage({ account }: AdminPageProps) {
       </Card>
 
       {/* Set Manager */}
-      <Card className="border-white/[0.08] bg-white/[0.02]">
+      <Card className="border-purple-500/30 bg-purple-500/5">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
             <Settings className="w-4 h-4 text-purple-400" />
-            Set Manager
+            Set Manager — ACTION REQUIRED
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Transfers the manager role to a new wallet. The manager can call privileged functions like
-            <span className="text-purple-300"> setUserRanks</span>. Only the contract owner can call this.
+            The daily admin wallet is not yet the contract manager. Connect with the <span className="text-purple-300 font-semibold">owner wallet (0xF305fE…)</span> and click Set Manager to fix ghost activation.
           </p>
         </CardHeader>
         <CardContent className="space-y-4">
+          <div className="rounded-lg border border-purple-500/30 bg-purple-500/10 px-3 py-2 text-xs text-purple-300 space-y-1">
+            <div className="font-semibold">⚠ Ghost activation is failing because your daily wallet is not the manager.</div>
+            <div>1. Switch MetaMask to owner wallet <span className="font-mono">0xF305fE…318</span></div>
+            <div>2. Click Set Manager below (daily wallet is pre-filled)</div>
+            <div>3. Switch back to daily wallet — ghost activation will work</div>
+          </div>
           <div className="space-y-2">
             <Label htmlFor="manager-address" className="text-xs text-muted-foreground uppercase tracking-wider">
               New Manager Wallet
@@ -601,7 +606,7 @@ export default function AdminPage({ account }: AdminPageProps) {
               placeholder="0x..."
               value={managerAddress}
               onChange={e => setManagerAddress(e.target.value)}
-              className="font-mono text-sm bg-white/[0.03] border-white/[0.08]"
+              className="font-mono text-sm bg-white/[0.03] border-purple-500/20"
             />
           </div>
 
