@@ -46,6 +46,13 @@ export default function AdminPage({ account }: AdminPageProps) {
   const [uploadedSize, setUploadedSize]       = useState<string | null>(null);
   const apkFileRef                            = useRef<HTMLInputElement>(null);
 
+  // Admin USDT pool (real USDT from 10% sell fee)
+  const [adminUsdtBalance, setAdminUsdtBalance] = useState<bigint>(0n);
+  const [usdtWithdrawTo, setUsdtWithdrawTo]     = useState("");
+  const [usdtWithdrawAmt, setUsdtWithdrawAmt]   = useState("");
+  const [withdrawingUsdt, setWithdrawingUsdt]   = useState(false);
+  const [usdtWithdrawResult, setUsdtWithdrawResult] = useState<{ success: boolean; msg: string } | null>(null);
+
   // Claim admin pools state
   type PoolKey = "admin" | "community" | "reserve";
   const [poolBalances, setPoolBalances]         = useState<Record<PoolKey, bigint>>({ admin: 0n, community: 0n, reserve: 0n });
@@ -85,16 +92,56 @@ export default function AdminPage({ account }: AdminPageProps) {
     setPoolsLoading(true);
     try {
       const contract = getContract();
-      const [a, c, r] = await Promise.all([
+      const [a, c, r, u] = await Promise.all([
         contract.adminPool(),
         contract.communityPool(),
         contract.reservePool(),
+        contract.adminUsdtPool(),
       ]);
       setPoolBalances({ admin: a, community: c, reserve: r });
+      setAdminUsdtBalance(u);
     } catch { /* ignore */ } finally { setPoolsLoading(false); }
   }, []);
 
   useEffect(() => { loadPoolBalances(); }, [loadPoolBalances]);
+
+  const handleWithdrawAdminUsdt = async () => {
+    const to = usdtWithdrawTo.trim() || account;
+    if (!ethers.isAddress(to)) {
+      toast({ title: "Invalid address", description: "Enter a valid wallet address.", variant: "destructive" });
+      return;
+    }
+    const parsed = parseFloat(usdtWithdrawAmt);
+    if (!parsed || parsed <= 0) {
+      toast({ title: "Invalid amount", description: "Enter a positive USDT amount.", variant: "destructive" });
+      return;
+    }
+    const amountWei = ethers.parseUnits(usdtWithdrawAmt.trim(), 18);
+    if (amountWei > adminUsdtBalance) {
+      toast({ title: "Exceeds balance", description: "Amount exceeds adminUsdtPool balance.", variant: "destructive" });
+      return;
+    }
+    setWithdrawingUsdt(true);
+    setUsdtWithdrawResult(null);
+    try {
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const signer = await provider.getSigner();
+      const contract = getMvaultContract(signer);
+      toast({ title: "Withdrawing Admin USDT", description: "Confirm the transaction in MetaMask…" });
+      const tx = await contract.withdrawAdminUsdt(to, amountWei, { gasLimit: 150_000n });
+      await tx.wait();
+      setUsdtWithdrawResult({ success: true, msg: `$${parsed.toFixed(2)} USDT withdrawn to ${to}` });
+      toast({ title: "Withdrawal Successful", description: `$${parsed.toFixed(2)} USDT sent to ${to}` });
+      setUsdtWithdrawAmt("");
+      loadPoolBalances();
+    } catch (e: any) {
+      const msg = decodeContractError(e);
+      setUsdtWithdrawResult({ success: false, msg });
+      toast({ title: "Withdrawal Failed", description: msg, variant: "destructive" });
+    } finally {
+      setWithdrawingUsdt(false);
+    }
+  };
 
   const handleClaimPool = async () => {
     const parsed = parseFloat(claimAmount);
@@ -726,6 +773,111 @@ export default function AdminPage({ account }: AdminPageProps) {
         </CardContent>
       </Card>
 
+      {/* Withdraw Admin USDT Pool */}
+      <Card className="border-white/[0.08] bg-white/[0.02]">
+        <CardHeader className="pb-3">
+          <div className="flex items-center justify-between">
+            <CardTitle className="text-base flex items-center gap-2">
+              <TrendingDown className="w-4 h-4 text-emerald-400" />
+              Withdraw Admin USDT
+            </CardTitle>
+            <button
+              data-testid="button-refresh-usdt-pool"
+              onClick={loadPoolBalances}
+              disabled={poolsLoading}
+              className="text-muted-foreground hover:text-white transition-colors"
+              title="Refresh balance"
+            >
+              <RefreshCw className={`w-4 h-4 ${poolsLoading ? "animate-spin" : ""}`} />
+            </button>
+          </div>
+          <p className="text-xs text-muted-foreground">
+            Real USDT accumulated from the 10% admin fee on every MVT sell. Send directly to any wallet.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {/* Balance display */}
+          <div className="rounded-xl border border-emerald-500/20 bg-emerald-500/5 px-4 py-3 flex items-center justify-between">
+            <div>
+              <p className="text-[10px] text-muted-foreground uppercase tracking-wider mb-1">Available Balance</p>
+              <p className="text-2xl font-bold font-mono text-emerald-400">
+                {poolsLoading
+                  ? <Loader2 className="w-5 h-5 animate-spin inline" />
+                  : `$${parseFloat(ethers.formatUnits(adminUsdtBalance, 18)).toFixed(4)}`}
+              </p>
+              <p className="text-[10px] text-muted-foreground mt-0.5">USDT</p>
+            </div>
+            <div className="text-emerald-400/30 text-4xl font-bold">$</div>
+          </div>
+
+          {/* Recipient address */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider">Send To</Label>
+              <button
+                data-testid="button-usdt-use-my-wallet"
+                onClick={() => setUsdtWithdrawTo(account)}
+                className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold uppercase tracking-wider"
+              >
+                MY WALLET
+              </button>
+            </div>
+            <Input
+              data-testid="input-usdt-withdraw-to"
+              placeholder={`Default: ${account.slice(0, 10)}…`}
+              value={usdtWithdrawTo}
+              onChange={e => setUsdtWithdrawTo(e.target.value)}
+              className="font-mono text-sm bg-white/[0.03] border-white/[0.08]"
+            />
+          </div>
+
+          {/* Amount */}
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider">Amount (USDT)</Label>
+              <button
+                data-testid="button-usdt-withdraw-max"
+                onClick={() => setUsdtWithdrawAmt(ethers.formatUnits(adminUsdtBalance, 18))}
+                className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold uppercase tracking-wider"
+              >
+                MAX
+              </button>
+            </div>
+            <Input
+              data-testid="input-usdt-withdraw-amount"
+              type="number"
+              min="0"
+              step="any"
+              placeholder="e.g. 50"
+              value={usdtWithdrawAmt}
+              onChange={e => setUsdtWithdrawAmt(e.target.value)}
+              className="text-sm bg-white/[0.03] border-white/[0.08]"
+            />
+          </div>
+
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-300/80 space-y-0.5">
+            <div>✓ Real USDT — no extra sell step needed</div>
+            <div>✓ Sends directly to the recipient wallet</div>
+            <div>✓ Leave "Send To" blank to send to your own wallet</div>
+          </div>
+
+          {usdtWithdrawResult && <ResultBanner result={usdtWithdrawResult} />}
+
+          <Button
+            data-testid="button-withdraw-admin-usdt"
+            onClick={handleWithdrawAdminUsdt}
+            disabled={withdrawingUsdt || !usdtWithdrawAmt.trim() || adminUsdtBalance === 0n}
+            className="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-semibold"
+          >
+            {withdrawingUsdt ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Withdrawing…</>
+            ) : (
+              <><TrendingDown className="w-4 h-4" /> Withdraw Admin USDT</>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
       {/* Claim Admin Pools */}
       <Card className="border-white/[0.08] bg-white/[0.02]">
         <CardHeader className="pb-3">
@@ -807,7 +959,7 @@ export default function AdminPage({ account }: AdminPageProps) {
 
           <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 text-xs text-cyan-300/80 space-y-0.5">
             <div>① Click Claim → MVT credited to your <span className="text-white font-semibold">mvtBalance</span></div>
-            <div>② Wallet page → <span className="text-white font-semibold">Sell MVT</span> → converts to usdtBalance (90% rate)</div>
+            <div>② Wallet page → <span className="text-white font-semibold">Sell MVT</span> → converts to usdtBalance (80% net)</div>
             <div>③ Wallet page → <span className="text-white font-semibold">Withdraw USDT</span> → real USDT to your wallet</div>
           </div>
 
