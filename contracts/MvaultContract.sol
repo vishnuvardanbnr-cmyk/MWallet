@@ -670,11 +670,11 @@ contract MvaultContract is Ownable, ReentrancyGuard {
             levelAmt     = (grossMvt * LEVEL_ALLOC)     / 100;
             placementAmt = (grossMvt * PLACEMENT_ALLOC) / 100;
             rankAmt      = (grossMvt * RANK_ALLOC)      / 100;
-            // communityAmt (10%) = the 10% taken by MVT token's MINT_PERCENTAGE as liquidity.
-            // It is NOT credited to communityPool — dust absorbs it and routes to adminPool.
-            uint256 dust = grossMvt - levelAmt - communityAmt - placementAmt - adminAmt - rankAmt;
-            adminPool     += adminAmt + dust;
-            emit Activated(user, minted, grossMvt, levelAmt, placementAmt, adminAmt);
+            // The 5 allocations sum to 90% of grossMvt = exactly minted.
+            // dust = 10% of grossMvt (the unbaked premium) — goes to communityPool, not adminPool.
+            communityPool += communityAmt;
+            adminPool     += adminAmt;
+            emit Activated(user, minted, grossMvt, levelAmt, communityAmt + placementAmt, adminAmt);
         }
 
         users[user].isActive       = true;
@@ -1083,10 +1083,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
             levelAmt     = (grossMvt * LEVEL_ALLOC)     / 100;
             placementAmt = (grossMvt * PLACEMENT_ALLOC) / 100;
             rankAmt      = (grossMvt * RANK_ALLOC)      / 100;
-            // communityAmt (10%) = the 10% taken by MVT token's MINT_PERCENTAGE as liquidity.
-            // It is NOT credited to communityPool — dust absorbs it and routes to adminPool.
-            uint256 dust = grossMvt - levelAmt - communityAmt - placementAmt - adminAmt - rankAmt;
-            adminPool     += adminAmt + dust;
+            // The 5 allocations sum to 90% of grossMvt = exactly minted.
+            communityPool += communityAmt;
+            adminPool     += adminAmt;
         }
 
         users[user].packagePrice   = pkgPrice;
