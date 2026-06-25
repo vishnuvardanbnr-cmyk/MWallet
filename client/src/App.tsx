@@ -8,7 +8,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
 import { useWeb3 } from "@/hooks/use-web3";
-import { ADMIN_WALLET } from "@/lib/contract";
+import { isAdminWallet } from "@/lib/contract";
 import { Wallet } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { MobileNav } from "@/components/mobile-nav";
@@ -135,7 +135,7 @@ function App() {
 
   // Auto-redirect admin wallet to /admin on connect
   useEffect(() => {
-    if (web3.account && web3.account.toLowerCase() === ADMIN_WALLET && location !== "/admin") {
+    if (web3.account && isAdminWallet(web3.account) && location !== "/admin") {
       navigate("/admin");
     }
   }, [web3.account]);
@@ -144,7 +144,7 @@ function App() {
 
   const getFlowStep = () => {
     if (!web3.account) return "connect";
-    if (web3.account.toLowerCase() === ADMIN_WALLET) return "dashboard";
+    if (isAdminWallet(web3.account)) return "dashboard";
     const isInitialLoad = !web3.initialLoaded;
     if ((isInitialLoad && web3.loading) || (web3.isRegistered && hasProfile === null)) return "loading";
     if (!web3.isRegistered) return "register";
@@ -407,7 +407,7 @@ function App() {
                     <Route path="/support">
                       <SupportPage
                         account={web3.account!}
-                        isAdmin={web3.account?.toLowerCase() === "0xf305fedfff08adaa7d2f73ca17f6ba4a3fb79318"}
+                        isAdmin={isAdminWallet(web3.account)}
                         getAdminPoolBalances={web3.getAdminPoolBalances}
                       />
                     </Route>

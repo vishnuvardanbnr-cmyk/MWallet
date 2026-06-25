@@ -4,11 +4,9 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { PACKAGE_NAMES, PACKAGE_PRICES_USD } from "@/lib/contract";
+import { PACKAGE_NAMES, PACKAGE_PRICES_USD, isAdminWallet } from "@/lib/contract";
 import { useSupportWs } from "@/hooks/use-support-ws";
 import type { SupportTicket, TicketMessage } from "@shared/schema";
-
-const ADMIN_WALLET = "0xf305fedfff08adaa7d2f73ca17f6ba4a3fb79318";
 
 const faqs = [
   {

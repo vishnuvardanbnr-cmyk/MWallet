@@ -7,7 +7,7 @@ import {
 import { LayoutDashboard, DollarSign, Wallet, Users, ArrowLeftRight, UserCircle, HelpCircle, LogOut, Copy, GitBranch, ShoppingBag, Coins, TrendingDown, RotateCcw, Grid2X2, UserPlus, Award, ShieldCheck } from "lucide-react";
 import { Logo } from "@/components/logo";
 import { Button } from "@/components/ui/button";
-import { shortenAddress } from "@/lib/contract";
+import { shortenAddress, isAdminWallet } from "@/lib/contract";
 import { useToast } from "@/hooks/use-toast";
 
 const menuItems = [
@@ -28,7 +28,6 @@ const menuItems = [
   { title: "Support", url: "/support", icon: HelpCircle },
 ];
 
-const ADMIN_WALLET = "0xf305fedfff08adaa7d2f73ca17f6ba4a3fb79318";
 
 interface AppSidebarProps {
   account: string;
@@ -40,7 +39,7 @@ export function AppSidebar({ account, userAddress, disconnect }: AppSidebarProps
   const [location, setLocation] = useLocation();
   const { toast } = useToast();
   const { isMobile, setOpenMobile } = useSidebar();
-  const isAdmin = account?.toLowerCase() === ADMIN_WALLET;
+  const isAdmin = isAdminWallet(account);
 
   const copyReferralLink = (side: "left" | "right") => {
     const link = `${window.location.origin}?ref=${userAddress}&side=${side}`;

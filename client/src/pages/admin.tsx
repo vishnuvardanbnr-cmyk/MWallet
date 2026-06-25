@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { getMvaultContract, getContract, getTokenContract, MVAULT_CONTRACT_ADDRESS, decodeContractError, ADMIN_WALLET } from "@/lib/contract";
+import { getMvaultContract, getContract, getTokenContract, MVAULT_CONTRACT_ADDRESS, decodeContractError, isAdminWallet } from "@/lib/contract";
 
 interface AdminPageProps {
   account: string;
@@ -76,7 +76,7 @@ export default function AdminPage({ account }: AdminPageProps) {
   const [pCategory, setPCategory]             = useState("Hardware Wallet");
   const [pInStock, setPInStock]               = useState(true);
 
-  const isAdmin = account?.toLowerCase() === ADMIN_WALLET;
+  const isAdmin = isAdminWallet(account);
 
   const loadProducts = async () => {
     setLoadingProducts(true);
