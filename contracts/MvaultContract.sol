@@ -670,10 +670,11 @@ contract MvaultContract is Ownable, ReentrancyGuard {
             levelAmt     = (grossMvt * LEVEL_ALLOC)     / 100;
             placementAmt = (grossMvt * PLACEMENT_ALLOC) / 100;
             rankAmt      = (grossMvt * RANK_ALLOC)      / 100;
+            // communityAmt (10%) = the 10% taken by MVT token's MINT_PERCENTAGE as liquidity.
+            // It is NOT credited to communityPool — dust absorbs it and routes to adminPool.
             uint256 dust = grossMvt - levelAmt - communityAmt - placementAmt - adminAmt - rankAmt;
-            communityPool += communityAmt;
             adminPool     += adminAmt + dust;
-            emit Activated(user, minted, grossMvt, levelAmt, communityAmt + placementAmt, adminAmt);
+            emit Activated(user, minted, grossMvt, levelAmt, placementAmt, adminAmt);
         }
 
         users[user].isActive       = true;
@@ -1082,8 +1083,9 @@ contract MvaultContract is Ownable, ReentrancyGuard {
             levelAmt     = (grossMvt * LEVEL_ALLOC)     / 100;
             placementAmt = (grossMvt * PLACEMENT_ALLOC) / 100;
             rankAmt      = (grossMvt * RANK_ALLOC)      / 100;
+            // communityAmt (10%) = the 10% taken by MVT token's MINT_PERCENTAGE as liquidity.
+            // It is NOT credited to communityPool — dust absorbs it and routes to adminPool.
             uint256 dust = grossMvt - levelAmt - communityAmt - placementAmt - adminAmt - rankAmt;
-            communityPool += communityAmt;
             adminPool     += adminAmt + dust;
         }
 
