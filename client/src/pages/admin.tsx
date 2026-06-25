@@ -53,6 +53,17 @@ export default function AdminPage({ account }: AdminPageProps) {
   const [withdrawingUsdt, setWithdrawingUsdt]   = useState(false);
   const [usdtWithdrawResult, setUsdtWithdrawResult] = useState<{ success: boolean; msg: string } | null>(null);
 
+  // Skip board entry state
+  const [skipBoardLevel, setSkipBoardLevel]   = useState("1");
+  const [skipBoardIndex, setSkipBoardIndex]   = useState("");
+  const [skippingBoard, setSkippingBoard]     = useState(false);
+  const [skipBoardResult, setSkipBoardResult] = useState<{ success: boolean; msg: string } | null>(null);
+
+  // Link board handler state
+  const [boardHandlerAddr, setBoardHandlerAddr]   = useState("0x510bb4a0041a1069e1b769ce21be30c7b7536c94");
+  const [linkingBoard, setLinkingBoard]           = useState(false);
+  const [linkBoardResult, setLinkBoardResult]     = useState<{ success: boolean; msg: string } | null>(null);
+
   // Claim admin pools state
   type PoolKey = "admin" | "community" | "reserve";
   const [poolBalances, setPoolBalances]         = useState<Record<PoolKey, bigint>>({ admin: 0n, community: 0n, reserve: 0n });
@@ -104,6 +115,65 @@ export default function AdminPage({ account }: AdminPageProps) {
   }, []);
 
   useEffect(() => { loadPoolBalances(); }, [loadPoolBalances]);
+
+  const handleLinkBoardHandler = async () => {
+    const addr = boardHandlerAddr.trim();
+    if (!ethers.isAddress(addr)) {
+      toast({ title: "Invalid address", description: "Enter a valid board matrix contract address.", variant: "destructive" });
+      return;
+    }
+    setLinkingBoard(true);
+    setLinkBoardResult(null);
+    try {
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const signer = await provider.getSigner();
+      const contract = getMvaultContract(signer);
+      toast({ title: "Linking Board Matrix", description: "Confirm the transaction in MetaMask…" });
+      const tx = await contract.setBoardHandler(addr, { gasLimit: 100_000n });
+      await tx.wait();
+      setLinkBoardResult({ success: true, msg: `Board handler set to ${addr}` });
+      toast({ title: "Board Handler Linked", description: `New board matrix: ${addr.slice(0, 10)}…` });
+    } catch (e: any) {
+      const msg = decodeContractError(e);
+      setLinkBoardResult({ success: false, msg });
+      toast({ title: "Link Failed", description: msg, variant: "destructive" });
+    } finally {
+      setLinkingBoard(false);
+    }
+  };
+
+  const handleSkipBoardEntry = async () => {
+    const level = parseInt(skipBoardLevel);
+    const index = parseInt(skipBoardIndex);
+    if (!skipBoardIndex.trim() || isNaN(index) || index < 0 || isNaN(level) || level < 1 || level > 6) {
+      toast({ title: "Invalid input", description: "Enter a valid pool level (1–6) and queue index.", variant: "destructive" });
+      return;
+    }
+    setSkippingBoard(true);
+    setSkipBoardResult(null);
+    try {
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const signer = await provider.getSigner();
+      const mvaultContract = getMvaultContract(signer);
+      const boardHandlerAddr = await mvaultContract.boardHandler();
+      if (!boardHandlerAddr || boardHandlerAddr === ethers.ZeroAddress) throw new Error("Board handler not set");
+      const { ethers: eth } = await import("ethers");
+      const boardAbi = ["function adminSkipEntry(uint256 _level, uint256 _index) external"];
+      const boardContract = new eth.Contract(boardHandlerAddr, boardAbi, signer);
+      toast({ title: "Skipping Board Entry", description: `Skipping Level ${level} index ${index} — confirm in MetaMask…` });
+      const tx = await boardContract.adminSkipEntry(BigInt(level), BigInt(index), { gasLimit: 150_000n });
+      await tx.wait();
+      setSkipBoardResult({ success: true, msg: `Level ${level} index ${index} marked as skipped — no reward paid.` });
+      toast({ title: "Entry Skipped", description: `Pool ${level} queue index ${index} removed.` });
+      setSkipBoardIndex("");
+    } catch (e: any) {
+      const msg = decodeContractError(e);
+      setSkipBoardResult({ success: false, msg });
+      toast({ title: "Skip Failed", description: msg, variant: "destructive" });
+    } finally {
+      setSkippingBoard(false);
+    }
+  };
 
   const handleWithdrawAdminUsdt = async () => {
     const to = usdtWithdrawTo.trim() || account;
@@ -873,6 +943,107 @@ export default function AdminPage({ account }: AdminPageProps) {
               <><Loader2 className="w-4 h-4 animate-spin" /> Withdrawing…</>
             ) : (
               <><TrendingDown className="w-4 h-4" /> Withdraw Admin USDT</>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Link Board Matrix Contract */}
+      <Card className="border-white/[0.08] bg-white/[0.02]">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <Link className="w-4 h-4 text-blue-400" />
+            Link Board Matrix
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Point the main contract to a new board matrix contract address. Only the contract owner can do this.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="space-y-2">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">New Board Matrix Address</Label>
+            <Input
+              data-testid="input-board-handler-addr"
+              placeholder="0x…"
+              value={boardHandlerAddr}
+              onChange={e => setBoardHandlerAddr(e.target.value)}
+              className="font-mono text-sm bg-white/[0.03] border-white/[0.08]"
+            />
+          </div>
+          <div className="rounded-lg border border-blue-500/20 bg-blue-500/5 px-3 py-2 text-xs text-blue-300/80 space-y-0.5">
+            <div>New board matrix (v2 with adminSkipEntry): <span className="font-mono">0x510bb4…36c94</span></div>
+            <div>After linking, use "Skip Board Entry" below to remove ghost queue entries.</div>
+          </div>
+          {linkBoardResult && <ResultBanner result={linkBoardResult} />}
+          <Button
+            data-testid="button-link-board-handler"
+            onClick={handleLinkBoardHandler}
+            disabled={linkingBoard || !boardHandlerAddr.trim()}
+            className="w-full bg-blue-700 hover:bg-blue-600 text-white font-semibold"
+          >
+            {linkingBoard ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Linking…</>
+            ) : (
+              <><Link className="w-4 h-4" /> Set Board Handler</>
+            )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Skip Board Queue Entry */}
+      <Card className="border-white/[0.08] bg-white/[0.02]">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <TrendingDown className="w-4 h-4 text-orange-400" />
+            Skip Board Queue Entry
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Remove a ghost-activated or invalid entry from the board pool queue. No reward is paid. Use queue index shown in Pool board view.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid grid-cols-2 gap-3">
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider">Pool Level (1–6)</Label>
+              <Input
+                data-testid="input-skip-board-level"
+                type="number"
+                min="1"
+                max="6"
+                value={skipBoardLevel}
+                onChange={e => setSkipBoardLevel(e.target.value)}
+                className="text-sm bg-white/[0.03] border-white/[0.08]"
+                placeholder="1"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label className="text-xs text-muted-foreground uppercase tracking-wider">Queue Index</Label>
+              <Input
+                data-testid="input-skip-board-index"
+                type="number"
+                min="0"
+                value={skipBoardIndex}
+                onChange={e => setSkipBoardIndex(e.target.value)}
+                className="text-sm bg-white/[0.03] border-white/[0.08]"
+                placeholder="e.g. 2"
+              />
+            </div>
+          </div>
+          <div className="rounded-lg border border-orange-500/20 bg-orange-500/5 px-3 py-2 text-xs text-orange-300/80 space-y-0.5">
+            <div>⚠ Irreversible — entry will be permanently marked as completed with no reward paid.</div>
+            <div>Index 0 = first in queue. Current ghost entries: Level 1 indexes 2, 3, 4.</div>
+          </div>
+          {skipBoardResult && <ResultBanner result={skipBoardResult} />}
+          <Button
+            data-testid="button-skip-board-entry"
+            onClick={handleSkipBoardEntry}
+            disabled={skippingBoard || !skipBoardIndex.trim()}
+            className="w-full bg-orange-700 hover:bg-orange-600 text-white font-semibold"
+          >
+            {skippingBoard ? (
+              <><Loader2 className="w-4 h-4 animate-spin" /> Processing…</>
+            ) : (
+              <><TrendingDown className="w-4 h-4" /> Skip This Entry</>
             )}
           </Button>
         </CardContent>

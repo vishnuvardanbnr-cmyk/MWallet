@@ -24,6 +24,7 @@ interface BoardTier {
   price: number;
   queueLength: number;
   currentIndex: number;
+  activeQueueCount: number | null;
   userEntries: UserBoardEntry[];
 }
 
@@ -76,12 +77,14 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
         try {
           if (!boardContract) throw new Error("Board handler not set");
 
-          const [queueLength, currentIndex] = await Promise.all([
+          const [queueLength, currentIndex, activeCount] = await Promise.all([
             boardContract.getBoardQueueLength(i),
             boardContract.getBoardCurrentIndex(i),
+            boardContract.getActiveQueueCount(i).catch(() => null),
           ]);
           const qLen = Number(queueLength);
           const cIdx = Number(currentIndex);
+          const activeQueueCount = activeCount !== null ? Number(activeCount) : null;
 
           const entries: UserBoardEntry[] = [];
           const maxScan = Math.min(qLen, cIdx + 50);
@@ -108,6 +111,7 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
             price: BOARD_PRICES_USD[i],
             queueLength: qLen,
             currentIndex: cIdx,
+            activeQueueCount: activeQueueCount,
             userEntries: entries,
           });
         } catch {
@@ -116,6 +120,7 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
             price: BOARD_PRICES_USD[i],
             queueLength: 0,
             currentIndex: 0,
+            activeQueueCount: null,
             userEntries: [],
           });
         }
@@ -416,7 +421,9 @@ export default function BoardPage({ btcPoolBalance, formatAmount, enterBoardPool
           {boardTiers.map((tier, idx) => {
             const colors = tierColors[idx];
             const split = getRewardSplit(tier.level);
-            const activeMatrices = tier.queueLength > 0 ? tier.queueLength - tier.currentIndex : 0;
+            const activeMatrices = tier.activeQueueCount !== null
+              ? tier.activeQueueCount
+              : (tier.queueLength > 0 ? tier.queueLength - tier.currentIndex : 0);
             const ownerReward = getPoolReward(tier.level);
             return (
               <div

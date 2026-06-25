@@ -124,6 +124,27 @@ contract MvaultBoardMatrix is Ownable, ReentrancyGuard {
         boardPrices[_level] = _price;
     }
 
+    /**
+     * @notice Admin: mark a board entry as skipped (no reward paid).
+     *         Use this to remove ghost/invalid entries from the active queue.
+     *         If the entry is the current active slot, currentIndex is advanced.
+     */
+    function adminSkipEntry(uint256 _level, uint256 _index) external onlyOwner {
+        require(_index < _boardMatrices[_level].length, "OB");
+        BoardMatrix storage m = _boardMatrices[_level][_index];
+        require(!m.completed, "AC");
+        m.completed = true;
+        if (boardEntryCount[m.owner] > 0) boardEntryCount[m.owner]--;
+        // If this was the active slot, advance past it (and any further completed ones)
+        if (boardCurrentIndex[_level] == _index) {
+            uint256 next = _index + 1;
+            while (next < _boardMatrices[_level].length && _boardMatrices[_level][next].completed) {
+                next++;
+            }
+            boardCurrentIndex[_level] = next;
+        }
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // ENTRY POINT (called by MvaultContract)
     // ─────────────────────────────────────────────────────────────────────────
@@ -154,15 +175,26 @@ contract MvaultBoardMatrix is Ownable, ReentrancyGuard {
 
         emit BoardEntered(_user, _boardLevel, newIdx);
 
-        // Fill a slot in the current active board (if one exists ahead of this user's new slot)
+        // Auto-skip any admin-completed (skipped) entries before filling
         uint256 currentIdx = boardCurrentIndex[_boardLevel];
+        while (currentIdx < newIdx && _boardMatrices[_boardLevel][currentIdx].completed) {
+            currentIdx++;
+            boardCurrentIndex[_boardLevel] = currentIdx;
+        }
+
+        // Fill a slot in the current active board (if one exists ahead of this user's new slot)
         if (currentIdx < newIdx) {
             BoardMatrix storage activeMatrix = _boardMatrices[_boardLevel][currentIdx];
             activeMatrix.filledCount++;
 
             if (activeMatrix.filledCount >= BOARD_MEMBERS_REQUIRED) {
                 activeMatrix.completed = true;
-                boardCurrentIndex[_boardLevel] = currentIdx + 1;
+                // Advance past any already-completed entries
+                uint256 next = currentIdx + 1;
+                while (next < _boardMatrices[_boardLevel].length && _boardMatrices[_boardLevel][next].completed) {
+                    next++;
+                }
+                boardCurrentIndex[_boardLevel] = next;
                 _completeBoardMatrix(activeMatrix.owner, _boardLevel);
             }
         }
@@ -267,6 +299,20 @@ contract MvaultBoardMatrix is Ownable, ReentrancyGuard {
 
     function getBoardQueueLength(uint256 _level) external view returns (uint256) {
         return _boardMatrices[_level].length;
+    }
+
+    /**
+     * @notice Returns the number of non-skipped active entries in the queue.
+     *         This excludes admin-skipped (completed without reward) entries.
+     */
+    function getActiveQueueCount(uint256 _level) external view returns (uint256) {
+        uint256 total = _boardMatrices[_level].length;
+        uint256 current = boardCurrentIndex[_level];
+        uint256 count = 0;
+        for (uint256 i = current; i < total; i++) {
+            if (!_boardMatrices[_level][i].completed) count++;
+        }
+        return count;
     }
 
     function getBoardMatrixInfo(uint256 _level, uint256 _index) external view returns (
