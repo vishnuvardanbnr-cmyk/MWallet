@@ -60,7 +60,7 @@ export default function AdminPage({ account }: AdminPageProps) {
   const [skipBoardResult, setSkipBoardResult] = useState<{ success: boolean; msg: string } | null>(null);
 
   // Link board handler state
-  const [boardHandlerAddr, setBoardHandlerAddr]   = useState("0x510bb4a0041a1069e1b769ce21be30c7b7536c94");
+  const [boardHandlerAddr, setBoardHandlerAddr]   = useState("0xa775d77b21915f32c7240cf613c51349e71f2c11");
   const [linkingBoard, setLinkingBoard]           = useState(false);
   const [linkBoardResult, setLinkBoardResult]     = useState<{ success: boolean; msg: string } | null>(null);
 
