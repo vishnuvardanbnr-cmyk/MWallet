@@ -12,6 +12,7 @@ const RPC         = "https://node.mymchain.com/api/rpc";
 const PK          = process.env.DEPLOYER_PRIVATE_KEY;
 const USDT        = "0x7b2ed1be97fa240dbd0328dd307e35e588bcb917";
 const MANAGER     = "0xe746140d043f65c0ea2f1774bcbfc222d70734bf"; // daily admin wallet
+const OWNER       = "0xF305fEdfFF08ADAA7D2F73cA17F6bA4a3FB79318"; // permanent owner (receives transferOwnership)
 const GAS_PRICE   = 1_000_000_000n;  // 1 Gwei
 const CHAIN_ID    = 1888n;
 const GAS_BUFFER  = 12n / 10n;       // ×1.2
@@ -158,6 +159,13 @@ async function main() {
   await call(wallet, "BoardMatrix.setLiquidityAddr",    boardAddr,  boardIface, "setLiquidityAddress",[wallet.address]);
   // MvaultContract → Manager
   await call(wallet, "MvaultContract.setManager",       mainAddr,   mainIface,  "setManager",        [MANAGER]);
+
+  // ── Transfer ownership: Deployer → permanent OWNER ─────────────────────
+  const ownIface = new ethers.Interface(["function transferOwnership(address newOwner)"]);
+  const contracts4 = [[tokenAddr,"MvaultToken"],[mainAddr,"MvaultContract"],[boardAddr,"BoardMatrix"],[stakingAddr,"MvaultStaking"]];
+  for (const [addr, label] of contracts4) {
+    await call(wallet, `${label}.transferOwnership`, addr, ownIface, "transferOwnership", [OWNER]);
+  }
 
   // ── 5. Deploy MvaultView(mainAddr) ───────────────────────────────────────
   const viewAddr = await deploy(wallet, "MvaultView", viewArt.bytecode, encodeArgs(["address", mainAddr]));

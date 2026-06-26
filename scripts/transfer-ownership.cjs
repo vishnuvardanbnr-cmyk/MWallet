@@ -1,52 +1,43 @@
-// transfer-ownership.cjs — Transfer ownership of all 3 MVault contracts
-const { ethers } = require("hardhat");
-require("dotenv").config();
+const { ethers } = require("ethers");
+const RPC = "https://node.mymchain.com/api/rpc";
+const MVAULT  = "0xbade927063dd8539e287f2533e8f99ed0ba90ad9";
+const MVT     = "0x899dea1532a780a6e78a60f9a765ac4592484c32";
+const BOARD   = "0x8339fd14a09be1834f9357d8180fcdb8772ba536";
+const STAKING = "0x38983e73b0686bf7fb89b431555319f476dd3c9f";
+const NEW_OWNER = "0xF305fEdfFF08ADAA7D2F73cA17F6bA4a3FB79318";
+const GAS_PRICE = 1_000_000_000n;
+const CHAIN_ID  = 1888n;
 
-const NEW_OWNER        = "0x04E8c5B49dE683c5B44eF1269Bd5ee4f338868C4";
-const MVAULT_CONTRACT  = "0x08d7e03c29623d3eEcc2D53cF6D4A1edf7E5F57c";
-const MVT_TOKEN        = "0x50984Ea16b3F79bB9B280a1ddEd624080F146Ad4";
-const BOARD_HANDLER    = "0x9dBE6Ee45d93d223AAF515c76dB74FA63f48b474";
+const provider = new ethers.JsonRpcProvider(RPC);
+const wallet   = new ethers.Wallet(process.env.DEPLOYER_PRIVATE_KEY, provider);
 
-const OWNABLE_ABI = [
-  "function owner() view returns (address)",
-  "function transferOwnership(address newOwner) external",
-];
-
-async function main() {
-  const [deployer] = await ethers.getSigners();
-  console.log(`\nCalling from: ${deployer.address}`);
-  console.log(`New owner:    ${NEW_OWNER}\n`);
-
-  const contracts = [
-    { name: "MvaultContract",  address: MVAULT_CONTRACT },
-    { name: "MvaultToken",     address: MVT_TOKEN },
-    { name: "MvaultBoard",     address: BOARD_HANDLER },
-  ];
-
-  for (const { name, address } of contracts) {
-    const c = new ethers.Contract(address, OWNABLE_ABI, deployer);
-    const current = await c.owner();
-    console.log(`${name} (${address})`);
-    console.log(`  Current owner: ${current}`);
-
-    if (current.toLowerCase() === NEW_OWNER.toLowerCase()) {
-      console.log(`  ✓ Already owned by new owner — skipping\n`);
-      continue;
-    }
-
-    if (current.toLowerCase() !== deployer.address.toLowerCase()) {
-      console.log(`  ✗ Deployer is NOT the current owner — cannot transfer\n`);
-      continue;
-    }
-
-    console.log(`  Sending transferOwnership...`);
-    const tx = await c.transferOwnership(NEW_OWNER);
-    console.log(`  TX: ${tx.hash}`);
-    await tx.wait();
-    console.log(`  ✓ Ownership transferred\n`);
+async function sendTx(to, data, label) {
+  const nonce = parseInt(await provider.send("eth_getTransactionCount", [wallet.address, "latest"]), 16);
+  const gasEst = await provider.send("eth_estimateGas", [{ from: wallet.address, to, data, nonce: "0x" + nonce.toString(16) }]);
+  const gasLimit = BigInt(gasEst) * 12n / 10n;
+  const signed = await wallet.signTransaction({ to, data, gasPrice: GAS_PRICE, gasLimit, nonce: BigInt(nonce), chainId: CHAIN_ID, value: 0n });
+  const hash = await provider.send("eth_sendRawTransaction", [signed]);
+  console.log(`  [${label}] tx: ${hash}`);
+  for (let i = 0; i < 30; i++) {
+    await new Promise(r => setTimeout(r, 2000));
+    const r = await provider.send("eth_getTransactionReceipt", [hash]);
+    if (r) { console.log(`  [${label}] ${r.status === "0x1" ? "✓ OK" : "✗ FAILED"}`); return; }
   }
-
-  console.log("Done.");
+  console.log(`  [${label}] timeout`);
 }
 
-main().catch((e) => { console.error(e); process.exit(1); });
+async function main() {
+  console.log("Deployer:", wallet.address);
+  const iface = new ethers.Interface(["function transferOwnership(address)"]);
+  const data  = iface.encodeFunctionData("transferOwnership", [NEW_OWNER]);
+  const contracts = [[MVAULT,"MvaultContract"],[MVT,"MvaultToken"],[BOARD,"BoardMatrix"],[STAKING,"MvaultStaking"]];
+  for (const [addr, label] of contracts) await sendTx(addr, data, label);
+
+  console.log("\n── Verifying owner ──");
+  const ownerAbi = new ethers.Interface(["function owner() view returns (address)"]);
+  for (const [addr, label] of contracts) {
+    const o = await new ethers.Contract(addr, ownerAbi, provider).owner();
+    console.log(`${label}: ${o} ${o.toLowerCase()===NEW_OWNER.toLowerCase()?"✓":"✗"}`);
+  }
+}
+main().catch(console.error);
