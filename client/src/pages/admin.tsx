@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
-import { getMvaultContract, getContract, getTokenContract, MVAULT_CONTRACT_ADDRESS, decodeContractError, isAdminWallet } from "@/lib/contract";
+import { getMvaultContract, getContract, getTokenContract, getDirectProvider, MVAULT_CONTRACT_ADDRESS, decodeContractError, isAdminWallet } from "@/lib/contract";
 
 interface AdminPageProps {
   account: string;
@@ -102,7 +102,7 @@ export default function AdminPage({ account }: AdminPageProps) {
   const loadPoolBalances = useCallback(async () => {
     setPoolsLoading(true);
     try {
-      const contract = getContract();
+      const contract = getMvaultContract(getDirectProvider());
       const [a, c, r, u] = await Promise.all([
         contract.adminPool(),
         contract.communityPool(),
