@@ -5,14 +5,16 @@ const path = require("path");
 const contractsDir = path.join(__dirname, "../contracts");
 const artifactsDir = path.join(__dirname, "../artifacts/contracts");
 
-const contracts = ["MvaultToken","MvaultContract","MvaultBoardMatrix","MvaultStaking","MvaultView"];
+// Only MvaultContract needs viaIR (stack too deep without it)
+const contracts = [
+  { name: "MvaultToken",        viaIR: false },
+  { name: "MvaultContract",     viaIR: true  },
+  { name: "MvaultBoardMatrix",  viaIR: false },
+  { name: "MvaultStaking",      viaIR: false },
+  { name: "MvaultView",         viaIR: true  },
+];
 
 function readFile(p) { return fs.readFileSync(p, "utf8"); }
-
-const sources = {};
-for (const name of contracts) {
-  sources[`contracts/${name}.sol`] = { content: readFile(path.join(contractsDir, `${name}.sol`)) };
-}
 
 function findImport(importPath) {
   const candidates = [
@@ -25,43 +27,53 @@ function findImport(importPath) {
   return { error: `File not found: ${importPath}` };
 }
 
-const input = {
-  language: "Solidity",
-  sources,
-  settings: {
-    optimizer: { enabled: true, runs: 200 },
-    viaIR: true,
-    outputSelection: { "*": { "*": ["abi", "evm.bytecode.object"] } },
-  },
-};
+function compileOne({ name, viaIR }) {
+  const sources = {};
+  sources[`contracts/${name}.sol`] = { content: readFile(path.join(contractsDir, `${name}.sol`)) };
 
-console.log("Compiling...");
-const output = JSON.parse(solc.compile(JSON.stringify(input), { import: findImport }));
+  const input = {
+    language: "Solidity",
+    sources,
+    settings: {
+      optimizer: { enabled: true, runs: 1 },
+      evmVersion: "london",
+      ...(viaIR ? { viaIR: true } : {}),
+      outputSelection: { "*": { "*": ["abi", "evm.bytecode.object", "evm.deployedBytecode.object"] } },
+    },
+  };
 
-if (output.errors) {
-  const errs = output.errors.filter(e => e.severity === "error");
-  if (errs.length) {
-    console.error("COMPILE ERRORS:");
-    errs.forEach(e => console.error(e.formattedMessage));
-    process.exit(1);
+  const output = JSON.parse(solc.compile(JSON.stringify(input), { import: findImport }));
+
+  if (output.errors) {
+    const errs = output.errors.filter(e => e.severity === "error");
+    if (errs.length) {
+      console.error(`COMPILE ERRORS in ${name}:`);
+      errs.forEach(e => console.error(e.formattedMessage));
+      process.exit(1);
+    }
   }
+
+  const compiled = output.contracts[`contracts/${name}.sol`]?.[name];
+  if (!compiled) { console.error(`Missing output for ${name}`); process.exit(1); }
+  return compiled;
 }
 
-for (const name of contracts) {
-  const compiled = output.contracts[`contracts/${name}.sol`]?.[name];
-  if (!compiled) { console.error(`Missing output for ${name}`); continue; }
-
-  const artifactDir = path.join(artifactsDir, `${name}.sol`);
+console.log("Compiling...");
+for (const c of contracts) {
+  const compiled = compileOne(c);
+  const artifactDir = path.join(artifactsDir, `${c.name}.sol`);
   fs.mkdirSync(artifactDir, { recursive: true });
 
   const artifact = {
-    contractName: name,
+    contractName: c.name,
     abi: compiled.abi,
     bytecode: "0x" + compiled.evm.bytecode.object,
+    deployedBytecode: "0x" + compiled.evm.deployedBytecode.object,
   };
 
-  fs.writeFileSync(path.join(artifactDir, `${name}.json`), JSON.stringify(artifact, null, 2));
-  const size = Math.ceil(compiled.evm.bytecode.object.length / 2);
-  console.log(`  ✓ ${name}: ${size} bytes (limit 24576)`);
+  fs.writeFileSync(path.join(artifactDir, `${c.name}.json`), JSON.stringify(artifact, null, 2));
+  const size = Math.ceil(compiled.evm.deployedBytecode.object.length / 2);
+  const viaIRTag = c.viaIR ? " [viaIR]" : "";
+  console.log(`  ✓ ${c.name}: ${size} bytes${viaIRTag}`);
 }
 console.log("Done.");

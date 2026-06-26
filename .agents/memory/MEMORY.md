@@ -5,6 +5,7 @@
 - [Contract size limit](contract-size.md) — EIP-170 (24,576 bytes) IS enforced on MChain 1888; gasUsed=0 + status=0 in receipt = size rejection, not gas issue.
 - [Delegation view removal](delegation-views.md) — getMvtPrice/getActiveStakes/getBtcPoolInfo/getUserBoardStats removed from MvaultContract to save bytespace; frontend calls MVT token and staking module contracts directly.
 - [MChain raw deployment](mchain-raw-deploy.md) — hardhat deploys silently fail on MChain (nonce skipping); always use scripts/deploy-raw-mchain.cjs (raw JSON-RPC, fresh nonce per tx).
+- [MChain compile settings](mchain-compile-settings.md) — must compile with solc 0.8.35 + evmVersion:"london" + runs:1 + viaIR:true; use scripts/compile-mvault.cjs (solcjs, not hardhat which needs Node 22); wrong evmVersion causes silent status=0x0 revert on MChain.
 - [MChain contract wipe](mchain-contract-wipe.md) — MChain 1888 periodically wipes contract state (test network reset); contracts verified via eth_getCode after every deploy.
 - [MChain block.timestamp=0 bug](mchain-timestamp-zero.md) — block.timestamp is always 0 on MChain 1888; any timestamp-based state flag is unreliable; use explicit bool fields instead.
 - [Profile bytes32 encoding](profile-bytes32.md) — displayName/email/phone/country are bytes32 in User struct (max 31 chars); use ethers.encodeBytes32String/decodeBytes32String; setProfile(bytes32,bytes32,bytes32,bytes32); no getProfile() function exists.
