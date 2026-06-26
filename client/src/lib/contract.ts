@@ -317,6 +317,7 @@ export const MVAULT_ABI = [
   "function withdrawAdminUsdt(address to, uint256 amount) external",
   "function withdrawReservePool(address to, uint256 amount) external",
   "function adminCashOut(uint256 amount, address recipient) external",
+  "function poolCashOut(uint8 poolType, uint256 amount, address recipient) external",
   "function adminRecoverMvtBalance(address user, uint256 amount) external",
   "function drainRankPool() external",
   "function setUserRanks(address[] addrs, uint8[] ranks_) external",

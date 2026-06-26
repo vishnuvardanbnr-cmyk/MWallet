@@ -73,7 +73,8 @@ export default function AdminPage({ account }: AdminPageProps) {
   const [claiming, setClaiming]                 = useState(false);
   const [claimResult, setClaimResult]           = useState<{ success: boolean; msg: string } | null>(null);
 
-  // Admin Cash Out (sell from adminPool → USDT direct to wallet)
+  // Admin Cash Out (sell from any pool → USDT direct to wallet)
+  const [cashOutPool, setCashOutPool]           = useState<PoolKey>("admin");
   const [cashOutAmount, setCashOutAmount]       = useState("");
   const [cashOutRecipient, setCashOutRecipient] = useState("");
   const [cashingOut, setCashingOut]             = useState(false);
@@ -264,16 +265,18 @@ export default function AdminPage({ account }: AdminPageProps) {
     const recipient = cashOutRecipient.trim() || account;
     if (!ethers.isAddress(recipient)) { toast({ title: "Invalid recipient address", variant: "destructive" }); return; }
     const amountWei = ethers.parseUnits(cashOutAmount.trim(), 18);
+    const poolTypeNum: Record<PoolKey, number> = { admin: 0, community: 1, reserve: 2 };
+    const poolLabel = cashOutPool === "admin" ? "Admin" : cashOutPool === "community" ? "Community" : "Reserve";
     setCashingOut(true);
     setCashOutResult(null);
     try {
       const provider = new ethers.BrowserProvider((window as any).ethereum);
       const signer = await provider.getSigner();
       const contract = getMvaultContract(signer);
-      toast({ title: "Cashing Out", description: "Selling MVT from admin pool → USDT sent directly to wallet…" });
-      const tx = await contract.adminCashOut(amountWei, recipient, { gasLimit: 300_000n });
+      toast({ title: "Cashing Out", description: `Selling MVT from ${poolLabel} Pool → USDT sent directly to wallet…` });
+      const tx = await contract.poolCashOut(poolTypeNum[cashOutPool], amountWei, recipient, { gasLimit: 350_000n });
       await tx.wait();
-      setCashOutResult({ success: true, msg: `✓ ${parsed.toLocaleString()} MVT sold — USDT sent directly to ${recipient}` });
+      setCashOutResult({ success: true, msg: `✓ ${parsed.toLocaleString()} MVT from ${poolLabel} Pool sold — USDT sent directly to ${recipient}` });
       toast({ title: "Cash Out Successful!", description: "USDT sent directly to the recipient wallet." });
       setCashOutAmount("");
       loadPoolBalances();
@@ -1221,7 +1224,7 @@ export default function AdminPage({ account }: AdminPageProps) {
         </CardContent>
       </Card>
 
-      {/* Admin Cash Out — sell from adminPool → USDT directly to wallet */}
+      {/* Admin Cash Out — sell from any pool → USDT directly to wallet */}
       <Card className="border-emerald-500/20 bg-emerald-500/[0.03]">
         <CardHeader className="pb-3">
           <CardTitle className="text-base flex items-center gap-2">
@@ -1229,10 +1232,42 @@ export default function AdminPage({ account }: AdminPageProps) {
             Admin Cash Out
           </CardTitle>
           <p className="text-xs text-muted-foreground">
-            Sell MVT directly from the Admin Pool — USDT goes straight to any wallet. No user account needed.
+            Sell MVT from any pool — USDT goes straight to any wallet. No user account needed.
           </p>
         </CardHeader>
         <CardContent className="space-y-3">
+          {/* Pool selector */}
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Select Pool</Label>
+            <div className="grid grid-cols-3 gap-2">
+              {(["admin", "community", "reserve"] as const).map((key) => {
+                const labels = { admin: "Admin", community: "Community", reserve: "Reserve" };
+                const val = poolBalances[key];
+                const mvt = parseFloat(ethers.formatUnits(val, 18)).toLocaleString(undefined, { maximumFractionDigits: 2 });
+                return (
+                  <button
+                    key={key}
+                    data-testid={`button-cashout-pool-${key}`}
+                    onClick={() => { setCashOutPool(key); setCashOutAmount(""); setCashOutResult(null); }}
+                    className={`rounded-lg border p-2.5 text-left transition-all ${
+                      cashOutPool === key
+                        ? "border-emerald-500/60 bg-emerald-500/10"
+                        : "border-white/[0.08] bg-white/[0.02] hover:border-white/20"
+                    }`}
+                  >
+                    <div className={`text-[10px] font-semibold uppercase tracking-wider mb-1 ${cashOutPool === key ? "text-emerald-400" : "text-muted-foreground"}`}>
+                      {labels[key]}
+                    </div>
+                    <div className={`text-sm font-mono font-bold ${cashOutPool === key ? "text-emerald-300" : "text-white"}`}>
+                      {poolsLoading ? <Loader2 className="w-3 h-3 animate-spin inline" /> : mvt}
+                    </div>
+                    <div className="text-[10px] text-muted-foreground mt-0.5">MVT</div>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
           <div className="space-y-1.5">
             <Label className="text-xs text-muted-foreground uppercase tracking-wider">MVT Amount</Label>
             <div className="flex gap-2">
@@ -1244,7 +1279,7 @@ export default function AdminPage({ account }: AdminPageProps) {
                 className="text-sm bg-white/[0.03] border-white/[0.08]"
               />
               <button
-                onClick={() => setCashOutAmount(ethers.formatUnits(poolBalances.admin, 18))}
+                onClick={() => setCashOutAmount(ethers.formatUnits(poolBalances[cashOutPool], 18))}
                 className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold uppercase tracking-wider whitespace-nowrap px-2"
               >MAX</button>
             </div>
@@ -1268,10 +1303,13 @@ export default function AdminPage({ account }: AdminPageProps) {
           <Button
             data-testid="button-admin-cashout"
             onClick={handleAdminCashOut}
-            disabled={cashingOut || !cashOutAmount.trim() || poolBalances.admin === 0n}
+            disabled={cashingOut || !cashOutAmount.trim() || poolBalances[cashOutPool] === 0n}
             className="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-semibold"
           >
-            {cashingOut ? <><Loader2 className="w-4 h-4 animate-spin" /> Cashing Out…</> : <><TrendingDown className="w-4 h-4" /> Cash Out Admin Pool → USDT</>}
+            {cashingOut
+              ? <><Loader2 className="w-4 h-4 animate-spin" /> Cashing Out…</>
+              : <><TrendingDown className="w-4 h-4" /> Cash Out {cashOutPool === "admin" ? "Admin" : cashOutPool === "community" ? "Community" : "Reserve"} Pool → USDT</>
+            }
           </Button>
         </CardContent>
       </Card>
