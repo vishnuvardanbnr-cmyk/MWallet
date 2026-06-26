@@ -1195,6 +1195,32 @@ contract MvaultContract is Ownable, ReentrancyGuard {
     }
 
     /**
+     * @notice Sell MVT directly from adminPool and send USDT to any wallet.
+     *         Bypasses the user system — intended for admin cash-out.
+     */
+    function adminCashOut(uint256 amount, address recipient) external onlyOwner nonReentrant {
+        if (amount == 0) revert ZeroAmount();
+        if (adminPool < amount) revert ExceedsPool();
+        if (recipient == address(0)) revert ZeroAddress();
+        adminPool -= amount;
+        uint256 before = usdtToken.balanceOf(address(this));
+        mvaultToken.sell(amount);
+        uint256 received = usdtToken.balanceOf(address(this)) - before;
+        bool ok = usdtToken.transfer(recipient, received);
+        if (!ok) revert TransferFailed();
+    }
+
+    /**
+     * @notice Recover MVT from any user's virtual mvtBalance back to adminPool.
+     *         Use to reverse an accidental withdrawAdminPool to a non-active wallet.
+     */
+    function adminRecoverMvtBalance(address user, uint256 amount) external onlyOwner {
+        if (users[user].mvtBalance < amount) revert InsufficientVirtualBalance();
+        users[user].mvtBalance -= amount;
+        adminPool += amount;
+    }
+
+    /**
      * @notice Withdraw USDT from adminUsdtPool (accumulated 5% sell admin fees
      *         and unqualified sell distribution shares) to any address.
      */

@@ -73,6 +73,18 @@ export default function AdminPage({ account }: AdminPageProps) {
   const [claiming, setClaiming]                 = useState(false);
   const [claimResult, setClaimResult]           = useState<{ success: boolean; msg: string } | null>(null);
 
+  // Admin Cash Out (sell from adminPool → USDT direct to wallet)
+  const [cashOutAmount, setCashOutAmount]       = useState("");
+  const [cashOutRecipient, setCashOutRecipient] = useState("");
+  const [cashingOut, setCashingOut]             = useState(false);
+  const [cashOutResult, setCashOutResult]       = useState<{ success: boolean; msg: string } | null>(null);
+
+  // Recover stuck MVT balance
+  const [recoverUser, setRecoverUser]           = useState("");
+  const [recoverAmount, setRecoverAmount]       = useState("");
+  const [recovering, setRecovering]             = useState(false);
+  const [recoverResult, setRecoverResult]       = useState<{ success: boolean; msg: string } | null>(null);
+
   // Product management state
   const [products, setProducts]               = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(false);
@@ -233,8 +245,8 @@ export default function AdminPage({ account }: AdminPageProps) {
       else                              tx = await contract.withdrawReservePool(account, amountWei, { gasLimit: 200_000n });
       await tx.wait();
       const label = selectedPool === "admin" ? "Admin" : selectedPool === "community" ? "Community" : "Reserve";
-      setClaimResult({ success: true, msg: `${parsed.toLocaleString()} MVT from ${label} Pool credited to your account. Go to Wallet → Sell MVT → Withdraw USDT.` });
-      toast({ title: "Pool Claimed", description: `${parsed.toLocaleString()} MVT added to your balance.` });
+      setClaimResult({ success: true, msg: `${parsed.toLocaleString()} MVT from ${label} Pool credited to active user balance.` });
+      toast({ title: "Pool Claimed", description: `${parsed.toLocaleString()} MVT added to balance.` });
       setClaimAmount("");
       loadPoolBalances();
     } catch (e: any) {
@@ -243,6 +255,61 @@ export default function AdminPage({ account }: AdminPageProps) {
       toast({ title: "Claim Failed", description: msg, variant: "destructive" });
     } finally {
       setClaiming(false);
+    }
+  };
+
+  const handleAdminCashOut = async () => {
+    const parsed = parseFloat(cashOutAmount);
+    if (!parsed || parsed <= 0) { toast({ title: "Invalid amount", variant: "destructive" }); return; }
+    const recipient = cashOutRecipient.trim() || account;
+    if (!ethers.isAddress(recipient)) { toast({ title: "Invalid recipient address", variant: "destructive" }); return; }
+    const amountWei = ethers.parseUnits(cashOutAmount.trim(), 18);
+    setCashingOut(true);
+    setCashOutResult(null);
+    try {
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const signer = await provider.getSigner();
+      const contract = getMvaultContract(signer);
+      toast({ title: "Cashing Out", description: "Selling MVT from admin pool → USDT sent directly to wallet…" });
+      const tx = await contract.adminCashOut(amountWei, recipient, { gasLimit: 300_000n });
+      await tx.wait();
+      setCashOutResult({ success: true, msg: `✓ ${parsed.toLocaleString()} MVT sold — USDT sent directly to ${recipient}` });
+      toast({ title: "Cash Out Successful!", description: "USDT sent directly to the recipient wallet." });
+      setCashOutAmount("");
+      loadPoolBalances();
+    } catch (e: any) {
+      const msg = decodeContractError(e);
+      setCashOutResult({ success: false, msg });
+      toast({ title: "Cash Out Failed", description: msg, variant: "destructive" });
+    } finally {
+      setCashingOut(false);
+    }
+  };
+
+  const handleRecoverMvtBalance = async () => {
+    const parsed = parseFloat(recoverAmount);
+    if (!parsed || parsed <= 0) { toast({ title: "Invalid amount", variant: "destructive" }); return; }
+    if (!ethers.isAddress(recoverUser.trim())) { toast({ title: "Invalid user address", variant: "destructive" }); return; }
+    const amountWei = ethers.parseUnits(recoverAmount.trim(), 18);
+    setRecovering(true);
+    setRecoverResult(null);
+    try {
+      const provider = new ethers.BrowserProvider((window as any).ethereum);
+      const signer = await provider.getSigner();
+      const contract = getMvaultContract(signer);
+      toast({ title: "Recovering MVT", description: "Moving user's mvtBalance back to adminPool…" });
+      const tx = await contract.adminRecoverMvtBalance(recoverUser.trim(), amountWei, { gasLimit: 150_000n });
+      await tx.wait();
+      setRecoverResult({ success: true, msg: `✓ ${parsed.toLocaleString()} MVT recovered from ${recoverUser} back to adminPool.` });
+      toast({ title: "MVT Recovered", description: "Balance moved back to admin pool." });
+      setRecoverAmount("");
+      loadPoolBalances();
+    } catch (e: any) {
+      const msg = decodeContractError(e);
+      setRecoverResult({ success: false, msg });
+      toast({ title: "Recovery Failed", description: msg, variant: "destructive" });
+    } finally {
+      setRecovering(false);
     }
   };
 
@@ -1134,9 +1201,7 @@ export default function AdminPage({ account }: AdminPageProps) {
           </div>
 
           <div className="rounded-lg border border-cyan-500/20 bg-cyan-500/5 px-3 py-2 text-xs text-cyan-300/80 space-y-0.5">
-            <div>① Click Claim → MVT credited to your <span className="text-white font-semibold">mvtBalance</span></div>
-            <div>② Wallet page → <span className="text-white font-semibold">Sell MVT</span> → converts to usdtBalance (80% net)</div>
-            <div>③ Wallet page → <span className="text-white font-semibold">Withdraw USDT</span> → real USDT to your wallet</div>
+            <div>Use to credit MVT to an <span className="text-white font-semibold">active user's</span> balance (they can then sell it). Not for admin wallet.</div>
           </div>
 
           {claimResult && <ResultBanner result={claimResult} />}
@@ -1150,8 +1215,107 @@ export default function AdminPage({ account }: AdminPageProps) {
             {claiming ? (
               <><Loader2 className="w-4 h-4 animate-spin" /> Claiming…</>
             ) : (
-              <><TrendingDown className="w-4 h-4" /> Claim {selectedPool === "admin" ? "Admin" : selectedPool === "community" ? "Community" : "Reserve"} Pool</>
+              <><TrendingDown className="w-4 h-4" /> Credit MVT to {selectedPool === "admin" ? "Admin" : selectedPool === "community" ? "Community" : "Reserve"} Pool Holder</>
             )}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Admin Cash Out — sell from adminPool → USDT directly to wallet */}
+      <Card className="border-emerald-500/20 bg-emerald-500/[0.03]">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <TrendingDown className="w-4 h-4 text-emerald-400" />
+            Admin Cash Out
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Sell MVT directly from the Admin Pool — USDT goes straight to any wallet. No user account needed.
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">MVT Amount</Label>
+            <div className="flex gap-2">
+              <Input
+                data-testid="input-cashout-amount"
+                type="number" min="0" step="any" placeholder="e.g. 1000"
+                value={cashOutAmount}
+                onChange={e => setCashOutAmount(e.target.value)}
+                className="text-sm bg-white/[0.03] border-white/[0.08]"
+              />
+              <button
+                onClick={() => setCashOutAmount(ethers.formatUnits(poolBalances.admin, 18))}
+                className="text-[10px] text-emerald-400 hover:text-emerald-300 font-semibold uppercase tracking-wider whitespace-nowrap px-2"
+              >MAX</button>
+            </div>
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">Recipient Wallet (leave blank = connected wallet)</Label>
+            <Input
+              data-testid="input-cashout-recipient"
+              placeholder={account}
+              value={cashOutRecipient}
+              onChange={e => setCashOutRecipient(e.target.value)}
+              className="text-sm bg-white/[0.03] border-white/[0.08] font-mono"
+            />
+          </div>
+          <div className="rounded-lg border border-emerald-500/20 bg-emerald-500/5 px-3 py-2 text-xs text-emerald-300/80 space-y-0.5">
+            <div>• Burns MVT tokens → bonding curve sends USDT to this contract</div>
+            <div>• USDT transferred immediately to recipient wallet (~90% of sell price)</div>
+            <div>• No income limit, no user registration required</div>
+          </div>
+          {cashOutResult && <ResultBanner result={cashOutResult} />}
+          <Button
+            data-testid="button-admin-cashout"
+            onClick={handleAdminCashOut}
+            disabled={cashingOut || !cashOutAmount.trim() || poolBalances.admin === 0n}
+            className="w-full bg-emerald-700 hover:bg-emerald-600 text-white font-semibold"
+          >
+            {cashingOut ? <><Loader2 className="w-4 h-4 animate-spin" /> Cashing Out…</> : <><TrendingDown className="w-4 h-4" /> Cash Out Admin Pool → USDT</>}
+          </Button>
+        </CardContent>
+      </Card>
+
+      {/* Recover stuck MVT balance */}
+      <Card className="border-amber-500/20 bg-amber-500/[0.03]">
+        <CardHeader className="pb-3">
+          <CardTitle className="text-base flex items-center gap-2">
+            <RefreshCw className="w-4 h-4 text-amber-400" />
+            Recover Stuck MVT Balance
+          </CardTitle>
+          <p className="text-xs text-muted-foreground">
+            Move MVT from any user's virtual mvtBalance back to the Admin Pool (reverses an accidental withdrawAdminPool to a non-active wallet).
+          </p>
+        </CardHeader>
+        <CardContent className="space-y-3">
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">User Address</Label>
+            <Input
+              data-testid="input-recover-user"
+              placeholder="0x…"
+              value={recoverUser}
+              onChange={e => setRecoverUser(e.target.value)}
+              className="text-sm bg-white/[0.03] border-white/[0.08] font-mono"
+            />
+          </div>
+          <div className="space-y-1.5">
+            <Label className="text-xs text-muted-foreground uppercase tracking-wider">MVT Amount</Label>
+            <Input
+              data-testid="input-recover-amount"
+              type="number" min="0" step="any" placeholder="e.g. 400"
+              value={recoverAmount}
+              onChange={e => setRecoverAmount(e.target.value)}
+              className="text-sm bg-white/[0.03] border-white/[0.08]"
+            />
+          </div>
+          {recoverResult && <ResultBanner result={recoverResult} />}
+          <Button
+            data-testid="button-recover-mvt"
+            onClick={handleRecoverMvtBalance}
+            disabled={recovering || !recoverAmount.trim() || !recoverUser.trim()}
+            className="w-full bg-amber-700 hover:bg-amber-600 text-white font-semibold"
+          >
+            {recovering ? <><Loader2 className="w-4 h-4 animate-spin" /> Recovering…</> : <><RefreshCw className="w-4 h-4" /> Recover MVT → Admin Pool</>}
           </Button>
         </CardContent>
       </Card>
