@@ -98,6 +98,7 @@ export function useWeb3() {
   const [profileOnChain, setProfileOnChain] = useState<ProfileOnChain | null>(null);
   const [btcPoolRate, setBtcPoolRateState] = useState<number>(10);
   const [contractMvtBalance, setContractMvtBalance] = useState<bigint>(0n);
+  const [connectError, setConnectError] = useState<string | null>(null);
   const tokenDecimals = 18;
 
   const getProvider = useCallback(() => {
@@ -357,18 +358,35 @@ export function useWeb3() {
   // ── Connection ──────────────────────────────────────────────────────────────
 
   const connect = useCallback(async () => {
+    setConnectError(null);
     try {
       await switchNetwork();
+      // Some mobile wallet in-app browsers (older MetaMask/Trust/SafePal/TokenPocket
+      // iOS builds) silently ignore wallet_addEthereumChain / wallet_switchEthereumChain
+      // — verify the chain actually changed before letting the user proceed, and
+      // retry once after a short delay in case the wallet needs a moment to reflect it.
+      let onChain = await isOnCorrectChain();
+      if (!onChain) {
+        await new Promise(r => setTimeout(r, 800));
+        onChain = await isOnCorrectChain();
+      }
       const provider = getProvider();
       const accounts = await provider.send("eth_requestAccounts", []);
       if (accounts.length > 0) {
         setAccount(accounts[0]);
         await fetchUserData(accounts[0]);
       }
-    } catch (err) {
+      if (!onChain) {
+        setConnectError(
+          `Your wallet didn't switch networks automatically. Please add/select ${NETWORK.chainName} manually: ` +
+          `Chain ID ${parseInt(NETWORK.chainId, 16)}, RPC ${NETWORK.rpcUrls[0]}, Symbol ${NETWORK.nativeCurrency.symbol}.`
+        );
+      }
+    } catch (err: any) {
       console.error("Connect error:", err);
+      setConnectError(err?.message || "Failed to connect wallet. Please try again.");
     }
-  }, [switchNetwork, getProvider, fetchUserData]);
+  }, [switchNetwork, getProvider, fetchUserData, isOnCorrectChain]);
 
   // ── Registration (address-based) ────────────────────────────────────────────
   // MetaMask's built-in RPC often returns "Internal JSON-RPC error" without any
@@ -900,6 +918,7 @@ export function useWeb3() {
     incomeInfo, binaryInfo, slabInfo: null as SlabInfo | null,
     mvtPrice, binaryPairs,
     btcPoolBalance, btcPoolRate, tokenDecimals, totalUsers, profileOnChain, contractMvtBalance,
+    connectError,
     connect, register, approveToken, activatePackage, activateFromBalance,
     sellMvt, withdrawFunds, withdrawBtcPool, rebirth, claimRebirthBalance,
     enterBoardPool, claimBinaryIncome, saveProfileOnChain, setBtcPoolRate,

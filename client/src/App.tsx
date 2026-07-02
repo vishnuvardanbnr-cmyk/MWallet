@@ -45,7 +45,7 @@ function ScrollToTop() {
   return null;
 }
 
-function ConnectScreen({ onConnect }: { onConnect: () => void }) {
+function ConnectScreen({ onConnect, connectError }: { onConnect: () => void; connectError?: string | null }) {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 relative overflow-hidden">
       <div className="absolute inset-0 bg-gradient-to-br from-amber-600/4 via-yellow-600/3 to-amber-800/4" />
@@ -94,6 +94,14 @@ function ConnectScreen({ onConnect }: { onConnect: () => void }) {
             <Wallet className="w-5 h-5" />
             Connect Wallet
           </button>
+          {connectError && (
+            <div
+              data-testid="text-connect-error"
+              className="text-xs text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg px-3 py-2 leading-relaxed"
+            >
+              {connectError}
+            </div>
+          )}
           <p className="text-[11px] text-muted-foreground/50">Secure, decentralized access via MetaMask</p>
         </div>
       </div>
@@ -168,7 +176,7 @@ function App() {
     return (
       <ThemeProvider>
         <Toaster />
-        <ConnectScreen onConnect={web3.connect} />
+        <ConnectScreen onConnect={web3.connect} connectError={web3.connectError} />
       </ThemeProvider>
     );
   }

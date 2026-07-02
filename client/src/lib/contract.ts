@@ -23,7 +23,9 @@ export const MCHAIN = {
   chainId: "0x760",  // 1888
   chainName: "MChain",
   rpcUrls: ["https://node.mymchain.com/api/rpc"],
-  blockExplorerUrls: [],
+  // Some mobile wallet apps (iOS MetaMask/Trust/SafePal in-app browsers) reject
+  // wallet_addEthereumChain when blockExplorerUrls is an empty array — omit the
+  // key entirely instead so validation doesn't silently fail on those clients.
   nativeCurrency: { name: "MxC", symbol: "MxC", decimals: 18 },
 };
 
