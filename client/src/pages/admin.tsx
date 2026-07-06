@@ -409,15 +409,22 @@ export default function AdminPage({ account }: AdminPageProps) {
     };
     xhr.onload = () => {
       setUploadProgress(null);
-      if (xhr.status === 200) {
-        const data = JSON.parse(xhr.responseText);
+      let data: any = null;
+      try {
+        data = JSON.parse(xhr.responseText);
+      } catch {
+        // Non-JSON response — typically an nginx/proxy error page (e.g. 413 Request
+        // Entity Too Large when the server's max upload size is smaller than the file).
+      }
+      if (xhr.status === 200 && data) {
         const mb = (data.size / 1024 / 1024).toFixed(1);
         setUploadedSize(`${mb} MB`);
         setMwalletUrl(data.url);
         setMwalletResult({ success: true, msg: `APK uploaded (${mb} MB). Users will now see the Install button.` });
         toast({ title: "APK Uploaded!", description: `${mb} MB — download link is now live.` });
       } else {
-        const msg = JSON.parse(xhr.responseText)?.message || "Upload failed";
+        const msg = data?.message
+          || (xhr.status === 413 ? "File too large for the server to accept (413). Try a smaller APK or contact support." : `Upload failed (HTTP ${xhr.status})`);
         setMwalletResult({ success: false, msg });
         toast({ title: "Upload failed", description: msg, variant: "destructive" });
       }
