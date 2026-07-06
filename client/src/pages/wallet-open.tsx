@@ -110,6 +110,8 @@ export default function WalletOpenPage() {
   const [mwalletInstall, setMwalletInstall] = useState<{ url: string; linkType: string } | null>(null);
   const [tpManual,       setTpManual]       = useState(false);
   const [copied,         setCopied]         = useState(false);
+  const [dlProgress,     setDlProgress]     = useState<number | null>(null);
+  const [dlError,        setDlError]        = useState<string | null>(null);
   const visTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Fetch admin-configured MWallet download URL
@@ -192,6 +194,54 @@ export default function WalletOpenPage() {
   const getStoreLink = (w: WalletDef) => {
     if (w.id === "mwallet") return mwalletInstall?.url ?? undefined;
     return isIOS() ? w.iosStore : isAndroid() ? w.androidStore : undefined;
+  };
+
+  // Direct-download the APK with a visible progress bar, instead of a plain
+  // anchor click — lets the user see how far along the (often 20-100 MB) file is.
+  // Once complete the browser saves it to Downloads and shows its own native
+  // "Open"/install prompt — that part is OS/browser behavior we can't control.
+  const downloadApk = async (url: string) => {
+    setDlError(null);
+    setDlProgress(0);
+    try {
+      const res = await fetch(url);
+      if (!res.ok || !res.body) throw new Error(`Download failed (HTTP ${res.status})`);
+      const total = Number(res.headers.get("content-length")) || 0;
+      const reader = res.body.getReader();
+      const chunks: Uint8Array[] = [];
+      let received = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        if (value) {
+          chunks.push(value);
+          received += value.length;
+          setDlProgress(total > 0 ? Math.min(99, Math.round((received / total) * 100)) : null);
+        }
+      }
+      const blob = new Blob(chunks as BlobPart[], { type: "application/vnd.android.package-archive" });
+      const blobUrl = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = blobUrl;
+      a.download = "mwallet.apk";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(blobUrl), 10_000);
+      setDlProgress(100);
+      setTimeout(() => setDlProgress(null), 1500);
+    } catch (e: any) {
+      setDlProgress(null);
+      setDlError(e?.message || "Download failed — try again");
+    }
+  };
+
+  const handleInstallClick = (w: WalletDef, e: React.MouseEvent) => {
+    if (w.id === "mwallet" && mwalletInstall?.linkType === "apk" && mwalletInstall?.url) {
+      e.preventDefault();
+      downloadApk(mwalletInstall.url);
+    }
+    // Play Store / external links fall through to the default <a> navigation.
   };
 
   // ── Auto-redirecting splash ──────────────────────────────────────────────
@@ -280,17 +330,37 @@ export default function WalletOpenPage() {
                   <div className="shrink-0 text-cyan-400/50 text-xs">→</div>
                 </button>
                 {isFailed && (
-                  <div className="flex items-center justify-between px-2">
-                    <div className="flex items-center gap-1">
-                      <AlertCircle className="h-3 w-3 text-red-400" />
-                      <p className="text-[10px] text-red-400">Not installed</p>
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between px-2">
+                      <div className="flex items-center gap-1">
+                        <AlertCircle className="h-3 w-3 text-red-400" />
+                        <p className="text-[10px] text-red-400">Not installed</p>
+                      </div>
+                      {getStoreLink(w) && dlProgress === null && (
+                        <a href={getStoreLink(w)} target="_blank" rel="noreferrer"
+                          onClick={(e) => handleInstallClick(w, e)}
+                          className="flex items-center gap-1 text-[10px] text-amber-400 hover:text-amber-300"
+                          data-testid="link-install-mwallet">
+                          <Download className="h-2.5 w-2.5" />
+                          Install
+                        </a>
+                      )}
                     </div>
-                    {getStoreLink(w) && (
-                      <a href={getStoreLink(w)} target="_blank" rel="noreferrer"
-                        className="flex items-center gap-1 text-[10px] text-amber-400 hover:text-amber-300">
-                        <Download className="h-2.5 w-2.5" />
-                        Install
-                      </a>
+                    {dlProgress !== null && (
+                      <div className="px-2 space-y-1" data-testid="progress-apk-download">
+                        <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
+                          <div
+                            className="h-full bg-amber-400 transition-all duration-200 rounded-full"
+                            style={{ width: `${dlProgress}%` }}
+                          />
+                        </div>
+                        <p className="text-[9px] text-amber-400/80">
+                          {dlProgress >= 100 ? "Download complete — check your notifications" : `Downloading… ${dlProgress}%`}
+                        </p>
+                      </div>
+                    )}
+                    {dlError && (
+                      <p className="text-[10px] text-red-400 px-2" data-testid="text-apk-download-error">{dlError}</p>
                     )}
                   </div>
                 )}
